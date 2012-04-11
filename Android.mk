@@ -2,7 +2,7 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-ifeq ($(TARGET_BOARD_PLATFORM),qsd8k)
+ifneq (,$(findstring $(TARGET_BOARD_PLATFORM),qsd8k msm7k))
 
 LOCAL_MODULE_TAGS      := optional
 LOCAL_MODULE_PATH      := $(TARGET_OUT_SHARED_LIBRARIES)/hw
