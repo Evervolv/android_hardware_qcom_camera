@@ -36,6 +36,10 @@ extern "C" {
 #include <sys/time.h>
 }
 
+#ifdef PREVIEW_MSM7K
+#define GRALLOC_USAGE_PMEM_PRIVATE_ADSP GRALLOC_USAGE_PRIVATE_0
+#endif
+
 /* HAL function implementation goes here*/
 
 /**
@@ -219,6 +223,12 @@ CameraHAL_HandlePreviewData(const sp<IMemory>& dataPtr,
       LOGE("CameraHAL_HandlePreviewData: previewWidth:%d previewHeight:%d "
            "offset:%#x size:%#x base:%p", previewWidth, previewHeight,
            (unsigned)offset, size, mHeap != NULL ? mHeap->base() : 0);
+
+#ifdef PREVIEW_MSM7K
+      mWindow->set_usage(mWindow,
+                         GRALLOC_USAGE_PMEM_PRIVATE_ADSP |
+                         GRALLOC_USAGE_SW_READ_OFTEN);
+#endif
 
       retVal = mWindow->set_buffers_geometry(mWindow,
                                              previewWidth, previewHeight,

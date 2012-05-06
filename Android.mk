@@ -15,8 +15,13 @@ LOCAL_SHARED_LIBRARIES := liblog libutils libcamera_client libbinder \
 
 LOCAL_C_INCLUDES       := frameworks/base/services \
                           frameworks/base/include \
-                          hardware/libhardware/include \
-                          hardware/qcom/display/libgralloc
+                          hardware/libhardware/include
+ifeq ($(TARGET_BOARD_PLATFORM),msm7k)
+LOCAL_C_INCLUDES       += hardware/libhardware/modules/gralloc
+LOCAL_CFLAGS           := -DPREVIEW_MSM7K
+else
+LOCAL_C_INCLUDES       += hardware/qcom/display/libgralloc
+endif
 
 LOCAL_PRELINK_MODULE   := false
 
