@@ -352,6 +352,7 @@ static void cam_data_callback(int32_t msgType,
       if (clientData != NULL) {
          LOGE("cam_data_callback: Posting data to client");
          origData_cb(msgType, clientData, 0, NULL, user);
+         clientData->release(clientData);
       }
    }
 }
@@ -373,6 +374,7 @@ static void cam_data_callback_timestamp(nsecs_t timestamp,
               systemTime());
          origDataTS_cb(timestamp, msgType, clientData, 0, user);
          qCamera->releaseRecordingFrame(dataPtr);
+         clientData->release(clientData);
       } else {
          LOGE("cam_data_callback_timestamp: ERROR allocating memory from client");
       }
