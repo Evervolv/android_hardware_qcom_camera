@@ -237,6 +237,7 @@ CameraHAL_HandlePreviewData(const sp<IMemory>& dataPtr,
          int32_t          stride;
          buffer_handle_t *bufHandle = NULL;
 
+         LOGE("CameraHAL_HandlePreviewData: dequeueing buffer");
          retVal = mWindow->dequeue_buffer(mWindow, &bufHandle, &stride);
          if (retVal == NO_ERROR) {
             retVal = mWindow->lock_buffer(mWindow, bufHandle);
@@ -248,6 +249,7 @@ CameraHAL_HandlePreviewData(const sp<IMemory>& dataPtr,
                                         previewFormat, destFormat,
                                         0, 0, previewWidth, previewHeight);
                mWindow->enqueue_buffer(mWindow, bufHandle);
+               LOGE("CameraHAL_HandlePreviewData: enqueued buffer");
             } else {
                LOGE("CameraHAL_HandlePreviewData: ERROR locking the buffer");
                mWindow->cancel_buffer(mWindow, bufHandle);
@@ -289,6 +291,7 @@ void CameraHAL_FixupParams(CameraParameters &settings)
    const char *preferred_size       = "640x480";
    const char *preview_frame_rates  = "30,27,24,15";
    const char *preferred_frame_rate = "15";
+   const char *frame_rate_range     = "(15,30)";
 
    settings.set(CameraParameters::KEY_VIDEO_FRAME_FORMAT,
                 CameraParameters::PIXEL_FORMAT_YUV420SP);
@@ -320,6 +323,11 @@ void CameraHAL_FixupParams(CameraParameters &settings)
    if (!settings.get(CameraParameters::KEY_PREVIEW_FRAME_RATE)) {
       settings.set(CameraParameters::KEY_PREVIEW_FRAME_RATE,
                    preferred_frame_rate);
+   }
+
+   if (!settings.get(CameraParameters::KEY_SUPPORTED_PREVIEW_FPS_RANGE)) {
+      settings.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FPS_RANGE,
+                   frame_rate_range);
    }
 }
 
@@ -504,13 +512,21 @@ void set_callbacks(struct camera_device * device,
 
 void enable_msg_type(struct camera_device * device, int32_t msg_type)
 {
-   LOGE("enable_msg_type: msg_type:%d", msg_type);
+   LOGE("enable_msg_type: msg_type:%#x", msg_type);
+   if (msg_type == 0xfff) {
+      msg_type = 0x1ff;
+   } else {
+      msg_type &= ~(CAMERA_MSG_PREVIEW_METADATA | CAMERA_MSG_RAW_IMAGE_NOTIFY);
+   }
    qCamera->enableMsgType(msg_type);
 }
 
 void disable_msg_type(struct camera_device * device, int32_t msg_type)
 {
-   LOGE("disable_msg_type: msg_type:%d", msg_type);
+   LOGE("disable_msg_type: msg_type:%#x", msg_type);
+   if (msg_type == 0xfff) {
+      msg_type = 0x1ff;
+   }
    qCamera->disableMsgType(msg_type);
 }
 
@@ -525,16 +541,24 @@ int start_preview(struct camera_device * device)
    LOGE("start_preview: Enabling CAMERA_MSG_PREVIEW_FRAME");
 
    /* TODO: Remove hack. */
-   qCamera->enableMsgType(CAMERA_MSG_PREVIEW_FRAME);
+   LOGE("qcamera_start_preview: Preview enabled:%d msg enabled:%d",
+        qCamera->previewEnabled(),
+        qCamera->msgTypeEnabled(CAMERA_MSG_PREVIEW_FRAME));
+   if (!qCamera->msgTypeEnabled(CAMERA_MSG_PREVIEW_FRAME)) {
+      qCamera->enableMsgType(CAMERA_MSG_PREVIEW_FRAME);
+   }
    return qCamera->startPreview();
 }
 
 void stop_preview(struct camera_device * device)
 {
-   LOGE("stop_preview:");
+   LOGE("stop_preview: msgenabled:%d",
+         qCamera->msgTypeEnabled(CAMERA_MSG_PREVIEW_FRAME));
 
    /* TODO: Remove hack. */
-   qCamera->disableMsgType(CAMERA_MSG_PREVIEW_FRAME);
+   if (qCamera->msgTypeEnabled(CAMERA_MSG_PREVIEW_FRAME)) {
+      qCamera->disableMsgType(CAMERA_MSG_PREVIEW_FRAME);
+   }
    return qCamera->stopPreview();
 }
 
