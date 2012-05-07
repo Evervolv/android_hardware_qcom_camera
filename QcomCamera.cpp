@@ -204,6 +204,30 @@ CameraHAL_CopyBuffers_Hw(int srcFd, int destFd,
     close(fb_fd);
 }
 
+CameraHAL_CopyBuffers_Sw(char *dest, char *src, int size)
+{
+   int       i;
+   int       numWords  = size / sizeof(unsigned);
+   unsigned *srcWords  = (unsigned *)src;
+   unsigned *destWords = (unsigned *)dest;
+
+   for (i = 0; i < numWords; i++) {
+      if ((i % 8) == 0 && (i + 8) < numWords) {
+         __builtin_prefetch(srcWords  + 8, 0, 0);
+         __builtin_prefetch(destWords + 8, 1, 0);
+      }
+      *destWords++ = *srcWords++;
+   }
+   if (__builtin_expect((size - (numWords * sizeof(unsigned))) > 0, 0)) {
+      int numBytes = size - (numWords * sizeof(unsigned));
+      char *destBytes = (char *)destWords;
+      char *srcBytes  = (char *)srcWords;
+      for (i = 0; i < numBytes; i++) {
+         *destBytes++ = *srcBytes++;
+      }
+   }
+}
+
 void
 CameraHAL_HandlePreviewData(const sp<IMemory>& dataPtr,
                             preview_stream_ops_t *mWindow,
@@ -275,7 +299,8 @@ camera_memory_t * CameraHAL_GenClientData(const sp<IMemory> &dataPtr,
 
    clientData = reqClientMemory(-1, size, 1, user);
    if (clientData != NULL) {
-      memcpy(clientData->data, (char *)(mHeap->base()) + offset, size);
+      CameraHAL_CopyBuffers_Sw((char *)clientData->data,
+                               (char *)(mHeap->base()) + offset, size);
    } else {
       LOGE("CameraHAL_GenClientData: ERROR allocating memory from client");
    }
@@ -354,7 +379,8 @@ static void cam_data_callback(int32_t msgType,
       hwParameters.getPreviewSize(&previewWidth, &previewHeight);
       CameraHAL_HandlePreviewData(dataPtr, mWindow, origCamReqMemory,
                                   previewWidth, previewHeight);
-   } else if (origData_cb != NULL && origCamReqMemory != NULL) {
+   }
+   if (origData_cb != NULL && origCamReqMemory != NULL) {
       camera_memory_t *clientData = CameraHAL_GenClientData(dataPtr,
                                        origCamReqMemory, user);
       if (clientData != NULL) {

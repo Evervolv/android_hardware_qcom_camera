@@ -4,6 +4,7 @@ include $(CLEAR_VARS)
 
 ifneq (,$(findstring $(TARGET_BOARD_PLATFORM),qsd8k msm7k))
 
+LOCAL_C_FLAGS          += -O3
 LOCAL_MODULE_TAGS      := optional
 LOCAL_MODULE_PATH      := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 LOCAL_MODULE           := camera.$(TARGET_BOARD_PLATFORM)
