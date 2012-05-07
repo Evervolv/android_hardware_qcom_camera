@@ -11,8 +11,8 @@ LOCAL_MODULE           := camera.$(TARGET_BOARD_PLATFORM)
 
 LOCAL_SRC_FILES        := QcomCamera.cpp
 
-LOCAL_SHARED_LIBRARIES := liblog libutils libcamera_client libbinder \
-                          libcutils libhardware libcamera
+LOCAL_SHARED_LIBRARIES := liblog libdl libutils libcamera_client libbinder \
+                          libcutils libhardware libui libcamera
 
 LOCAL_C_INCLUDES       := frameworks/base/services \
                           frameworks/base/include \
