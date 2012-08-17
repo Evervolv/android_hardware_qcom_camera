@@ -65,6 +65,9 @@ struct qcom_mdp_img {
    int32_t  format;
    int32_t  offset;
    int      memory_id; /* The file descriptor */
+#ifndef PREVIEW_MSM7K
+   uint32_t priv;
+#endif
 };
 
 struct qcom_mdp_blit_req {
@@ -75,6 +78,9 @@ struct qcom_mdp_blit_req {
    uint32_t alpha;
    uint32_t transp_mask;
    uint32_t flags;
+#ifndef PREVIEW_MSM7K
+   int sharpening_strength;
+#endif
 };
 
 struct blitreq {
