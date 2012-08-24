@@ -52,42 +52,6 @@ extern "C" {
  * and openCameraHardware() is 0 to N-1.
  */
 
-struct qcom_mdp_rect {
-   uint32_t x;
-   uint32_t y;
-   uint32_t w;
-   uint32_t h;
-};
-
-struct qcom_mdp_img {
-   uint32_t width;
-   int32_t  height;
-   int32_t  format;
-   int32_t  offset;
-   int      memory_id; /* The file descriptor */
-#ifndef PREVIEW_MSM7K
-   uint32_t priv;
-#endif
-};
-
-struct qcom_mdp_blit_req {
-   struct   qcom_mdp_img src;
-   struct   qcom_mdp_img dst;
-   struct   qcom_mdp_rect src_rect;
-   struct   qcom_mdp_rect dst_rect;
-   uint32_t alpha;
-   uint32_t transp_mask;
-   uint32_t flags;
-#ifndef PREVIEW_MSM7K
-   int sharpening_strength;
-#endif
-};
-
-struct blitreq {
-   unsigned int count;
-   struct qcom_mdp_blit_req req;
-};
-
 /* Prototypes and extern functions. */
 android::sp<android::CameraHardwareInterface> (*LINK_openCameraHardware)(int id);
 int (*LINK_getNumberofCameras)(void);
@@ -111,9 +75,9 @@ static hw_module_methods_t camera_module_methods = {
 static hw_module_t camera_common  = {
   tag: HARDWARE_MODULE_TAG,
   version_major: 1,
-  version_minor: 0,
+  version_minor: 1,
   id: CAMERA_HARDWARE_MODULE_ID,
-  name: "Camera HAL for ICS",
+  name: "Jellybean Camera Hal",
   author: "Raviprasad V Mummidi",
   methods: &camera_module_methods,
   dso: NULL,
@@ -165,61 +129,66 @@ camera_device_ops_t camera_ops = {
 
 namespace android {
 
-/* HAL helper functions. */
-bool
-CameraHAL_CopyBuffers_Hw(int srcFd, int destFd,
+/* XXX: this _should_ be done with the copybit module
+        TODO: figure out how */
+bool internal_hw_blit(int srcFd, int destFd,
                          size_t srcOffset, size_t destOffset,
                          int srcFormat, int destFormat,
                          int x, int y, int w, int h)
 {
-    struct blitreq blit;
-    bool   success = true;
-    int    fb_fd = open("/dev/graphics/fb0", O_RDWR);
+    bool success = true;
+
+    int fb_fd = open("/dev/graphics/fb0", O_RDWR);
 
     if (fb_fd < 0) {
-       ALOGE("CameraHAL_CopyBuffers_Hw: Error opening /dev/graphics/fb0");
-       return false;
+        ALOGE("%s: Error opening frame buffer errno=%d (%s)",
+              __FUNCTION__, errno, strerror(errno));
+        return false;
     }
 
-    ALOGV("CameraHAL_CopyBuffers_Hw: srcFD:%d destFD:%d srcOffset:%#x"
-         " destOffset:%#x x:%d y:%d w:%d h:%d", srcFd, destFd, srcOffset,
-         destOffset, x, y, w, h);
+    ALOGV("%s: srcFD:%d destFD:%d srcOffset:%#x destOffset:%#x x:%d y:%d w:%d h:%d",
+          __FUNCTION__, srcFd, destFd, srcOffset, destOffset, x, y, w, h);
 
-    memset(&blit, 0, sizeof(blit));
-    blit.count = 1;
+    struct {
+        uint32_t count;
+        struct mdp_blit_req req[1];
+    } list;
 
-    blit.req.flags       = 0;
-    blit.req.alpha       = 0xff;
-    blit.req.transp_mask = 0xffffffff;
+    memset(&list, 0, sizeof(list));
 
-    blit.req.src.width     = w;
-    blit.req.src.height    = h;
-    blit.req.src.offset    = srcOffset;
-    blit.req.src.memory_id = srcFd;
-    blit.req.src.format    = srcFormat;
+    list.count = 1;
 
-    blit.req.dst.width     = w;
-    blit.req.dst.height    = h;
-    blit.req.dst.offset    = destOffset;
-    blit.req.dst.memory_id = destFd;
-    blit.req.dst.format    = destFormat;
+    list.req[0].flags       = 0;
+    list.req[0].alpha       = MDP_ALPHA_NOP;
+    list.req[0].transp_mask = MDP_TRANSP_NOP;
 
-    blit.req.src_rect.x = blit.req.dst_rect.x = x;
-    blit.req.src_rect.y = blit.req.dst_rect.y = y;
-    blit.req.src_rect.w = blit.req.dst_rect.w = w;
-    blit.req.src_rect.h = blit.req.dst_rect.h = h;
+    list.req[0].src.width     = w;
+    list.req[0].src.height    = h;
+    list.req[0].src.offset    = srcOffset;
+    list.req[0].src.memory_id = srcFd;
+    list.req[0].src.format    = srcFormat;
 
-    if (ioctl(fb_fd, MSMFB_BLIT, &blit)) {
-       ALOGE("CameraHAL_CopyBuffers_Hw: MSMFB_BLIT failed = %d %s",
-            errno, strerror(errno));
+    list.req[0].dst.width     = w;
+    list.req[0].dst.height    = h;
+    list.req[0].dst.offset    = destOffset;
+    list.req[0].dst.memory_id = destFd;
+    list.req[0].dst.format    = destFormat;
+
+    list.req[0].src_rect.x = list.req[0].dst_rect.x = x;
+    list.req[0].src_rect.y = list.req[0].dst_rect.y = y;
+    list.req[0].src_rect.w = list.req[0].dst_rect.w = w;
+    list.req[0].src_rect.h = list.req[0].dst_rect.h = h;
+
+    if (ioctl(fb_fd, MSMFB_BLIT, &list)) {
+       ALOGE("%s: MSMFB_BLIT failed = %d %s",
+            __FUNCTION__, errno, strerror(errno));
        success = false;
     }
     close(fb_fd);
     return success;
 }
 
-void
-CameraHal_Decode_Sw(unsigned int* rgb, char* yuv420sp, int width, int height)
+void internal_decode_sw(unsigned int* rgb, char* yuv420sp, int width, int height)
 {
    int frameSize = width * height;
 
@@ -250,8 +219,7 @@ CameraHal_Decode_Sw(unsigned int* rgb, char* yuv420sp, int width, int height)
    }
 }
 
-void
-CameraHAL_CopyBuffers_Sw(char *dest, char *src, int size)
+void internal_copybuffers_sw(char *dest, char *src, int size)
 {
    int       i;
    int       numWords  = size / sizeof(unsigned);
@@ -275,8 +243,7 @@ CameraHAL_CopyBuffers_Sw(char *dest, char *src, int size)
    }
 }
 
-void
-CameraHAL_HandlePreviewData(const sp<IMemory>& dataPtr,
+void internal_handle_preview(const sp<IMemory>& dataPtr,
                             preview_stream_ops_t *mWindow,
                             camera_request_memory getMemory,
                             int32_t previewWidth, int32_t previewHeight)
@@ -291,8 +258,8 @@ CameraHAL_HandlePreviewData(const sp<IMemory>& dataPtr,
       sp<IMemoryHeap> mHeap = dataPtr->getMemory(&offset,
                                                                    &size);
 
-      ALOGV("CameraHAL_HandlePreviewData: previewWidth:%d previewHeight:%d "
-           "offset:%#x size:%#x base:%p", previewWidth, previewHeight,
+      ALOGV("%s: previewWidth:%d previewHeight:%d offset:%#x size:%#x base:%p",
+            __FUNCTION__, previewWidth, previewHeight,
            (unsigned)offset, size, mHeap != NULL ? mHeap->base() : 0);
 
       mWindow->set_usage(mWindow,
@@ -308,14 +275,14 @@ CameraHAL_HandlePreviewData(const sp<IMemory>& dataPtr,
          int32_t          stride;
          buffer_handle_t *bufHandle = NULL;
 
-         ALOGV("CameraHAL_HandlePreviewData: dequeueing buffer");
+         ALOGV("%s: dequeueing buffer",__FUNCTION__);
          retVal = mWindow->dequeue_buffer(mWindow, &bufHandle, &stride);
          if (retVal == NO_ERROR) {
             retVal = mWindow->lock_buffer(mWindow, bufHandle);
             if (retVal == NO_ERROR) {
                private_handle_t const *privHandle =
                   reinterpret_cast<private_handle_t const *>(*bufHandle);
-               if (!CameraHAL_CopyBuffers_Hw(mHeap->getHeapID(), privHandle->fd,
+               if (!internal_hw_blit(mHeap->getHeapID(), privHandle->fd,
                                              offset, privHandle->offset,
                                              previewFormat, destFormat,
                                              0, 0, previewWidth,
@@ -333,7 +300,7 @@ CameraHAL_HandlePreviewData(const sp<IMemory>& dataPtr,
                               &bits);
                   ALOGV("CameraHAL_HPD: w:%d h:%d bits:%p",
                        previewWidth, previewHeight, bits);
-                  CameraHal_Decode_Sw((unsigned int *)bits, (char *)mHeap->base() + offset,
+                  internal_decode_sw((unsigned int *)bits, (char *)mHeap->base() + offset,
                                       previewWidth, previewHeight);
 
                   // unlock buffer before sending to display
@@ -341,19 +308,19 @@ CameraHAL_HandlePreviewData(const sp<IMemory>& dataPtr,
                }
 
                mWindow->enqueue_buffer(mWindow, bufHandle);
-               ALOGV("CameraHAL_HandlePreviewData: enqueued buffer");
+               ALOGV("%s: enqueued buffer",__FUNCTION__);
             } else {
-               ALOGE("CameraHAL_HandlePreviewData: ERROR locking the buffer");
+               ALOGE("%s: ERROR locking the buffer",__FUNCTION__);
                mWindow->cancel_buffer(mWindow, bufHandle);
             }
          } else {
-            ALOGE("CameraHAL_HandlePreviewData: ERROR dequeueing the buffer");
+            ALOGE("%s: ERROR dequeueing the buffer",__FUNCTION__);
          }
       }
    }
 }
 
-camera_memory_t * CameraHAL_GenClientData(const sp<IMemory> &dataPtr,
+camera_memory_t * internal_generate_client_data(const sp<IMemory> &dataPtr,
                         camera_request_memory reqClientMemory,
                         void *user)
 {
@@ -362,20 +329,20 @@ camera_memory_t * CameraHAL_GenClientData(const sp<IMemory> &dataPtr,
    camera_memory_t *clientData = NULL;
    sp<IMemoryHeap> mHeap = dataPtr->getMemory(&offset, &size);
 
-   ALOGV("CameraHAL_GenClientData: offset:%#x size:%#x base:%p",
+   ALOGV("%s: offset:%#x size:%#x base:%p", __FUNCTION__
         (unsigned)offset, size, mHeap != NULL ? mHeap->base() : 0);
 
    clientData = reqClientMemory(-1, size, 1, user);
    if (clientData != NULL) {
-      CameraHAL_CopyBuffers_Sw((char *)clientData->data,
+      internal_copybuffers_sw((char *)clientData->data,
                                (char *)(mHeap->base()) + offset, size);
    } else {
-      ALOGE("CameraHAL_GenClientData: ERROR allocating memory from client");
+      ALOGE("%s: ERROR allocating memory from client",__FUNCTION__);
    }
    return clientData;
 }
 
-void CameraHAL_FixupParams(CameraParameters &settings)
+void internal_fixup_settings(CameraParameters &settings)
 {
    const char *preview_sizes =
       "1280x720,800x480,768x432,720x480,640x480,576x432,480x320,384x288,352x288,320x240,240x160,176x144";
@@ -445,11 +412,11 @@ static void cam_data_callback(int32_t msgType,
       int32_t previewWidth, previewHeight;
       CameraParameters hwParameters = qCamera->getParameters();
       hwParameters.getPreviewSize(&previewWidth, &previewHeight);
-      CameraHAL_HandlePreviewData(dataPtr, mWindow, origCamReqMemory,
+      internal_handle_preview(dataPtr, mWindow, origCamReqMemory,
                                   previewWidth, previewHeight);
    }
    if (origData_cb != NULL && origCamReqMemory != NULL) {
-      camera_memory_t *clientData = CameraHAL_GenClientData(dataPtr,
+      camera_memory_t *clientData = internal_generate_client_data(dataPtr,
                                        origCamReqMemory, user);
       if (clientData != NULL) {
          ALOGV("cam_data_callback: Posting data to client");
@@ -469,7 +436,7 @@ static void cam_data_callback_timestamp(nsecs_t timestamp,
         timestamp /1000, msgType, user);
 
    if (origDataTS_cb != NULL && origCamReqMemory != NULL) {
-      camera_memory_t *clientData = CameraHAL_GenClientData(dataPtr,
+      camera_memory_t *clientData = internal_generate_client_data(dataPtr,
                                        origCamReqMemory, user);
       if (clientData != NULL) {
          ALOGV("cam_data_callback_timestamp: Posting data to client timestamp:%lld",
@@ -806,7 +773,7 @@ char * get_parameters(struct camera_device * device)
    ALOGV("get_parameters");
    camSettings = qCamera->getParameters();
    ALOGV("get_parameters: after calling qCamera->getParameters()");
-   CameraHAL_FixupParams(camSettings);
+   internal_fixup_settings(camSettings);
    g_str = camSettings.flatten();
    rc = strdup((char *)g_str.string());
    ALOGV("get_parameters: returning rc:%p :%s",
