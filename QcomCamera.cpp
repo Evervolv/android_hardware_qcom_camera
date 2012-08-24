@@ -90,10 +90,6 @@ camera_module_t HAL_MODULE_INFO_SYM = {
   get_camera_info: get_camera_info,
 };
 
-#if 0 //TODO: use this instead of declaring in camera_device_open
-              it works fine with this but segfaults when
-              closing the camera app, so that needs to be addressed.
-
 camera_device_ops_t camera_ops = {
   set_preview_window:         android::set_preview_window,
   set_callbacks:              android::set_callbacks,
@@ -125,7 +121,6 @@ camera_device_ops_t camera_ops = {
   release:                    android::release,
   dump:                       android::dump,
 };
-#endif
 
 namespace android {
 
@@ -496,98 +491,69 @@ extern "C" int get_camera_info(int camera_id, struct camera_info *info)
    return NO_ERROR;
 }
 
-extern "C" int camera_device_open(const hw_module_t* module, const char* name,
-                   hw_device_t** device)
+extern "C" int camera_device_open(const hw_module_t* module, const char* id,
+                   hw_device_t** hw_device)
 {
 
-   void *libcameraHandle;
-   int cameraId = atoi(name);
+    ALOGD("%s:++",__FUNCTION__);
+    int rc = -1;
+    camera_device *device = NULL;
 
-   ALOGV("camera_device_open: name:%s device:%p cameraId:%d",
-        name, device, cameraId);
+    if(module && id && hw_device) {
+        int cameraId = atoi(id);
+        void * libcameraHandle = ::dlopen("libcamera.so", RTLD_NOW);
 
-   libcameraHandle = ::dlopen("libcamera.so", RTLD_NOW);
-   ALOGD("loading libcamera at %p", libcameraHandle);
-   if (!libcameraHandle) {
-       ALOGE("FATAL ERROR: could not dlopen libcamera.so: %s", dlerror());
-       return false;
-   }
+        if (libcameraHandle) {
+            ALOGD("%s: loaded libcamera at %p", __FUNCTION__, libcameraHandle);
 
-   if (::dlsym(libcameraHandle, "openCameraHardware") != NULL) {
-      *(void**)&LINK_openCameraHardware =
-               ::dlsym(libcameraHandle, "openCameraHardware");
-   } else if (::dlsym(libcameraHandle, "HAL_openCameraHardware") != NULL) {
-      *(void**)&LINK_openCameraHardware =
-               ::dlsym(libcameraHandle, "HAL_openCameraHardware");
-   } else {
-      ALOGE("FATAL ERROR: Could not find openCameraHardware");
-      dlclose(libcameraHandle);
-      return false;
-   }
+            if (::dlsym(libcameraHandle, "openCameraHardware") != NULL) {
+                *(void**)&LINK_openCameraHardware =
+                    ::dlsym(libcameraHandle, "openCameraHardware");
+            } else if (::dlsym(libcameraHandle, "HAL_openCameraHardware") != NULL) {
+                *(void**)&LINK_openCameraHardware =
+                    ::dlsym(libcameraHandle, "HAL_openCameraHardware");
+            } else {
+                ALOGE("FATAL ERROR: Could not find openCameraHardware");
+                dlclose(libcameraHandle);
+                return rc;
+            }
 
-   qCamera = LINK_openCameraHardware(cameraId);
-   ::dlclose(libcameraHandle);
+            qCamera = LINK_openCameraHardware(cameraId);
 
-   camera_device_t* camera_device = NULL;
-   camera_device_ops_t* camera_ops = NULL;
+            ::dlclose(libcameraHandle);
 
-   camera_device = (camera_device_t*)malloc(sizeof(*camera_device));
-   camera_ops = (camera_device_ops_t*)malloc(sizeof(*camera_ops));
-   memset(camera_device, 0, sizeof(*camera_device));
-   memset(camera_ops, 0, sizeof(*camera_ops));
+            device = (camera_device *)malloc(sizeof (struct camera_device));
 
-   camera_device->common.tag              = HARDWARE_DEVICE_TAG;
-   camera_device->common.version          = 0;
-   camera_device->common.module           = (hw_module_t *)(module);
-   camera_device->common.close            = close_camera_device;
-   camera_device->ops                     = camera_ops;
-
-   camera_ops->set_preview_window         = set_preview_window;
-   camera_ops->set_callbacks              = set_callbacks;
-   camera_ops->enable_msg_type            = enable_msg_type;
-   camera_ops->disable_msg_type           = disable_msg_type;
-   camera_ops->msg_type_enabled           = msg_type_enabled;
-   camera_ops->start_preview              = start_preview;
-   camera_ops->stop_preview               = stop_preview;
-   camera_ops->preview_enabled            = preview_enabled;
-   camera_ops->store_meta_data_in_buffers = store_meta_data_in_buffers;
-   camera_ops->start_recording            = start_recording;
-   camera_ops->stop_recording             = stop_recording;
-   camera_ops->recording_enabled          = recording_enabled;
-   camera_ops->release_recording_frame    = release_recording_frame;
-   camera_ops->auto_focus                 = auto_focus;
-   camera_ops->cancel_auto_focus          = cancel_auto_focus;
-   camera_ops->take_picture               = take_picture;
-   camera_ops->cancel_picture             = cancel_picture;
-
-   camera_ops->set_parameters             = set_parameters;
-   camera_ops->get_parameters             = get_parameters;
-   camera_ops->put_parameters             = put_parameters;
-   camera_ops->send_command               = send_command;
-   camera_ops->release                    = release;
-   camera_ops->dump                       = dump;
-
-   *device = &camera_device->common;
-   return NO_ERROR;
+            if(device) {
+                //memset(device, 0, sizeof(*device));
+                // Dont think these are needed
+                //device->common.tag              = HARDWARE_DEVICE_TAG;
+                //device->common.version          = 0;
+                //device->common.module           = (hw_module_t *)(module);
+                device->common.close            = close_camera_device;
+                device->ops                     = &camera_ops;
+                rc = 0;
+            }
+        }
+    }
+    *hw_device = (hw_device_t*)device;
+    ALOGD("%s:--",__FUNCTION__);
+    return rc;
 }
 
-extern "C" int close_camera_device(hw_device_t* device)
+extern "C" int close_camera_device(hw_device_t* hw_dev)
 {
-   int rc = -EINVAL;
-   ALOGV("close_camera_device");
-   camera_device_t *cameraDev = (camera_device_t *)device;
-   if (cameraDev) {
-      camera_device_ops_t *camera_ops = cameraDev->ops;
-      if (camera_ops) {
-         if (qCamera != NULL) {
+    int rc = -1;
+    ALOGD("%s:++",__FUNCTION__);
+    camera_device_t *device = (camera_device_t *)hw_dev;
+    if (device) {
+        if (qCamera != NULL)
             qCamera.clear();
-         }
-         free(camera_ops);
-      }
-      free(cameraDev);
-      rc = NO_ERROR;
-   }
-   return rc;
+        free(device);
+        rc = 0;
+    }
+    ALOGD("%s:--",__FUNCTION__);
+    return rc;
 }
 
 int set_preview_window(struct camera_device * device,
