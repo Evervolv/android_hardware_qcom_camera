@@ -1,3 +1,4 @@
+ifneq ($(TARGET_PROVIDES_CAMERA_HAL),true)
 ifeq ($(TARGET_BOARD_PLATFORM),msm8960)
 
 ifneq ($(USE_CAMERA_STUB),true)
@@ -133,3 +134,4 @@ ifeq ($(V4L2_BASED_LIBCAM),true)
 include $(LOCAL_PATH1)/QCamera/Android.mk
 endif
 endif
+endif # TARGET_PROVIDES_CAMERA_HAL
