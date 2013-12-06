@@ -185,6 +185,7 @@ typedef struct{
     float focal_lengths[CAM_FOCAL_LENGTHS_MAX];
     uint8_t focal_lengths_count;
 
+    /* Needs to be regular f number instead of APEX */
     float apertures[CAM_APERTURES_MAX];
     uint8_t apertures_count;
 
@@ -477,7 +478,7 @@ typedef union {
     INCLUDE(CAM_INTF_META_TONEMAP_CURVES,           cam_rgb_tonemap_curves,      1);
     INCLUDE(CAM_INTF_META_TONEMAP_MODE,             uint8_t,                     1);
     INCLUDE(CAM_INTF_META_FLASH_MODE,               uint8_t,                     1);
-    INCLUDE(CAM_INTF_META_STREAM_TYPE_MASK,         uint32_t,                    1);
+    INCLUDE(CAM_INTF_META_STREAM_ID,                cam_stream_ID_t,             1);
 } parm_type_t;
 
 
@@ -496,9 +497,11 @@ typedef union {
     INCLUDE(CAM_INTF_META_GOOD_FRAME_IDX_RANGE,         cam_frame_idx_range_t,       1);
     /* Specific to HAL3 */
     INCLUDE(CAM_INTF_META_FRAME_NUMBER_VALID,           int32_t,                     1);
+    INCLUDE(CAM_INTF_META_URGENT_FRAME_NUMBER_VALID,    int32_t,                     1);
     INCLUDE(CAM_INTF_META_FRAME_DROPPED,                cam_frame_dropped_t,         1);
     INCLUDE(CAM_INTF_META_PENDING_REQUESTS,             uint32_t,                    1);
     INCLUDE(CAM_INTF_META_FRAME_NUMBER,                 uint32_t,                    1);
+    INCLUDE(CAM_INTF_META_URGENT_FRAME_NUMBER,          uint32_t,                    1);
     INCLUDE(CAM_INTF_META_COLOR_CORRECT_MODE,           uint8_t,                     1);
     INCLUDE(CAM_INTF_META_COLOR_CORRECT_TRANSFORM,      cam_color_correct_matrix_t,  1);
     INCLUDE(CAM_INTF_META_COLOR_CORRECT_GAINS,          cam_color_correct_gains_t,   1);

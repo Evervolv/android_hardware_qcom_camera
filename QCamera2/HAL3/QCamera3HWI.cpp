@@ -976,66 +976,110 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
     cam_frame_dropped_t cam_frame_drop = *(cam_frame_dropped_t *)
         POINTER_OF(CAM_INTF_META_FRAME_DROPPED, metadata);
 
+    int32_t urgent_frame_number_valid = *(int32_t *)
+        POINTER_OF(CAM_INTF_META_URGENT_FRAME_NUMBER_VALID, metadata);
+    uint32_t urgent_frame_number = *(uint32_t *)
+        POINTER_OF(CAM_INTF_META_URGENT_FRAME_NUMBER, metadata);
+
+    if (urgent_frame_number_valid) {
+        ALOGV("%s: valid urgent frame_number = %d, capture_time = %lld",
+          __func__, urgent_frame_number, capture_time);
+
+        //Recieved an urgent Frame Number, handle it
+        //using HAL3.1 quirk for partial results
+        for (List<PendingRequestInfo>::iterator i =
+            mPendingRequestsList.begin(); i != mPendingRequestsList.end(); i++) {
+            camera3_notify_msg_t notify_msg;
+            ALOGV("%s: Iterator Frame = %d urgent frame = %d",
+                __func__, i->frame_number, urgent_frame_number);
+
+            if (i->frame_number < urgent_frame_number &&
+                i->bNotified == 0) {
+                notify_msg.type = CAMERA3_MSG_SHUTTER;
+                notify_msg.message.shutter.frame_number = i->frame_number;
+                notify_msg.message.shutter.timestamp = capture_time -
+                    (urgent_frame_number - i->frame_number) * NSEC_PER_33MSEC;
+                mCallbackOps->notify(mCallbackOps, &notify_msg);
+                i->timestamp = notify_msg.message.shutter.timestamp;
+                i->bNotified = 1;
+                ALOGV("%s: Dummy notification !!!! notify frame_number = %d, capture_time = %lld",
+                    __func__, i->frame_number, notify_msg.message.shutter.timestamp);
+            }
+
+            if (i->frame_number == urgent_frame_number) {
+
+                camera3_capture_result_t result;
+
+                // Send shutter notify to frameworks
+                notify_msg.type = CAMERA3_MSG_SHUTTER;
+                notify_msg.message.shutter.frame_number = i->frame_number;
+                notify_msg.message.shutter.timestamp = capture_time;
+                mCallbackOps->notify(mCallbackOps, &notify_msg);
+
+                i->timestamp = capture_time;
+                i->bNotified = 1;
+
+                // Extract 3A metadata
+                result.result =
+                    translateCbUrgentMetadataToResultMetadata(metadata);
+                // Populate metadata result
+                result.frame_number = urgent_frame_number;
+                result.num_output_buffers = 0;
+                result.output_buffers = NULL;
+                mCallbackOps->process_capture_result(mCallbackOps, &result);
+                ALOGV("%s: urgent frame_number = %d, capture_time = %lld",
+                     __func__, result.frame_number, capture_time);
+                free_camera_metadata((camera_metadata_t *)result.result);
+                break;
+            }
+        }
+    }
+
     if (!frame_number_valid) {
-        ALOGV("%s: Not a valid frame number, used as SOF only", __func__);
+        ALOGV("%s: Not a valid normal frame number, used as SOF only", __func__);
         mMetadataChannel->bufDone(metadata_buf);
         free(metadata_buf);
         goto done_metadata;
     }
-    ALOGV("%s: valid frame_number = %d, capture_time = %lld", __func__,
+    ALOGV("%s: valid normal frame_number = %d, capture_time = %lld", __func__,
             frame_number, capture_time);
 
     // Go through the pending requests info and send shutter/results to frameworks
     for (List<PendingRequestInfo>::iterator i = mPendingRequestsList.begin();
         i != mPendingRequestsList.end() && i->frame_number <= frame_number;) {
         camera3_capture_result_t result;
-        camera3_notify_msg_t notify_msg;
         ALOGV("%s: frame_number in the list is %d", __func__, i->frame_number);
 
         // Flush out all entries with less or equal frame numbers.
-
-        //TODO: Make sure shutter timestamp really reflects shutter timestamp.
-        //Right now it's the same as metadata timestamp
-
-        //TODO: When there is metadata drop, how do we derive the timestamp of
-        //dropped frames? For now, we fake the dropped timestamp by substracting
-        //from the reported timestamp
-        nsecs_t current_capture_time = capture_time -
-            (frame_number - i->frame_number) * NSEC_PER_33MSEC;
-
-        // Send shutter notify to frameworks
-        notify_msg.type = CAMERA3_MSG_SHUTTER;
-        notify_msg.message.shutter.frame_number = i->frame_number;
-        notify_msg.message.shutter.timestamp = current_capture_time;
-        mCallbackOps->notify(mCallbackOps, &notify_msg);
-        ALOGV("%s: notify frame_number = %d, capture_time = %lld", __func__,
-                i->frame_number, capture_time);
         mPendingRequest--;
 
         // Check whether any stream buffer corresponding to this is dropped or not
-        // If dropped, then send the ERROR_BUFFER for the corresponding stream
+        // If dropped, then notify ERROR_BUFFER for the corresponding stream and
+        // buffer with CAMERA3_BUFFER_STATUS_ERROR
         if (cam_frame_drop.frame_dropped) {
             camera3_notify_msg_t notify_msg;
             for (List<RequestedBufferInfo>::iterator j = i->buffers.begin();
                     j != i->buffers.end(); j++) {
                 QCamera3Channel *channel = (QCamera3Channel *)j->stream->priv;
-                uint32_t streamTypeMask = channel->getStreamTypeMask();
-                if (streamTypeMask & cam_frame_drop.stream_type_mask) {
-                    // Send Error notify to frameworks with CAMERA3_MSG_ERROR_BUFFER
-                    ALOGV("%s: Start of reporting error frame#=%d, streamMask=%d",
-                           __func__, i->frame_number, streamTypeMask);
-                    notify_msg.type = CAMERA3_MSG_ERROR;
-                    notify_msg.message.error.frame_number = i->frame_number;
-                    notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_BUFFER ;
-                    notify_msg.message.error.error_stream = j->stream;
-                    mCallbackOps->notify(mCallbackOps, &notify_msg);
-                    ALOGV("%s: End of reporting error frame#=%d, streamMask=%d",
-                           __func__, i->frame_number, streamTypeMask);
-                    PendingFrameDropInfo PendingFrameDrop;
-                    PendingFrameDrop.frame_number=i->frame_number;
-                    PendingFrameDrop.stream_type_mask = cam_frame_drop.stream_type_mask;
-                    // Add the Frame drop info to mPendingFrameDropList
-                    mPendingFrameDropList.push_back(PendingFrameDrop);
+                uint32_t streamID = channel->getStreamID(channel->getStreamTypeMask());
+                for (uint32_t k=0; k<cam_frame_drop.cam_stream_ID.num_streams; k++) {
+                  if (streamID == cam_frame_drop.cam_stream_ID.streamID[k]) {
+                      // Send Error notify to frameworks with CAMERA3_MSG_ERROR_BUFFER
+                      ALOGV("%s: Start of reporting error frame#=%d, streamID=%d",
+                             __func__, i->frame_number, streamID);
+                      notify_msg.type = CAMERA3_MSG_ERROR;
+                      notify_msg.message.error.frame_number = i->frame_number;
+                      notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_BUFFER ;
+                      notify_msg.message.error.error_stream = j->stream;
+                      mCallbackOps->notify(mCallbackOps, &notify_msg);
+                      ALOGV("%s: End of reporting error frame#=%d, streamID=%d",
+                             __func__, i->frame_number, streamID);
+                      PendingFrameDropInfo PendingFrameDrop;
+                      PendingFrameDrop.frame_number=i->frame_number;
+                      PendingFrameDrop.stream_ID = streamID;
+                      // Add the Frame drop info to mPendingFrameDropList
+                      mPendingFrameDropList.push_back(PendingFrameDrop);
+                  }
                 }
             }
         }
@@ -1045,13 +1089,13 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
         if (i->frame_number < frame_number) {
             CameraMetadata dummyMetadata;
             dummyMetadata.update(ANDROID_SENSOR_TIMESTAMP,
-                    &current_capture_time, 1);
+                    &i->timestamp, 1);
             dummyMetadata.update(ANDROID_REQUEST_ID,
                     &(i->request_id), 1);
             result.result = dummyMetadata.release();
         } else {
             result.result = translateCbMetadataToResultMetadata(metadata,
-                    current_capture_time, i->request_id, i->blob_request,
+                    i->timestamp, i->request_id, i->blob_request,
                     &(i->input_jpeg_settings));
             if (mIsZslMode) {
                 int found_metadata = 0;
@@ -1129,12 +1173,11 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                     for (List<PendingFrameDropInfo>::iterator m = mPendingFrameDropList.begin();
                             m != mPendingFrameDropList.end(); m++) {
                         QCamera3Channel *channel = (QCamera3Channel *)j->buffer->stream->priv;
-                        uint32_t streamTypeMask = channel->getStreamTypeMask();
-                        if((m->stream_type_mask & streamTypeMask) &&
-                                (m->frame_number==frame_number)) {
+                        uint32_t streamID = channel->getStreamID(channel->getStreamTypeMask());
+                        if((m->stream_ID==streamID) && (m->frame_number==frame_number)) {
                             j->buffer->status=CAMERA3_BUFFER_STATUS_ERROR;
-                            ALOGV("%s: Stream STATUS_ERROR frame_number=%d, streamTypeMask=%d",
-                                  __func__, frame_number, streamTypeMask);
+                            ALOGV("%s: Stream STATUS_ERROR frame_number=%d, streamID=%d",
+                                  __func__, frame_number, streamID);
                             m = mPendingFrameDropList.erase(m);
                             break;
                         }
@@ -1149,13 +1192,13 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
 
             mCallbackOps->process_capture_result(mCallbackOps, &result);
             ALOGV("%s: meta frame_number = %d, capture_time = %lld",
-                    __func__, result.frame_number, current_capture_time);
+                    __func__, result.frame_number, i->timestamp);
             free_camera_metadata((camera_metadata_t *)result.result);
             delete[] result_buffers;
         } else {
             mCallbackOps->process_capture_result(mCallbackOps, &result);
             ALOGV("%s: meta frame_number = %d, capture_time = %lld",
-                        __func__, result.frame_number, current_capture_time);
+                        __func__, result.frame_number, i->timestamp);
             free_camera_metadata((camera_metadata_t *)result.result);
         }
         // erase the element from the list
@@ -1205,12 +1248,11 @@ void QCamera3HardwareInterface::handleBufferWithLock(
         for (List<PendingFrameDropInfo>::iterator m = mPendingFrameDropList.begin();
                 m != mPendingFrameDropList.end(); m++) {
             QCamera3Channel *channel = (QCamera3Channel *)buffer->stream->priv;
-            uint32_t streamTypeMask = channel->getStreamTypeMask();
-            if((m->stream_type_mask & streamTypeMask) &&
-                (m->frame_number==frame_number) ) {
+            uint32_t streamID = channel->getStreamID(channel->getStreamTypeMask());
+            if((m->stream_ID==streamID) && (m->frame_number==frame_number)) {
                 buffer->status=CAMERA3_BUFFER_STATUS_ERROR;
-                ALOGV("%s: Stream STATUS_ERROR frame_number=%d, streamTypeMask=%d",
-                        __func__, frame_number, streamTypeMask);
+                ALOGV("%s: Stream STATUS_ERROR frame_number=%d, streamID=%d",
+                        __func__, frame_number, streamID);
                 m = mPendingFrameDropList.erase(m);
                 break;
             }
@@ -1414,7 +1456,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
     }
 
     uint32_t frameNumber = request->frame_number;
-    uint32_t streamTypeMask = 0;
+    cam_stream_ID_t streamID;
 
     if (meta.exists(ANDROID_REQUEST_ID)) {
         request_id = meta.find(ANDROID_REQUEST_ID).data.i32[0];
@@ -1458,10 +1500,11 @@ int QCamera3HardwareInterface::processCaptureRequest(
             pthread_mutex_unlock(&mMutex);
             return rc;
         }
-        streamTypeMask |= channel->getStreamTypeMask();
+        streamID.streamID[i]=channel->getStreamID(channel->getStreamTypeMask());
     }
+    streamID.num_streams=request->num_output_buffers;
 
-    rc = setFrameParameters(request, streamTypeMask);
+    rc = setFrameParameters(request, streamID);
     if (rc < 0) {
         ALOGE("%s: fail to set frame parameters", __func__);
         pthread_mutex_unlock(&mMutex);
@@ -1474,6 +1517,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
     pendingRequest.num_buffers = request->num_output_buffers;
     pendingRequest.request_id = request_id;
     pendingRequest.blob_request = blob_request;
+    pendingRequest.bNotified = 0;
     if (blob_request)
         pendingRequest.input_jpeg_settings = *mJpegSettings;
     pendingRequest.input_buffer_present = (request->input_buffer != NULL)? 1 : 0;
@@ -1785,83 +1829,23 @@ QCamera3HardwareInterface::translateCbMetadataToResultMetadata
              camMetadata.update(ANDROID_COLOR_CORRECTION_MODE, color_correct_mode, 1);
              break;
           }
-         case CAM_INTF_META_AEC_PRECAPTURE_ID: {
-             int32_t  *ae_precapture_id =
-                     (int32_t *)POINTER_OF(CAM_INTF_META_AEC_PRECAPTURE_ID, metadata);
-             camMetadata.update(ANDROID_CONTROL_AE_PRECAPTURE_ID, ae_precapture_id, 1);
-             break;
-          }
-         case CAM_INTF_META_AEC_ROI: {
-            cam_area_t  *hAeRegions =
-                  (cam_area_t *)POINTER_OF(CAM_INTF_META_AEC_ROI, metadata);
-             int32_t aeRegions[5];
-             convertToRegions(hAeRegions->rect, aeRegions, hAeRegions->weight);
-             camMetadata.update(ANDROID_CONTROL_AE_REGIONS, aeRegions, 5);
-             break;
-          }
-          case CAM_INTF_META_AEC_STATE:{
-             uint8_t *ae_state =
-                  (uint8_t *)POINTER_OF(CAM_INTF_META_AEC_STATE, metadata);
-             camMetadata.update(ANDROID_CONTROL_AE_STATE, ae_state, 1);
-             break;
-          }
-          case CAM_INTF_PARM_FOCUS_MODE:{
-             uint8_t  *focusMode =
-                  (uint8_t *)POINTER_OF(CAM_INTF_PARM_FOCUS_MODE, metadata);
-             uint8_t fwkAfMode = lookupFwkName(FOCUS_MODES_MAP,
-                 sizeof(FOCUS_MODES_MAP)/sizeof(FOCUS_MODES_MAP[0]), *focusMode);
-             camMetadata.update(ANDROID_CONTROL_AF_MODE, &fwkAfMode, 1);
-             break;
-          }
-          case CAM_INTF_META_AF_ROI:{
-             /*af regions*/
-             cam_area_t  *hAfRegions =
-                  (cam_area_t *)POINTER_OF(CAM_INTF_META_AF_ROI, metadata);
-             int32_t afRegions[5];
-             convertToRegions(hAfRegions->rect, afRegions, hAfRegions->weight);
-             camMetadata.update(ANDROID_CONTROL_AF_REGIONS, afRegions, 5);
-             break;
-          }
-          case CAM_INTF_META_AF_STATE: {
-             uint8_t  *afState = (uint8_t *)POINTER_OF(CAM_INTF_META_AF_STATE, metadata);
-             camMetadata.update(ANDROID_CONTROL_AF_STATE, afState, 1);
-             break;
-          }
-          case CAM_INTF_META_AF_TRIGGER_ID: {
-             int32_t  *afTriggerId =
-                  (int32_t *)POINTER_OF(CAM_INTF_META_AF_TRIGGER_ID, metadata);
-             camMetadata.update(ANDROID_CONTROL_AF_TRIGGER_ID, afTriggerId, 1);
-             break;
-          }
-          case CAM_INTF_PARM_WHITE_BALANCE: {
-               uint8_t  *whiteBalance =
-                  (uint8_t *)POINTER_OF(CAM_INTF_PARM_WHITE_BALANCE, metadata);
-               uint8_t fwkWhiteBalanceMode = lookupFwkName(WHITE_BALANCE_MODES_MAP,
-                   sizeof(WHITE_BALANCE_MODES_MAP)/sizeof(WHITE_BALANCE_MODES_MAP[0]),
-                   *whiteBalance);
-               camMetadata.update(ANDROID_CONTROL_AWB_MODE, &fwkWhiteBalanceMode, 1);
-               break;
-          }
-          case CAM_INTF_META_AWB_REGIONS: {
-             /*awb regions*/
-             cam_area_t  *hAwbRegions =
-                (cam_area_t *)POINTER_OF(CAM_INTF_META_AWB_REGIONS, metadata);
-             int32_t awbRegions[5];
-             convertToRegions(hAwbRegions->rect, awbRegions, hAwbRegions->weight);
-             camMetadata.update(ANDROID_CONTROL_AWB_REGIONS, awbRegions, 5);
-             break;
-          }
-          case CAM_INTF_META_AWB_STATE: {
-             uint8_t  *whiteBalanceState =
-                (uint8_t *)POINTER_OF(CAM_INTF_META_AWB_STATE, metadata);
-             camMetadata.update(ANDROID_CONTROL_AWB_STATE, whiteBalanceState, 1);
-             break;
-          }
-          case CAM_INTF_META_MODE: {
-             uint8_t  *mode = (uint8_t *)POINTER_OF(CAM_INTF_META_MODE, metadata);
-             camMetadata.update(ANDROID_CONTROL_MODE, mode, 1);
-             break;
-          }
+
+         // 3A state is sent in urgent partial result (uses quirk)
+         case CAM_INTF_META_AEC_PRECAPTURE_ID:
+         case CAM_INTF_META_AEC_ROI:
+         case CAM_INTF_META_AEC_STATE:
+         case CAM_INTF_PARM_FOCUS_MODE:
+         case CAM_INTF_META_AF_ROI:
+         case CAM_INTF_META_AF_STATE:
+         case CAM_INTF_META_AF_TRIGGER_ID:
+         case CAM_INTF_PARM_WHITE_BALANCE:
+         case CAM_INTF_META_AWB_REGIONS:
+         case CAM_INTF_META_AWB_STATE:
+         case CAM_INTF_META_MODE: {
+           ALOGV("%s: 3A metadata: %d, do not process", __func__, curr_entry);
+           break;
+         }
+
           case CAM_INTF_META_EDGE_MODE: {
              cam_edge_application_t  *edgeApplication =
                 (cam_edge_application_t *)POINTER_OF(CAM_INTF_META_EDGE_MODE, metadata);
@@ -2106,6 +2090,134 @@ QCamera3HardwareInterface::translateCbMetadataToResultMetadata
              ALOGV("%s: This is not a valid metadata type to report to fwk, %d",
                    __func__, curr_entry);
              break;
+       }
+       next_entry = GET_NEXT_PARAM_ID(curr_entry, metadata);
+       curr_entry = next_entry;
+    }
+    resultMetadata = camMetadata.release();
+    return resultMetadata;
+}
+
+/*===========================================================================
+ * FUNCTION   : translateCbUrgentMetadataToResultMetadata
+ *
+ * DESCRIPTION:
+ *
+ * PARAMETERS :
+ *   @metadata : metadata information from callback
+ *
+ * RETURN     : camera_metadata_t*
+ *              metadata in a format specified by fwk
+ *==========================================================================*/
+camera_metadata_t*
+QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
+                                (metadata_buffer_t *metadata) {
+
+    CameraMetadata camMetadata;
+    camera_metadata_t* resultMetadata;
+
+    uint8_t partial_result_tag = ANDROID_QUIRKS_PARTIAL_RESULT_PARTIAL;
+    camMetadata.update(ANDROID_QUIRKS_PARTIAL_RESULT, &partial_result_tag, 1);
+
+    uint8_t curr_entry = GET_FIRST_PARAM_ID(metadata);
+    uint8_t next_entry;
+    while (curr_entry != CAM_INTF_PARM_MAX) {
+      switch (curr_entry) {
+        case CAM_INTF_META_AEC_PRECAPTURE_ID: {
+            int32_t  *ae_precapture_id =
+              (int32_t *)POINTER_OF(CAM_INTF_META_AEC_PRECAPTURE_ID, metadata);
+            camMetadata.update(ANDROID_CONTROL_AE_PRECAPTURE_ID,
+                                          ae_precapture_id, 1);
+            ALOGV("%s: urgent Metadata : ANDROID_CONTROL_AE_PRECAPTURE_ID", __func__);
+          break;
+        }
+        case CAM_INTF_META_AEC_ROI: {
+            cam_area_t  *hAeRegions =
+                (cam_area_t *)POINTER_OF(CAM_INTF_META_AEC_ROI, metadata);
+            int32_t aeRegions[5];
+            convertToRegions(hAeRegions->rect, aeRegions, hAeRegions->weight);
+            camMetadata.update(ANDROID_CONTROL_AE_REGIONS, aeRegions, 5);
+            ALOGV("%s: urgent Metadata : ANDROID_CONTROL_AE_REGIONS", __func__);
+            break;
+        }
+        case CAM_INTF_META_AEC_STATE:{
+            uint8_t *ae_state =
+                (uint8_t *)POINTER_OF(CAM_INTF_META_AEC_STATE, metadata);
+            camMetadata.update(ANDROID_CONTROL_AE_STATE, ae_state, 1);
+            ALOGV("%s: urgent Metadata : ANDROID_CONTROL_AE_STATE", __func__);
+            break;
+        }
+        case CAM_INTF_PARM_FOCUS_MODE:{
+            uint8_t  *focusMode =
+                (uint8_t *)POINTER_OF(CAM_INTF_PARM_FOCUS_MODE, metadata);
+            uint8_t fwkAfMode = lookupFwkName(FOCUS_MODES_MAP,
+               sizeof(FOCUS_MODES_MAP)/sizeof(FOCUS_MODES_MAP[0]), *focusMode);
+            camMetadata.update(ANDROID_CONTROL_AF_MODE, &fwkAfMode, 1);
+            ALOGV("%s: urgent Metadata : ANDROID_CONTROL_AF_MODE", __func__);
+            break;
+        }
+        case CAM_INTF_META_AF_ROI:{
+            /*af regions*/
+            cam_area_t  *hAfRegions =
+                (cam_area_t *)POINTER_OF(CAM_INTF_META_AF_ROI, metadata);
+            int32_t afRegions[5];
+            convertToRegions(hAfRegions->rect, afRegions, hAfRegions->weight);
+            camMetadata.update(ANDROID_CONTROL_AF_REGIONS, afRegions, 5);
+            ALOGV("%s: urgent Metadata : ANDROID_CONTROL_AF_REGIONS", __func__);
+            break;
+        }
+        case CAM_INTF_META_AF_STATE: {
+            uint8_t  *afState =
+               (uint8_t *)POINTER_OF(CAM_INTF_META_AF_STATE, metadata);
+            camMetadata.update(ANDROID_CONTROL_AF_STATE, afState, 1);
+            ALOGV("%s: urgent Metadata : ANDROID_CONTROL_AF_STATE", __func__);
+            break;
+        }
+        case CAM_INTF_META_AF_TRIGGER_ID: {
+            int32_t  *afTriggerId =
+                 (int32_t *)POINTER_OF(CAM_INTF_META_AF_TRIGGER_ID, metadata);
+            camMetadata.update(ANDROID_CONTROL_AF_TRIGGER_ID, afTriggerId, 1);
+            ALOGV("%s: urgent Metadata : ANDROID_CONTROL_AF_TRIGGER_ID", __func__);
+            break;
+        }
+        case CAM_INTF_PARM_WHITE_BALANCE: {
+           uint8_t  *whiteBalance =
+                (uint8_t *)POINTER_OF(CAM_INTF_PARM_WHITE_BALANCE, metadata);
+             uint8_t fwkWhiteBalanceMode =
+                    lookupFwkName(WHITE_BALANCE_MODES_MAP,
+                    sizeof(WHITE_BALANCE_MODES_MAP)/
+                    sizeof(WHITE_BALANCE_MODES_MAP[0]), *whiteBalance);
+             camMetadata.update(ANDROID_CONTROL_AWB_MODE,
+                 &fwkWhiteBalanceMode, 1);
+            ALOGV("%s: urgent Metadata : ANDROID_CONTROL_AWB_MODE", __func__);
+             break;
+        }
+        case CAM_INTF_META_AWB_REGIONS: {
+           /*awb regions*/
+           cam_area_t  *hAwbRegions =
+               (cam_area_t *)POINTER_OF(CAM_INTF_META_AWB_REGIONS, metadata);
+           int32_t awbRegions[5];
+           convertToRegions(hAwbRegions->rect, awbRegions,hAwbRegions->weight);
+           camMetadata.update(ANDROID_CONTROL_AWB_REGIONS, awbRegions, 5);
+           ALOGV("%s: urgent Metadata : ANDROID_CONTROL_AWB_REGIONS", __func__);
+           break;
+        }
+        case CAM_INTF_META_AWB_STATE: {
+           uint8_t  *whiteBalanceState =
+              (uint8_t *)POINTER_OF(CAM_INTF_META_AWB_STATE, metadata);
+           camMetadata.update(ANDROID_CONTROL_AWB_STATE, whiteBalanceState, 1);
+           ALOGV("%s: urgent Metadata : ANDROID_CONTROL_AWB_STATE", __func__);
+           break;
+        }
+        case CAM_INTF_META_MODE: {
+            uint8_t *mode =(uint8_t *)POINTER_OF(CAM_INTF_META_MODE, metadata);
+            camMetadata.update(ANDROID_CONTROL_MODE, mode, 1);
+            ALOGV("%s: urgent Metadata : ANDROID_CONTROL_MODE", __func__);
+            break;
+        }
+        default:
+            ALOGV("%s: Normal Metadata %d, do not process",
+              __func__, curr_entry);
        }
        next_entry = GET_NEXT_PARAM_ID(curr_entry, metadata);
        curr_entry = next_entry;
@@ -2572,6 +2684,11 @@ int QCamera3HardwareInterface::initStaticMetadata(int cameraId)
     uint8_t availableVstabModes[] = {ANDROID_CONTROL_VIDEO_STABILIZATION_MODE_OFF};
     staticInfo.update(ANDROID_CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES,
                       availableVstabModes, sizeof(availableVstabModes));
+
+    /** Quirk for urgent 3A state until final interface is worked out */
+    uint8_t usePartialResultQuirk = 1;
+    staticInfo.update(ANDROID_QUIRKS_USE_PARTIAL_RESULT,
+                      &usePartialResultQuirk, 1);
 
     /*HAL 1 and HAL 3 common*/
     float maxZoom = 4;
@@ -3265,13 +3382,13 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
  *
  * PARAMETERS :
  *   @request   : request that needs to be serviced
- *   @streamTypeMask : bit mask of stream types on which buffers are requested
+ *   @streamID : Stream ID of all the requested streams
  *
  * RETURN     : success: NO_ERROR
  *              failure:
  *==========================================================================*/
 int QCamera3HardwareInterface::setFrameParameters(camera3_capture_request_t *request,
-                    uint32_t streamTypeMask)
+                    cam_stream_ID_t streamID)
 {
     /*translate from camera_metadata_t type to parm_type_t*/
     int rc = 0;
@@ -3299,9 +3416,10 @@ int QCamera3HardwareInterface::setFrameParameters(camera3_capture_request_t *req
         return BAD_VALUE;
     }
 
-    /* Update stream id mask where buffers are requested */
-    rc = AddSetParmEntryToBatch(mParameters, CAM_INTF_META_STREAM_TYPE_MASK,
-                                sizeof(streamTypeMask), &streamTypeMask);
+    /* Update stream id of all the requested buffers */
+    rc = AddSetParmEntryToBatch(mParameters, CAM_INTF_META_STREAM_ID,
+                                sizeof(cam_stream_ID_t), &streamID);
+
     if (rc < 0) {
         ALOGE("%s: Failed to set stream type mask in the parameters", __func__);
         return BAD_VALUE;
@@ -3572,7 +3690,7 @@ int QCamera3HardwareInterface::translateMetadataToParameters
                 frame_settings.find(ANDROID_CONTROL_AE_MODE).data.u8[0];
             if (fwk_aeMode > ANDROID_CONTROL_AE_MODE_ON) {
                 respectFlashMode = 0;
-                ALOGI("%s: AE Mode controls flash, ignore android.flash.mode",
+                ALOGV("%s: AE Mode controls flash, ignore android.flash.mode",
                     __func__);
             }
         }
@@ -3582,7 +3700,7 @@ int QCamera3HardwareInterface::translateMetadataToParameters
             flashMode = (int32_t)lookupHalName(FLASH_MODES_MAP,
                                           sizeof(FLASH_MODES_MAP),
                                           flashMode);
-            ALOGI("%s: flash mode after mapping %d", __func__, flashMode);
+            ALOGV("%s: flash mode after mapping %d", __func__, flashMode);
             // To check: CAM_INTF_META_FLASH_MODE usage
             rc = AddSetParmEntryToBatch(mParameters, CAM_INTF_PARM_LED_MODE,
                           sizeof(flashMode), &flashMode);

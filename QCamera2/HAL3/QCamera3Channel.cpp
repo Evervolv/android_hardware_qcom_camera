@@ -342,6 +342,27 @@ uint32_t QCamera3Channel::getStreamTypeMask()
 }
 
 /*===========================================================================
+ * FUNCTION   : getStreamID
+ *
+ * DESCRIPTION: Get StreamID of requested stream type
+ *
+ * PARAMETERS : streamMask
+ *
+ * RETURN     : Stream ID
+ *==========================================================================*/
+uint32_t QCamera3Channel::getStreamID(uint32_t streamMask)
+{
+    uint32_t streamID = 0;
+    for (int i = 0; i < m_numStreams; i++) {
+        if (streamMask == (uint32_t )(0x1 << mStreams[i]->getMyType())) {
+            streamID = mStreams[i]->getMyServerID();
+            break;
+        }
+    }
+    return streamID;
+}
+
+/*===========================================================================
  * FUNCTION   : getInternalFormatBuffer
  *
  * DESCRIPTION: return buffer in the internal format structure
@@ -1613,6 +1634,10 @@ QCamera3Exif *QCamera3PicChannel::getExifData()
                        EXIF_ASCII,
                        count,
                        (void *)dateTime);
+        exif->addEntry(EXIFTAGID_EXIF_DATE_TIME_DIGITIZED,
+                       EXIF_ASCII,
+                       count,
+                       (void *)dateTime);
     } else {
         ALOGE("%s: getExifDateTime failed", __func__);
     }
@@ -1768,7 +1793,7 @@ QCamera3Exif *QCamera3PicChannel::getExifData()
     return exif;
 }
 
-int QCamera3PicChannel::kMaxBuffers = 1;
+int QCamera3PicChannel::kMaxBuffers = 2;
 
 /*===========================================================================
  * FUNCTION   : QCamera3ReprocessChannel
