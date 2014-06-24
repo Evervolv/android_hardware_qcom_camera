@@ -122,7 +122,6 @@ int mm_camera_socket_sendmsg(
     struct iovec iov[1];
     struct cmsghdr * cmsghp = NULL;
     char control[CMSG_SPACE(sizeof(int))];
-    uint32_t len = 0;
 
     if (msg == NULL) {
       CDBG("%s: msg is NULL", __func__);
@@ -136,8 +135,7 @@ int mm_camera_socket_sendmsg(
     iov[0].iov_len = buf_size;
     msgh.msg_iov = iov;
     msgh.msg_iovlen = 1;
-    len = iov[0].iov_len;
-    CDBG("%s: iov_len=%d", __func__, len);
+    CDBG("%s: iov_len=%d", __func__, iov[0].iov_len);
 
     msgh.msg_control = NULL;
     msgh.msg_controllen = 0;

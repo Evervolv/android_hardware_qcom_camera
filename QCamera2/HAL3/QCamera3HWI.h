@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundataion. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundataion. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -44,15 +44,6 @@ extern "C" {
 #include <mm_camera_interface.h>
 #include <mm_jpeg_interface.h>
 }
-#ifdef CDBG
-#undef CDBG
-#endif //#ifdef CDBG
-#define CDBG(fmt, args...) ALOGD_IF(gCamHal3LogLevel >= 2, fmt, ##args)
-
-#ifdef CDBG_HIGH
-#undef CDBG_HIGH
-#endif //#ifdef CDBG_HIGH
-#define CDBG_HIGH(fmt, args...) ALOGD_IF(gCamHal3LogLevel >= 1, fmt, ##args)
 
 using namespace android;
 
@@ -72,8 +63,6 @@ typedef int64_t nsecs_t;
 #define NSEC_PER_USEC 1000
 #define NSEC_PER_33MSEC 33000000LL
 
-extern volatile uint32_t gCamHal3LogLevel;
-
 class QCamera3MetadataChannel;
 class QCamera3PicChannel;
 class QCamera3HeapMemory;
@@ -81,9 +70,7 @@ class QCamera3Exif;
 
 typedef struct {
     camera3_stream_t *stream;
-    camera3_stream_buffer_set_t buffer_set;
     stream_status_t status;
-    int registered;
     QCamera3Channel *channel;
 } stream_info_t;
 
@@ -95,6 +82,8 @@ public:
                 const camera3_callback_ops_t *callback_ops);
     static int configure_streams(const struct camera3_device *,
                 camera3_stream_configuration_t *stream_list);
+    static int register_stream_buffers(const struct camera3_device *,
+                const camera3_stream_buffer_set_t *buffer_set);
     static const camera_metadata_t* construct_default_request_settings(
                                 const struct camera3_device *, int type);
     static int process_capture_request(const struct camera3_device *,
@@ -120,9 +109,6 @@ public:
                                           int32_t* fpsRangesTable);
     static void makeOverridesList(cam_scene_mode_overrides_t* overridesTable, uint8_t size,
                                    uint8_t* overridesList, uint8_t* supported_indexes, int camera_id);
-    static uint8_t filterJpegSizes(int32_t* jpegSizes, int32_t* processedSizes,
-                                   uint8_t processedSizesCnt, uint8_t maxCount,
-                                   cam_rect_t active_array_size, uint8_t downscale_factor);
     static void convertToRegions(cam_rect_t rect, int32_t* region, int weight);
     static void convertFromRegions(cam_area_t* roi, const camera_metadata_t *settings,
                                    uint32_t tag);
@@ -138,6 +124,7 @@ public:
 
     int initialize(const camera3_callback_ops_t *callback_ops);
     int configureStreams(camera3_stream_configuration_t *stream_list);
+    int registerStreamBuffers(const camera3_stream_buffer_set_t *buffer_set);
     int processCaptureRequest(camera3_capture_request_t *request);
     void dump(int fd);
     int flush();
@@ -170,31 +157,24 @@ public:
         uint8_t hal_name;
     } QCameraMap;
 
-    typedef struct {
-        const char *const desc;
-        cam_cds_mode_type_t val;
-    } QCameraPropMap;
-
 private:
 
     int openCamera();
     int closeCamera();
-    int AddSetParmEntryToBatch(parm_buffer_t *p_table,
-                               cam_intf_parm_type_t paramType,
+    int AddSetMetaEntryToBatch(metadata_buffer_t *p_table,
+                               unsigned int paramType,
                                uint32_t paramLength,
                                void *paramValue);
     static int8_t lookupHalName(const QCameraMap arr[],
                       int len, unsigned int fwk_name);
     static int32_t lookupFwkName(const QCameraMap arr[],
                       int len, int hal_name);
-    static cam_cds_mode_type_t lookupProp(const QCameraPropMap arr[],
-            int len, const char *name);
-    static int calcMaxJpegSize(uint8_t camera_id);
 
     int validateCaptureRequest(camera3_capture_request_t *request);
 
     void deriveMinFrameDuration();
     int64_t getMinFrameDuration(const camera3_capture_request_t *request);
+
     void handleMetadataWithLock(mm_camera_super_buf_t *metadata_buf);
     void handleBufferWithLock(camera3_stream_buffer_t *buffer,
         uint32_t frame_number);
@@ -204,15 +184,15 @@ private:
                             int32_t enabled,
                             const char *type,
                             uint32_t frameNumber);
-    static void getLogLevel();
 
-    int queueReprocMetadata(metadata_buffer_t *metadata);
+    void cleanAndSortStreamInfo();
     void extractJpegMetadata(CameraMetadata& jpegMetadata,
             const camera3_capture_request_t *request);
 public:
-    cam_dimension_t calcMaxJpegDim();
+
     bool needOnlineRotation();
     int getJpegQuality();
+    int calcMaxJpegSize();
     QCamera3Exif *getExifData();
 public:
     static int kMaxInFlight;
@@ -230,12 +210,15 @@ private:
     camera3_stream_t *mInputStream;
     QCamera3MetadataChannel *mMetadataChannel;
     QCamera3PicChannel *mPictureChannel;
-    QCameraRawChannel *mRawChannel;
+    QCamera3RawChannel *mRawChannel;
+    QCamera3SupportChannel *mSupportChannel;
 
      //First request yet to be processed after configureStreams
     bool mFirstRequest;
+    bool mRepeatingRequest;
     QCamera3HeapMemory *mParamHeap;
     metadata_buffer_t* mParameters;
+    metadata_buffer_t* mPrevParameters;
     bool m_bWNROn;
 
     /* Data structure to store pending request */
@@ -293,9 +276,12 @@ private:
     int64_t mMinProcessedFrameDuration;
     int64_t mMinJpegFrameDuration;
     int64_t mMinRawFrameDuration;
-    bool mRawDump;
+
     power_module_t *m_pPowerModule;   // power module
 
+#ifdef HAS_MULTIMEDIA_HINTS
+    bool mHdrHint;
+#endif
     uint32_t mMetaFrameCount;
     const camera_module_callbacks_t *mCallbacks;
 
@@ -310,7 +296,6 @@ private:
     static const QCameraMap FOCUS_CALIBRATION_MAP[];
     static const QCameraMap TEST_PATTERN_MAP[];
     static const QCameraMap REFERENCE_ILLUMINANT_MAP[];
-    static const QCameraPropMap CDS_MAP[];
 
     static pthread_mutex_t mCameraSessionLock;
     static unsigned int mCameraSessionActive;

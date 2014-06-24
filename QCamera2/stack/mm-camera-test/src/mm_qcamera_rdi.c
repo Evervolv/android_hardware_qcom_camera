@@ -40,9 +40,7 @@ static void mm_app_rdi_dump_frame(mm_camera_buf_def_t *frame,
     char file_name[64];
     int file_fd;
     int i;
-
     if (frame != NULL) {
-
         snprintf(file_name, sizeof(file_name), "/data/%s_%03d.%s", name, frame_idx, ext);
         file_fd = open(file_name, O_RDWR | O_CREAT, 0777);
         if (file_fd < 0) {
@@ -55,7 +53,7 @@ static void mm_app_rdi_dump_frame(mm_camera_buf_def_t *frame,
             }
 
             close(file_fd);
-            CDBG("%s: dump rdi frame %s", __func__,file_name);
+            CDBG("dump %s", file_name);
         }
     }
 }
@@ -103,13 +101,11 @@ mm_camera_stream_t * mm_app_add_rdi_stream(mm_camera_test_obj_t *test_obj,
         return NULL;
     }
 
-    CDBG_ERROR("%s: raw_dim w:%d height:%d\n", __func__, cam_cap->raw_dim.width, cam_cap->raw_dim.height);
+    CDBG_ERROR("%s: raw_dim w:%d height:%d\n", __func__, cam_cap->raw_dim[0].width, cam_cap->raw_dim[0].height);
     for (i = 0;i < cam_cap->supported_raw_fmt_cnt;i++) {
         CDBG_ERROR("%s: supported_raw_fmts[%d]=%d\n", __func__, i, cam_cap->supported_raw_fmts[i]);
-        if (((CAM_FORMAT_BAYER_MIPI_RAW_8BPP_GBRG <= cam_cap->supported_raw_fmts[i]) &&
-            (CAM_FORMAT_BAYER_MIPI_RAW_12BPP_BGGR >= cam_cap->supported_raw_fmts[i])) ||
-            (cam_cap->supported_raw_fmts[i] == CAM_FORMAT_META_RAW_8BIT) ||
-            (cam_cap->supported_raw_fmts[i] == CAM_FORMAT_JPEG_RAW_8BIT))
+        if (CAM_FORMAT_BAYER_MIPI_RAW_8BPP_GBRG <= cam_cap->supported_raw_fmts[i] &&
+            CAM_FORMAT_BAYER_MIPI_RAW_12BPP_BGGR >= cam_cap->supported_raw_fmts[i])
         {
             fmt = cam_cap->supported_raw_fmts[i];
             CDBG_ERROR("%s: fmt=%d\n", __func__, fmt);
@@ -141,11 +137,8 @@ mm_camera_stream_t * mm_app_add_rdi_stream(mm_camera_test_obj_t *test_obj,
         stream->s_config.stream_info->num_of_burst = num_burst;
     }
     stream->s_config.stream_info->fmt = fmt;
-    CDBG("%s: RAW: w: %d, h: %d ", __func__,
-       cam_cap->raw_dim.width, cam_cap->raw_dim.height);
-
-    stream->s_config.stream_info->dim.width = cam_cap->raw_dim.width;
-    stream->s_config.stream_info->dim.height = cam_cap->raw_dim.height;
+    stream->s_config.stream_info->dim.width = cam_cap->raw_dim[0].width;
+    stream->s_config.stream_info->dim.height = cam_cap->raw_dim[0].height;
     stream->s_config.padding_info = cam_cap->padding_info;
 
     rc = mm_app_config_stream(test_obj, channel, stream, &stream->s_config);
@@ -256,17 +249,12 @@ int mm_app_stop_and_del_rdi_channel(mm_camera_test_obj_t *test_obj,
         CDBG_ERROR("%s:Stop RDI failed rc=%d\n", __func__, rc);
     }
 
-    if (channel->num_streams <= MAX_STREAM_NUM_IN_BUNDLE) {
-        for (i = 0; i < channel->num_streams; i++) {
-            stream = &channel->streams[i];
-            rc = mm_app_del_stream(test_obj, channel, stream);
-            if (MM_CAMERA_OK != rc) {
-                CDBG_ERROR("%s:del stream(%d) failed rc=%d\n", __func__, i, rc);
-            }
+    for (i = 0; i < channel->num_streams; i++) {
+        stream = &channel->streams[i];
+        rc = mm_app_del_stream(test_obj, channel, stream);
+        if (MM_CAMERA_OK != rc) {
+            CDBG_ERROR("%s:del stream(%d) failed rc=%d\n", __func__, i, rc);
         }
-    } else {
-        CDBG_ERROR("%s: num_streams = %d. Should not be more than %d\n",
-            __func__, channel->num_streams, MAX_STREAM_NUM_IN_BUNDLE);
     }
 
     rc = mm_app_del_channel(test_obj, channel);

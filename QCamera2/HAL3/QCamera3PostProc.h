@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundataion. All rights reserved.
+/* Copyright (c) 2012-2013, The Linux Foundataion. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -53,18 +53,27 @@ typedef struct {
     uint32_t client_hdl;             // handle of jpeg client (obtained when open jpeg)
     mm_camera_super_buf_t *src_frame;// source frame (need to be returned back to kernel after done)
     mm_camera_super_buf_t *src_reproc_frame; // original source frame for reproc if not NULL
-    QCamera3Exif *pJpegExifObj;
     metadata_buffer_t *metadata;
     jpeg_settings_t *jpeg_settings;
-} qcamera_hal3_jpeg_data_t;
+} qcamera_jpeg_data_t;
 
 typedef struct {
     uint32_t jobId;                  // job ID
     mm_camera_super_buf_t *src_frame;// source frame (need to be returned back to kernel after done)
     metadata_buffer_t *metadata;
-} qcamera_hal3_pp_data_t;
+} qcamera_pp_data_t;
 
-#define MAX_HAL3_EXIF_TABLE_ENTRIES 22
+typedef struct {
+    mm_camera_super_buf_t *frame;    // source frame that needs post process
+} qcamera_pp_request_t;
+
+typedef struct {
+    uint32_t jobId;                  // job ID (obtained when start_jpeg_job)
+    jpeg_job_status_t status;        // jpeg encoding status
+    mm_jpeg_output_t out_data;         // ptr to jpeg output buf
+} qcamera_jpeg_evt_payload_t;
+
+#define MAX_EXIF_TABLE_ENTRIES 22
 class QCamera3Exif
 {
 public:
@@ -79,7 +88,7 @@ public:
     QEXIF_INFO_DATA *getEntries() {return m_Entries;};
 
 private:
-    QEXIF_INFO_DATA m_Entries[MAX_HAL3_EXIF_TABLE_ENTRIES];  // exif tags for JPEG encoder
+    QEXIF_INFO_DATA m_Entries[MAX_EXIF_TABLE_ENTRIES];  // exif tags for JPEG encoder
     uint32_t  m_nNumEntries;                            // number of valid entries
 };
 
@@ -100,8 +109,9 @@ public:
     int32_t processPPData(mm_camera_super_buf_t *frame);
     int32_t processPPMetadata(metadata_buffer_t *reproc_meta);
     int32_t processJpegSettingData(jpeg_settings_t *jpeg_settings);
-    qcamera_hal3_jpeg_data_t *findJpegJobByJobId(uint32_t jobId);
-    void releaseJpegJobData(qcamera_hal3_jpeg_data_t *job);
+    int32_t processJpegEvt(qcamera_jpeg_evt_payload_t *evt);
+    qcamera_jpeg_data_t *findJpegJobByJobId(uint32_t jobId);
+    void releaseJpegJobData(qcamera_jpeg_data_t *job);
 
 private:
     int32_t sendEvtNotify(int32_t msg_type, int32_t ext1, int32_t ext2);
@@ -110,7 +120,7 @@ private:
     int32_t getJpegEncodeConfig(mm_jpeg_encode_params_t& encode_parm,
                                   QCamera3Stream *main_stream,
                                   jpeg_settings_t *jpeg_settings);
-    int32_t encodeData(qcamera_hal3_jpeg_data_t *jpeg_job_data,
+    int32_t encodeData(qcamera_jpeg_data_t *jpeg_job_data,
                        uint8_t &needNewSess);
     void releaseSuperBuf(mm_camera_super_buf_t *super_buf);
     static void releaseNotifyData(void *user_data, void *cookie);
@@ -132,6 +142,7 @@ private:
     uint32_t                   mJpegClientHandle;
     uint32_t                   mJpegSessionId;
 
+    QCamera3Exif *             m_pJpegExifObj;
     int8_t                     m_bThumbnailNeeded;
     QCamera3Memory             *mJpegMem;
     QCamera3ReprocessChannel *  m_pReprocChannel;

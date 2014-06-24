@@ -56,10 +56,6 @@ typedef enum {
 #define QOMX_IMAGE_EXT_MOBICAT_NAME            "OMX.QCOM.image.exttype.mobicat"
 #define QOMX_IMAGE_EXT_ENCODING_MODE_NAME        "OMX.QCOM.image.encoding.mode"
 #define QOMX_IMAGE_EXT_WORK_BUFFER_NAME      "OMX.QCOM.image.exttype.workbuffer"
-#define QOMX_IMAGE_EXT_METADATA_NAME      "OMX.QCOM.image.exttype.metadata"
-#define QOMX_IMAGE_EXT_META_ENC_KEY_NAME      "OMX.QCOM.image.exttype.metaEncKey"
-#define QOMX_IMAGE_EXT_MEM_OPS_NAME      "OMX.QCOM.image.exttype.mem_ops"
-#define QOMX_IMAGE_EXT_JPEG_SPEED_NAME      "OMX.QCOM.image.exttype.jpeg.speed"
 
 /** QOMX_IMAGE_EXT_INDEXTYPE
 *  This enum is an extension of the OMX_INDEXTYPE enum and
@@ -85,19 +81,7 @@ typedef enum {
   QOMX_IMAGE_EXT_ENCODING_MODE = 0x07F00004,
 
   //Name: OMX.QCOM.image.exttype.workbuffer
-  QOMX_IMAGE_EXT_WORK_BUFFER = 0x07F00005,
-
-  //Name: OMX.QCOM.image.exttype.metadata
-  QOMX_IMAGE_EXT_METADATA = 0x07F00008,
-
-  //Name: OMX.QCOM.image.exttype.metaEncKey
-  QOMX_IMAGE_EXT_META_ENC_KEY = 0x07F00009,
-
-  //Name: OMX.QCOM.image.exttype.memOps
-  QOMX_IMAGE_EXT_MEM_OPS = 0x07F0000A,
-
-  //Name: OMX.QCOM.image.exttype.jpeg.speed
-  QOMX_IMAGE_EXT_JPEG_SPEED = 0x07F000B,
+  QOMX_IMAGE_EXT_WORK_BUFFER = 0x07F00004,
 
 } QOMX_IMAGE_EXT_INDEXTYPE;
 
@@ -193,7 +177,6 @@ typedef struct {
   OMX_U32 output_width;
   OMX_U32 output_height;
   QOMX_YUV_FRAME_INFO tmbOffset;
-  OMX_U32 rotation;
 } QOMX_THUMBNAIL_INFO;
 
 /**qomx_mobicat
@@ -214,26 +197,7 @@ typedef struct {
 typedef struct {
   int fd;
   uint8_t *vaddr;
-  uint32_t length;
 } QOMX_WORK_BUFFER;
-
-/**QOMX_METADATA
- *
- * meta data to be set in EXIF
- */
-typedef struct {
-  OMX_U8  *metadata;
-  OMX_U32 metaPayloadSize;
-} QOMX_METADATA;
-
-/**QOMX_META_ENC_KEY
- *
- * meta data encryption key
- */
-typedef struct {
-  OMX_U8  *metaKey;
-  OMX_U32 keyLen;
-} QOMX_META_ENC_KEY;
 
 /** QOMX_IMG_COLOR_FORMATTYPE
 *  This enum is an extension of the OMX_COLOR_FORMATTYPE enum.
@@ -263,51 +227,6 @@ typedef enum {
   OMX_Serial_Encoding,
   OMX_Parallel_Encoding
 } QOMX_ENCODING_MODE;
-
-
-/**omx_jpeg_ouput_buf_t
-*  Structure describing jpeg output buffer
-*  @handle - Handle to the containing class
-*  @mem_hdl - Handle to camera memory struct
-*  @vaddr - Buffer address
-*  @size - Buffer size
-*  @fd - file descriptor
-**/
-typedef struct {
-  void *handle;
-  void *mem_hdl;
-  int8_t isheap;
-  int size; /*input*/
-  void *vaddr;
-  int fd;
-} omx_jpeg_ouput_buf_t;
-
-/** QOMX_MEM_OPS
-* Structure holding the function pointers to
-* buffer memory operations
-* @get_memory - function to allocate buffer memory
-**/
-typedef struct {
-  int (*get_memory)( omx_jpeg_ouput_buf_t *p_out_buf);
-} QOMX_MEM_OPS;
-
-/** QOMX_JPEG_SPEED_MODE
-* Enum specifying the values for the jpeg
-* speed mode setting
-**/
-typedef enum {
-  QOMX_JPEG_SPEED_MODE_NORMAL,
-  QOMX_JPEG_SPEED_MODE_HIGH
-} QOMX_JPEG_SPEED_MODE;
-
-/** QOMX_JPEG_SPEED
-* Structure used to set the jpeg speed mode
-* parameter
-* @speedMode - jpeg speed mode
-**/
-typedef struct {
-  QOMX_JPEG_SPEED_MODE speedMode;
-} QOMX_JPEG_SPEED;
 
 #ifdef __cplusplus
  }

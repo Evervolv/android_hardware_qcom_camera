@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundataion. All rights reserved.
+/* Copyright (c) 2012-2013, The Linux Foundataion. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -27,7 +27,7 @@
  *
  */
 
-#define LOG_TAG "QCameraHWI_Mem"
+#define LOG_TAG "QCamera3HWI_Mem"
 
 #include <string.h>
 #include <fcntl.h>
@@ -36,7 +36,6 @@
 #include <utils/Errors.h>
 #include <gralloc_priv.h>
 #include "QCamera3Mem.h"
-#include "QCamera3HWI.h"
 
 extern "C" {
 #include <mm_camera_interface.h>
@@ -63,7 +62,7 @@ QCamera3Memory::QCamera3Memory()
     for (int i = 0; i < MM_CAMERA_MAX_NUM_FRAMES; i++) {
         mMemInfo[i].fd = 0;
         mMemInfo[i].main_ion_fd = 0;
-        mMemInfo[i].handle = 0;
+        mMemInfo[i].handle = NULL;
         mMemInfo[i].size = 0;
     }
 }
@@ -115,9 +114,9 @@ int QCamera3Memory::cacheOpsInternal(int index, unsigned int cmd, void *vaddr)
     custom_data.cmd = cmd;
     custom_data.arg = (unsigned long)&cache_inv_data;
 
-    CDBG("%s: addr = %p, fd = %d, handle = %lx length = %d, ION Fd = %d",
+    ALOGV("%s: addr = %p, fd = %d, handle = %p length = %d, ION Fd = %d",
          __func__, cache_inv_data.vaddr, cache_inv_data.fd,
-         (unsigned long)cache_inv_data.handle, cache_inv_data.length,
+         cache_inv_data.handle, cache_inv_data.length,
          mMemInfo[index].main_ion_fd);
     ret = ioctl(mMemInfo[index].main_ion_fd, ION_IOC_CUSTOM, &custom_data);
     if (ret < 0)
@@ -338,7 +337,7 @@ int QCamera3HeapMemory::allocOneBuffer(QCamera3MemInfo &memInfo, int heap_id, in
     alloc.len = (alloc.len + 4095) & (~4095);
     alloc.align = 4096;
     alloc.flags = ION_FLAG_CACHED;
-    alloc.heap_mask = heap_id;
+    alloc.heap_id_mask = heap_id;
     rc = ioctl(main_ion_fd, ION_IOC_ALLOC, &alloc);
     if (rc < 0) {
         ALOGE("ION allocation for len %d failed: %s\n", alloc.len,
@@ -396,7 +395,7 @@ void QCamera3HeapMemory::deallocOneBuffer(QCamera3MemInfo &memInfo)
         close(memInfo.main_ion_fd);
         memInfo.main_ion_fd = 0;
     }
-    memInfo.handle = 0;
+    memInfo.handle = NULL;
     memInfo.size = 0;
 }
 
@@ -606,7 +605,7 @@ int QCamera3GrallocMemory::registerBuffer(buffer_handle_t *buffer)
     status_t ret = NO_ERROR;
     struct ion_fd_data ion_info_fd;
     void *vaddr = NULL;
-    CDBG(" %s : E ", __FUNCTION__);
+    ALOGV(" %s : E ", __FUNCTION__);
 
     memset(&ion_info_fd, 0, sizeof(ion_info_fd));
 
@@ -662,7 +661,7 @@ int QCamera3GrallocMemory::registerBuffer(buffer_handle_t *buffer)
     }
 
 end:
-    CDBG(" %s : X ",__func__);
+    ALOGV(" %s : X ",__func__);
     return ret;
 }
 
@@ -677,7 +676,7 @@ end:
  *==========================================================================*/
 void QCamera3GrallocMemory::unregisterBuffers()
 {
-    CDBG("%s: E ", __FUNCTION__);
+    ALOGV("%s: E ", __FUNCTION__);
 
     for (int cnt = 0; cnt < mBufferCount; cnt++) {
         munmap(mPtr[cnt], mMemInfo[cnt].size);
@@ -690,10 +689,10 @@ void QCamera3GrallocMemory::unregisterBuffers()
             ALOGE("ion free failed");
         }
         close(mMemInfo[cnt].main_ion_fd);
-        CDBG_HIGH("put buffer %d successfully", cnt);
+        ALOGV("put buffer %d successfully", cnt);
     }
     mBufferCount = 0;
-    CDBG(" %s : X ",__FUNCTION__);
+    ALOGV(" %s : X ",__FUNCTION__);
 }
 
 /*===========================================================================

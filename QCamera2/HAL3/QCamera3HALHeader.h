@@ -58,11 +58,7 @@ class QCamera3Channel;
         char gps_processing_method[GPS_PROCESSING_METHOD_SIZE];
     } jpeg_settings_t;
 
-    typedef struct {
-        int32_t iso_speed;
-        int64_t exposure_time;
-    } metadata_response_t;
+ };//namespace qcamera
 
-};//namespace qcamera
 
 #endif
