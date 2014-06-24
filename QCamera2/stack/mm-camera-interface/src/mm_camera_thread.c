@@ -222,14 +222,16 @@ static void mm_camera_poll_proc_pipe(mm_camera_poll_thread_t *poll_cb)
         poll_cb->poll_fds[poll_cb->num_fds].events = POLLIN|POLLRDNORM|POLLPRI;
         poll_cb->num_fds++;
 
-        if (MM_CAMERA_POLL_TYPE_EVT == poll_cb->poll_type) {
+        if (MM_CAMERA_POLL_TYPE_EVT == poll_cb->poll_type &&
+                poll_cb->num_fds < MAX_STREAM_NUM_IN_BUNDLE) {
             if (poll_cb->poll_entries[0].fd > 0) {
                 /* fd is valid, we update poll_fds */
                 poll_cb->poll_fds[poll_cb->num_fds].fd = poll_cb->poll_entries[0].fd;
                 poll_cb->poll_fds[poll_cb->num_fds].events = POLLIN|POLLRDNORM|POLLPRI;
                 poll_cb->num_fds++;
             }
-        } else if (MM_CAMERA_POLL_TYPE_DATA == poll_cb->poll_type) {
+        } else if (MM_CAMERA_POLL_TYPE_DATA == poll_cb->poll_type &&
+                poll_cb->num_fds <= MAX_STREAM_NUM_IN_BUNDLE) {
             for(i = 0; i < MAX_STREAM_NUM_IN_BUNDLE; i++) {
                 if(poll_cb->poll_entries[i].fd > 0) {
                     /* fd is valid, we update poll_fds to this fd */
@@ -279,6 +281,10 @@ static void *mm_camera_poll_fn(mm_camera_poll_thread_t *poll_cb)
 {
     int rc = 0, i;
 
+    if (NULL == poll_cb) {
+        CDBG_ERROR("%s: poll_cb is NULL!\n", __func__);
+        return NULL;
+    }
     CDBG("%s: poll type = %d, num_fd = %d poll_cb = %p\n",
          __func__, poll_cb->poll_type, poll_cb->num_fds,poll_cb);
     do {
@@ -319,7 +325,7 @@ static void *mm_camera_poll_fn(mm_camera_poll_thread_t *poll_cb)
             usleep(10);
             continue;
         }
-    } while (poll_cb->state == MM_CAMERA_POLL_TASK_STATE_POLL);
+    } while ((poll_cb != NULL) && (poll_cb->state == MM_CAMERA_POLL_TASK_STATE_POLL));
     return NULL;
 }
 
@@ -483,15 +489,10 @@ int32_t mm_camera_poll_thread_del_poll_fd(mm_camera_poll_thread_t * poll_cb,
     return rc;
 }
 
-static pthread_mutex_t constr_destr_lock = PTHREAD_MUTEX_INITIALIZER;
-
 int32_t mm_camera_poll_thread_launch(mm_camera_poll_thread_t * poll_cb,
                                      mm_camera_poll_thread_type_t poll_type)
 {
     int32_t rc = 0;
-
-    pthread_mutex_lock(&constr_destr_lock);
-
     poll_cb->poll_type = poll_type;
 
     poll_cb->pfds[0] = 0;
@@ -499,7 +500,6 @@ int32_t mm_camera_poll_thread_launch(mm_camera_poll_thread_t * poll_cb,
     rc = pipe(poll_cb->pfds);
     if(rc < 0) {
         CDBG_ERROR("%s: pipe open rc=%d\n", __func__, rc);
-        pthread_mutex_unlock(&constr_destr_lock);
         return -1;
     }
 
@@ -521,19 +521,15 @@ int32_t mm_camera_poll_thread_launch(mm_camera_poll_thread_t * poll_cb,
     }
     pthread_mutex_unlock(&poll_cb->mutex);
     CDBG("%s: End",__func__);
-    pthread_mutex_unlock(&constr_destr_lock);
     return rc;
 }
 
 int32_t mm_camera_poll_thread_release(mm_camera_poll_thread_t *poll_cb)
 {
     int32_t rc = 0;
-
-    pthread_mutex_lock(&constr_destr_lock);
-
     if(MM_CAMERA_POLL_TASK_STATE_STOPPED == poll_cb->state) {
         CDBG_ERROR("%s: err, poll thread is not running.\n", __func__);
-        goto done;
+        return rc;
     }
 
     /* send exit signal to poll thread */
@@ -554,8 +550,6 @@ int32_t mm_camera_poll_thread_release(mm_camera_poll_thread_t *poll_cb)
     pthread_mutex_destroy(&poll_cb->mutex);
     pthread_cond_destroy(&poll_cb->cond_v);
     memset(poll_cb, 0, sizeof(mm_camera_poll_thread_t));
-done:
-    pthread_mutex_unlock(&constr_destr_lock);
     return rc;
 }
 
@@ -586,6 +580,9 @@ static void *mm_camera_cmd_thread(void *data)
             case MM_CAMERA_CMD_TYPE_REQ_DATA_CB:
             case MM_CAMERA_CMD_TYPE_SUPER_BUF_DATA_CB:
             case MM_CAMERA_CMD_TYPE_CONFIG_NOTIFY:
+            case MM_CAMERA_CMD_TYPE_START_ZSL:
+            case MM_CAMERA_CMD_TYPE_STOP_ZSL:
+            case MM_CAMERA_CMD_TYPE_GENERAL:
             case MM_CAMERA_CMD_TYPE_FLUSH_QUEUE:
                 if (NULL != cmd_thread->cb) {
                     cmd_thread->cb(node, cmd_thread->user_data);

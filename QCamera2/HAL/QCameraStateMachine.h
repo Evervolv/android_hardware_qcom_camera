@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundataion. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundataion. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -85,6 +85,7 @@ typedef enum {
     QCAMERA_SM_EVT_JPEG_EVT_NOTIFY,          // evt notify from jpeg
     QCAMERA_SM_EVT_SNAPSHOT_DONE,            // internal evt that snapshot is done
     QCAMERA_SM_EVT_THERMAL_NOTIFY,           // evt notify from thermal daemon
+    QCAMERA_SM_EVT_STOP_CAPTURE_CHANNEL,     // stop capture channel
     QCAMERA_SM_EVT_MAX
 } qcamera_sm_evt_enum_t;
 
@@ -106,6 +107,11 @@ typedef struct {
         int handle;                           // result_type ==QCAMERA_API_RESULT_TYPE_HANDLE
     };
 } qcamera_api_result_t;
+
+typedef struct api_result_list {
+   qcamera_api_result_t result;
+   struct api_result_list *next;
+}api_result_list;
 
 // definition for payload type of setting callback
 typedef struct {
@@ -132,6 +138,11 @@ typedef struct {
 typedef enum {
     QCAMERA_INTERNAL_EVT_FOCUS_UPDATE,       // focus updating result
     QCAMERA_INTERNAL_EVT_PREP_SNAPSHOT_DONE, // prepare snapshot done
+    QCAMERA_INTERNAL_EVT_FACE_DETECT_RESULT, // face detection result
+    QCAMERA_INTERNAL_EVT_HISTOGRAM_STATS,    // histogram
+    QCAMERA_INTERNAL_EVT_CROP_INFO,          // crop info
+    QCAMERA_INTERNAL_EVT_ASD_UPDATE,         // asd update result
+    QCAMERA_INTERNAL_EVT_READY_FOR_SNAPSHOT, // Ready for Prepare Snapshot
     QCAMERA_INTERNAL_EVT_MAX
 } qcamera_internal_evt_type_t;
 
@@ -140,6 +151,10 @@ typedef struct {
     union {
         cam_auto_focus_data_t focus_data;
         cam_prep_snapshot_state_t prep_snapshot_state;
+        cam_face_detection_data_t faces_data;
+        cam_hist_stats_t stats_data;
+        cam_crop_data_t crop_data;
+        cam_auto_scene_t asd_data;
     };
 } qcamera_sm_internal_evt_payload_t;
 
@@ -152,6 +167,12 @@ public:
     int32_t procEvt(qcamera_sm_evt_enum_t evt, void *evt_payload);
 
     bool isPreviewRunning(); // check if preview is running
+    bool isPreviewReady(); // check if preview is ready
+    bool isCaptureRunning(); // check if image capture is running
+    bool isNonZSLCaptureRunning(); // check if image capture is running in non ZSL mode
+    String8 dump(); //returns the state information in a string
+    bool isPrepSnapStateRunning();
+    bool isRecording();
 
 private:
     typedef enum {
@@ -199,7 +220,6 @@ private:
     QCameraQueue evt_queue;               // cmd queue for evt from mm-camera-intf/mm-jpeg-intf
     pthread_t cmd_pid;                    // cmd thread ID
     cam_semaphore_t cmd_sem;              // semaphore for cmd thread
-
 };
 
 }; // namespace qcamera

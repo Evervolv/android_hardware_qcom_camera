@@ -33,7 +33,7 @@
 #include <cam_semaphore.h>
 
 #include "mm_camera_interface.h"
-
+#include <hardware/camera.h>
 /**********************************************************************************
 * Data structure declare
 ***********************************************************************************/
@@ -45,7 +45,7 @@
 #define MM_CAMERA_CHANNEL_POLL_THREAD_MAX 1
 
 #define MM_CAMERA_DEV_NAME_LEN 32
-#define MM_CAMERA_DEV_OPEN_TRIES 20
+#define MM_CAMERA_DEV_OPEN_TRIES 2
 #define MM_CAMERA_DEV_OPEN_RETRY_SLEEP 20
 
 #ifndef TRUE
@@ -55,6 +55,8 @@
 #ifndef FALSE
 #define FALSE 0
 #endif
+
+#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 
 struct mm_channel;
 struct mm_stream;
@@ -68,19 +70,36 @@ typedef enum
     MM_CAMERA_CMD_TYPE_REQ_DATA_CB,/* request data */
     MM_CAMERA_CMD_TYPE_SUPER_BUF_DATA_CB,    /* superbuf dataB CMD */
     MM_CAMERA_CMD_TYPE_CONFIG_NOTIFY, /* configure notify mode */
+    MM_CAMERA_CMD_TYPE_START_ZSL, /* start zsl snapshot for channel */
+    MM_CAMERA_CMD_TYPE_STOP_ZSL, /* stop zsl snapshot for channel */
     MM_CAMERA_CMD_TYPE_FLUSH_QUEUE, /* flush queue */
+    MM_CAMERA_CMD_TYPE_GENERAL,  /* general cmd */
     MM_CAMERA_CMD_TYPE_MAX
 } mm_camera_cmdcb_type_t;
 
 typedef struct {
     uint32_t stream_id;
     uint32_t frame_idx;
+    uint32_t flags;
     mm_camera_buf_def_t *buf; /* ref to buf */
 } mm_camera_buf_info_t;
 
 typedef struct {
     uint32_t num_buf_requested;
+    uint32_t num_retro_buf_requested;
 } mm_camera_req_buf_t;
+
+typedef enum {
+    MM_CAMERA_GENERIC_CMD_TYPE_AE_BRACKETING,
+    MM_CAMERA_GENERIC_CMD_TYPE_AF_BRACKETING,
+    MM_CAMERA_GENERIC_CMD_TYPE_FLASH_BRACKETING,
+    MM_CAMERA_GENERIC_CMD_TYPE_ZOOM_1X,
+} mm_camera_generic_cmd_type_t;
+
+typedef struct {
+    mm_camera_generic_cmd_type_t type;
+    uint32_t payload[32];
+} mm_camera_generic_cmd_t;
 
 typedef struct {
     mm_camera_cmdcb_type_t cmd_type;
@@ -91,6 +110,7 @@ typedef struct {
         mm_camera_req_buf_t req_buf; /* num of buf requested */
         uint32_t frame_idx; /* frame idx boundary for flush superbuf queue*/
         mm_camera_super_buf_notify_mode_t notify_mode; /* notification mode */
+        mm_camera_generic_cmd_t gen_cmd;
     } u;
 } mm_camera_cmdcb_t;
 
@@ -252,12 +272,18 @@ typedef enum {
     MM_CHANNEL_EVT_CANCEL_REQUEST_SUPER_BUF,
     MM_CHANNEL_EVT_FLUSH_SUPER_BUF_QUEUE,
     MM_CHANNEL_EVT_CONFIG_NOTIFY_MODE,
+    MM_CHANNEL_EVT_START_ZSL_SNAPSHOT,
+    MM_CHANNEL_EVT_STOP_ZSL_SNAPSHOT,
     MM_CHANNEL_EVT_MAP_STREAM_BUF,
     MM_CHANNEL_EVT_UNMAP_STREAM_BUF,
     MM_CHANNEL_EVT_SET_STREAM_PARM,
     MM_CHANNEL_EVT_GET_STREAM_PARM,
     MM_CHANNEL_EVT_DO_STREAM_ACTION,
     MM_CHANNEL_EVT_DELETE,
+    MM_CHANNEL_EVT_AF_BRACKETING,
+    MM_CHANNEL_EVT_AE_BRACKETING,
+    MM_CHANNEL_EVT_FLASH_BRACKETING,
+    MM_CHANNEL_EVT_ZOOM_1X,
 } mm_channel_evt_type_t;
 
 typedef struct {
@@ -306,6 +332,12 @@ typedef struct {
     mm_camera_channel_attr_t attr;
     uint32_t expected_frame_id;
     uint32_t match_cnt;
+    uint32_t expected_frame_id_without_led;
+    uint32_t led_on_start_frame_id;
+    uint32_t led_off_start_frame_id;
+    uint32_t led_on_num_frames;
+    uint32_t once;
+    uint32_t frame_skip_count;
 } mm_channel_queue_t;
 
 typedef struct {
@@ -326,6 +358,11 @@ typedef struct mm_channel {
 
     /* num of pending suferbuffers */
     uint32_t pending_cnt;
+    uint32_t pending_retro_cnt;
+    uint32_t bWaitForPrepSnapshotDone;
+    uint32_t unLockAEC;
+    /* num of pending suferbuffers */
+    uint8_t stopZslSnapshot;
 
     /* cmd thread for superbuffer dataCB and async stop*/
     mm_camera_cmd_thread_t cmd_thread;
@@ -343,6 +380,17 @@ typedef struct mm_channel {
 
     /* reference to parent cam_obj */
     struct mm_camera_obj* cam_obj;
+
+    /* manual zsl snapshot control */
+    uint8_t manualZSLSnapshot;
+
+    /* control for zsl led */
+    uint8_t startZSlSnapshotCalled;
+    uint8_t needLEDFlash;
+    uint8_t need3ABracketing;
+    uint8_t isFlashBracketingEnabled;
+    uint8_t isZoom1xFrameRequested;
+    uint32_t burstSnapNum;
 } mm_channel_t;
 
 /* struct to store information about pp cookie*/
@@ -390,6 +438,7 @@ typedef struct {
     int8_t num_cam;
     char video_dev_name[MM_CAMERA_MAX_NUM_SENSORS][MM_CAMERA_DEV_NAME_LEN];
     mm_camera_obj_t *cam_obj[MM_CAMERA_MAX_NUM_SENSORS];
+    struct camera_info info[MM_CAMERA_MAX_NUM_SENSORS];
 } mm_camera_ctrl_t;
 
 typedef enum {
@@ -445,6 +494,10 @@ extern int32_t mm_camera_prepare_snapshot(mm_camera_obj_t *my_obj,
                                           int32_t do_af_flag);
 extern int32_t mm_camera_start_zsl_snapshot(mm_camera_obj_t *my_obj);
 extern int32_t mm_camera_stop_zsl_snapshot(mm_camera_obj_t *my_obj);
+extern int32_t mm_camera_start_zsl_snapshot_ch(mm_camera_obj_t *my_obj,
+        uint32_t ch_id);
+extern int32_t mm_camera_stop_zsl_snapshot_ch(mm_camera_obj_t *my_obj,
+        uint32_t ch_id);
 extern uint32_t mm_camera_add_channel(mm_camera_obj_t *my_obj,
                                       mm_camera_channel_attr_t *attr,
                                       mm_camera_buf_notify_t channel_cb,
@@ -469,7 +522,8 @@ extern int32_t mm_camera_stop_channel(mm_camera_obj_t *my_obj,
                                       uint32_t ch_id);
 extern int32_t mm_camera_request_super_buf(mm_camera_obj_t *my_obj,
                                            uint32_t ch_id,
-                                           uint32_t num_buf_requested);
+                                           uint32_t num_buf_requested,
+                                           uint32_t num_retro_buf_requested);
 extern int32_t mm_camera_cancel_super_buf_request(mm_camera_obj_t *my_obj,
                                                   uint32_t ch_id);
 extern int32_t mm_camera_flush_super_buf_queue(mm_camera_obj_t *my_obj,
@@ -578,4 +632,8 @@ extern int32_t mm_camera_cmd_thread_launch(
 extern int32_t mm_camera_cmd_thread_name(const char* name);
 extern int32_t mm_camera_cmd_thread_release(mm_camera_cmd_thread_t * cmd_thread);
 
+extern int32_t mm_camera_channel_advanced_capture(mm_camera_obj_t *my_obj,
+                                               mm_camera_advanced_capture_t advanced_capturetype,
+                                               uint32_t ch_id,
+                                               int32_t start_flag);
 #endif /* __MM_CAMERA_H__ */

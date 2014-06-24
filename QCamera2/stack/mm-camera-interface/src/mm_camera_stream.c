@@ -72,6 +72,30 @@ int32_t mm_stream_reg_buf(mm_stream_t * my_obj);
 int32_t mm_stream_buf_done(mm_stream_t * my_obj,
                            mm_camera_buf_def_t *frame);
 int32_t mm_stream_calc_offset(mm_stream_t *my_obj);
+int32_t mm_stream_calc_offset_preview(cam_format_t fmt,
+                                      cam_dimension_t *dim,
+                                      cam_stream_buf_plane_info_t *buf_planes);
+int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
+                                      cam_dimension_t *dim,
+                                      cam_stream_buf_plane_info_t *buf_planes);
+
+int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
+                                       cam_dimension_t *dim,
+                                       cam_padding_info_t *padding,
+                                       cam_stream_buf_plane_info_t *buf_planes);
+int32_t mm_stream_calc_offset_raw(cam_format_t fmt,
+                                  cam_dimension_t *dim,
+                                  cam_padding_info_t *padding,
+                                  cam_stream_buf_plane_info_t *buf_planes);
+int32_t mm_stream_calc_offset_video(cam_dimension_t *dim,
+                                    cam_stream_buf_plane_info_t *buf_planes);
+int32_t mm_stream_calc_offset_metadata(cam_dimension_t *dim,
+                                       cam_padding_info_t *padding,
+                                       cam_stream_buf_plane_info_t *buf_planes);
+int32_t mm_stream_calc_offset_postproc(cam_stream_info_t *stream_info,
+                                       cam_padding_info_t *padding,
+                                       cam_stream_buf_plane_info_t *plns);
+
 
 /* state machine function declare */
 int32_t mm_stream_fsm_inited(mm_stream_t * my_obj,
@@ -387,6 +411,11 @@ int32_t mm_stream_fsm_inited(mm_stream_t *my_obj,
             break;
         }
 
+        if (NULL == my_obj) {
+            CDBG_ERROR("%s: NULL camera object\n", __func__);
+            rc = -1;
+            break;
+        }
         snprintf(dev_name, sizeof(dev_name), "/dev/%s",
                  mm_camera_util_get_dev_name(my_obj->ch_obj->cam_obj->my_hdl));
 
@@ -579,9 +608,7 @@ int32_t mm_stream_fsm_buffed(mm_stream_t * my_obj,
     case MM_STREAM_EVT_PUT_BUF:
         rc = mm_stream_deinit_bufs(my_obj);
         /* change state to configed */
-        if(0 == rc) {
-            my_obj->state = MM_STREAM_STATE_CFG;
-        }
+        my_obj->state = MM_STREAM_STATE_CFG;
         break;
     case MM_STREAM_EVT_REG_BUF:
         rc = mm_stream_reg_buf(my_obj);
@@ -792,7 +819,7 @@ int32_t mm_stream_config(mm_stream_t *my_obj,
     CDBG("%s: E, my_handle = 0x%x, fd = %d, state = %d",
          __func__, my_obj->my_hdl, my_obj->fd, my_obj->state);
     my_obj->stream_info = config->stream_info;
-    my_obj->buf_num = 0;
+    my_obj->buf_num = config->stream_info->num_bufs;
     my_obj->mem_vtbl = config->mem_vtbl;
     my_obj->padding_info = config->padding_info;
     /* cd through intf always palced at idx 0 of buf_cb */
@@ -944,16 +971,19 @@ int32_t mm_stream_read_msm_frame(mm_stream_t * my_obj,
     vb.length = num_planes;
 
     rc = ioctl(my_obj->fd, VIDIOC_DQBUF, &vb);
-    if (rc < 0) {
-        CDBG_ERROR("%s: VIDIOC_DQBUF ioctl call failed (rc=%d)\n",
-                   __func__, rc);
+    if (0 > rc) {
+        CDBG_ERROR("%s: VIDIOC_DQBUF ioctl call failed on stream type %d (rc=%d): %s",
+            __func__, my_obj->stream_info->stream_type, rc, strerror(errno));
     } else {
         pthread_mutex_lock(&my_obj->buf_lock);
         my_obj->queued_buffer_count--;
-        if(my_obj->queued_buffer_count == 0) {
-            CDBG_HIGH("%s: Stoping poll on stream %p type :%d", __func__, my_obj, my_obj->stream_info->stream_type);
-            mm_camera_poll_thread_del_poll_fd(&my_obj->ch_obj->poll_thread[0], my_obj->my_hdl, mm_camera_async_call);
-            CDBG_HIGH("%s: Stopped poll on stream %p type :%d", __func__, my_obj, my_obj->stream_info->stream_type);
+        if (0 == my_obj->queued_buffer_count) {
+            CDBG_HIGH("%s: Stoping poll on stream %p type: %d", __func__,
+                my_obj, my_obj->stream_info->stream_type);
+            mm_camera_poll_thread_del_poll_fd(&my_obj->ch_obj->poll_thread[0],
+                my_obj->my_hdl, mm_camera_async_call);
+            CDBG_HIGH("%s: Stopped poll on stream %p type: %d", __func__,
+                my_obj, my_obj->stream_info->stream_type);
         }
         pthread_mutex_unlock(&my_obj->buf_lock);
         int8_t idx = vb.index;
@@ -966,19 +996,22 @@ int32_t mm_stream_read_msm_frame(mm_stream_t * my_obj,
         buf_info->buf->frame_idx = vb.sequence;
         buf_info->buf->ts.tv_sec  = vb.timestamp.tv_sec;
         buf_info->buf->ts.tv_nsec = vb.timestamp.tv_usec * 1000;
-        CDBG("%s: VIDIOC_DQBUF buf_index %d, frame_idx %d, stream type %d\n",
-             __func__, vb.index, buf_info->buf->frame_idx, my_obj->stream_info->stream_type);
+        CDBG("%s: VIDIOC_DQBUF buf_index %d, frame_idx %d, stream type %d, rc %d",
+            __func__, vb.index, buf_info->buf->frame_idx,
+            my_obj->stream_info->stream_type, rc);
+
+        buf_info->buf->is_uv_subsampled =
+            (vb.reserved == V4L2_PIX_FMT_NV14 || vb.reserved == V4L2_PIX_FMT_NV41);
+
         if ( NULL != my_obj->mem_vtbl.clean_invalidate_buf ) {
             rc = my_obj->mem_vtbl.clean_invalidate_buf(idx,
-                                                       my_obj->mem_vtbl.user_data);
-            if ( 0 > rc ) {
+                my_obj->mem_vtbl.user_data);
+            if (0 > rc) {
                 CDBG_ERROR("%s: Clean invalidate cache failed on buffer index: %d",
-                           __func__,
-                           idx);
-                return rc;
+                    __func__, idx);
             }
         } else {
-            CDBG_ERROR(" %s : Clean invalidate cache op not supported\n", __func__);
+            CDBG_ERROR("%s: Clean invalidate cache op not supported", __func__);
         }
     }
 
@@ -1120,8 +1153,9 @@ int32_t mm_stream_qbuf(mm_stream_t *my_obj, mm_camera_buf_def_t *buf)
     int32_t rc = 0;
     struct v4l2_buffer buffer;
     struct v4l2_plane planes[VIDEO_MAX_PLANES];
-    CDBG("%s: E, my_handle = 0x%x, fd = %d, state = %d",
-         __func__, my_obj->my_hdl, my_obj->fd, my_obj->state);
+    CDBG("%s: E, my_handle = 0x%x, fd = %d, state = %d, stream type = %d",
+         __func__, my_obj->my_hdl, my_obj->fd, my_obj->state,
+         my_obj->stream_info->stream_type);
 
     memcpy(planes, buf->planes, sizeof(planes));
     memset(&buffer, 0, sizeof(buffer));
@@ -1150,24 +1184,42 @@ int32_t mm_stream_qbuf(mm_stream_t *my_obj, mm_camera_buf_def_t *buf)
     }
 
     my_obj->queued_buffer_count++;
-    if(my_obj->queued_buffer_count == 1) {
+    if (1 == my_obj->queued_buffer_count) {
         /* Add fd to data poll thread */
-        CDBG_HIGH("%s: Starting poll on stream %p type :%d", __func__, my_obj,my_obj->stream_info->stream_type);
+        CDBG_HIGH("%s: Starting poll on stream %p type: %d", __func__,
+            my_obj,my_obj->stream_info->stream_type);
         rc = mm_camera_poll_thread_add_poll_fd(&my_obj->ch_obj->poll_thread[0],
-                my_obj->my_hdl,
-                my_obj->fd,
-                mm_stream_data_notify,
-                (void*)my_obj,
-                mm_camera_async_call);
-        CDBG_HIGH("%s: Started poll on stream %p type :%d", __func__, my_obj,my_obj->stream_info->stream_type);
-        if (rc < 0) {
-            CDBG_ERROR("%s: add poll fd error", __func__);
-            return rc;
+            my_obj->my_hdl, my_obj->fd, mm_stream_data_notify, (void*)my_obj,
+            mm_camera_async_call);
+        if (0 > rc) {
+            CDBG_ERROR("%s: Add poll on stream %p type: %d fd error (rc=%d)",
+                __func__, my_obj, my_obj->stream_info->stream_type, rc);
+        } else {
+            CDBG_HIGH("%s: Started poll on stream %p type: %d", __func__,
+                my_obj, my_obj->stream_info->stream_type);
         }
     }
 
     rc = ioctl(my_obj->fd, VIDIOC_QBUF, &buffer);
-    CDBG("%s: qbuf idx:%d, rc:%d", __func__, buffer.index, rc);
+    if (0 > rc) {
+        CDBG_ERROR("%s: VIDIOC_QBUF ioctl call failed on stream type %d (rc=%d): %s",
+            __func__, my_obj->stream_info->stream_type, rc, strerror(errno));
+        my_obj->queued_buffer_count--;
+        if (0 == my_obj->queued_buffer_count) {
+            /* Remove fd from data poll in case of failing
+             * first buffer queuing attempt */
+            CDBG_HIGH("%s: Stoping poll on stream %p type: %d", __func__,
+                my_obj, my_obj->stream_info->stream_type);
+            mm_camera_poll_thread_del_poll_fd(&my_obj->ch_obj->poll_thread[0],
+                my_obj->my_hdl, mm_camera_async_call);
+            CDBG_HIGH("%s: Stopped poll on stream %p type: %d", __func__,
+                my_obj, my_obj->stream_info->stream_type);
+        }
+    } else {
+        CDBG("%s: VIDIOC_QBUF buf_index %d, stream type %d, rc %d", __func__,
+            buffer.index, my_obj->stream_info->stream_type, rc);
+    }
+
     return rc;
 }
 
@@ -1192,6 +1244,9 @@ int32_t mm_stream_request_buf(mm_stream_t * my_obj)
     CDBG("%s: E, my_handle = 0x%x, fd = %d, state = %d",
          __func__, my_obj->my_hdl, my_obj->fd, my_obj->state);
 
+    CDBG_ERROR("%s: buf_num = %d, stream type = %d",
+         __func__, buf_num, my_obj->stream_info->stream_type);
+
     if(buf_num > MM_CAMERA_MAX_NUM_FRAMES) {
         CDBG_ERROR("%s: buf num %d > max limit %d\n",
                    __func__, buf_num, MM_CAMERA_MAX_NUM_FRAMES);
@@ -1207,6 +1262,7 @@ int32_t mm_stream_request_buf(mm_stream_t * my_obj)
       CDBG_ERROR("%s: fd=%d, ioctl VIDIOC_REQBUFS failed: rc=%d\n",
            __func__, my_obj->fd, rc);
     }
+
     CDBG("%s :X rc = %d",__func__,rc);
     return rc;
 }
@@ -1436,6 +1492,9 @@ int32_t mm_stream_init_bufs(mm_stream_t * my_obj)
     free(reg_flags);
     reg_flags = NULL;
 
+    /* update in stream info about number of stream buffers */
+    my_obj->stream_info->num_bufs = my_obj->buf_num;
+
     return rc;
 }
 
@@ -1514,8 +1573,7 @@ int32_t mm_stream_reg_buf(mm_stream_t * my_obj)
         if (my_obj->buf_status[i].initial_reg_flag) {
             rc = mm_stream_qbuf(my_obj, &my_obj->buf[i]);
             if (rc != 0) {
-                CDBG_ERROR("%s: VIDIOC_QBUF rc = %d, errno is %s\n",
-                        __func__, rc, strerror(errno));
+                CDBG_ERROR("%s: VIDIOC_QBUF rc = %d\n", __func__, rc);
                 break;
             }
             my_obj->buf_status[i].buf_refcnt = 0;
@@ -1589,6 +1647,7 @@ uint32_t mm_stream_get_v4l2_fmt(cam_format_t fmt)
     uint32_t val;
     switch(fmt) {
     case CAM_FORMAT_YUV_420_NV12:
+    case CAM_FORMAT_YUV_420_NV12_VENUS:
         val = V4L2_PIX_FMT_NV12;
         break;
     case CAM_FORMAT_YUV_420_NV21:
@@ -1633,7 +1692,7 @@ uint32_t mm_stream_get_v4l2_fmt(cam_format_t fmt)
 /*===========================================================================
  * FUNCTION   : mm_stream_calc_offset_preview
  *
- * DESCRIPTION: calculate preview/postview frame offset based on format and
+ * DESCRIPTION: calculate preview frame offset based on format and
  *              padding information
  *
  * PARAMETERS :
@@ -1660,12 +1719,15 @@ int32_t mm_stream_calc_offset_preview(cam_format_t fmt,
 
         stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_16);
         scanline = PAD_TO_SIZE(dim->height, CAM_PAD_TO_2);
+
         buf_planes->plane_info.mp[0].offset = 0;
         buf_planes->plane_info.mp[0].len = stride * scanline;
         buf_planes->plane_info.mp[0].offset_x = 0;
         buf_planes->plane_info.mp[0].offset_y = 0;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
 
         stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_16);
         scanline = PAD_TO_SIZE(dim->height / 2, CAM_PAD_TO_2);
@@ -1676,6 +1738,8 @@ int32_t mm_stream_calc_offset_preview(cam_format_t fmt,
         buf_planes->plane_info.mp[1].offset_y = 0;
         buf_planes->plane_info.mp[1].stride = stride;
         buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width;
+        buf_planes->plane_info.mp[1].height = dim->height / 2;
 
         buf_planes->plane_info.frame_len =
             PAD_TO_SIZE(buf_planes->plane_info.mp[0].len +
@@ -1696,6 +1760,8 @@ int32_t mm_stream_calc_offset_preview(cam_format_t fmt,
         buf_planes->plane_info.mp[0].offset_y = 0;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
 
         stride = PAD_TO_SIZE(dim->width / 2, CAM_PAD_TO_32) * 2;
         scanline = PAD_TO_SIZE(dim->height / 2, CAM_PAD_TO_32);
@@ -1707,6 +1773,8 @@ int32_t mm_stream_calc_offset_preview(cam_format_t fmt,
         buf_planes->plane_info.mp[1].offset_y = 0;
         buf_planes->plane_info.mp[1].stride = stride;
         buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width;
+        buf_planes->plane_info.mp[1].height = dim->height / 2;
 
         buf_planes->plane_info.frame_len =
             PAD_TO_SIZE(buf_planes->plane_info.mp[0].len +
@@ -1725,6 +1793,8 @@ int32_t mm_stream_calc_offset_preview(cam_format_t fmt,
         buf_planes->plane_info.mp[0].offset_y = 0;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
 
         stride = PAD_TO_SIZE(stride / 2, CAM_PAD_TO_16);
         scanline = scanline / 2;
@@ -1735,6 +1805,8 @@ int32_t mm_stream_calc_offset_preview(cam_format_t fmt,
         buf_planes->plane_info.mp[1].offset_y = 0;
         buf_planes->plane_info.mp[1].stride = stride;
         buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width / 2;
+        buf_planes->plane_info.mp[1].height = dim->height / 2;
 
         buf_planes->plane_info.mp[2].offset = 0;
         buf_planes->plane_info.mp[2].len =
@@ -1743,6 +1815,8 @@ int32_t mm_stream_calc_offset_preview(cam_format_t fmt,
         buf_planes->plane_info.mp[2].offset_y = 0;
         buf_planes->plane_info.mp[2].stride = stride;
         buf_planes->plane_info.mp[2].scanline = scanline;
+        buf_planes->plane_info.mp[2].width = dim->width / 2;
+        buf_planes->plane_info.mp[2].height = dim->height / 2;
 
         buf_planes->plane_info.frame_len =
             PAD_TO_SIZE(buf_planes->plane_info.mp[0].len +
@@ -1763,6 +1837,8 @@ int32_t mm_stream_calc_offset_preview(cam_format_t fmt,
         buf_planes->plane_info.mp[0].offset_y = 0;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
 
         buf_planes->plane_info.mp[1].offset = 0;
         buf_planes->plane_info.mp[1].len = stride * scanline;
@@ -1770,11 +1846,252 @@ int32_t mm_stream_calc_offset_preview(cam_format_t fmt,
         buf_planes->plane_info.mp[1].offset_y = 0;
         buf_planes->plane_info.mp[1].stride = stride;
         buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width;
+        buf_planes->plane_info.mp[1].height = dim->height;
 
         buf_planes->plane_info.frame_len =
             PAD_TO_SIZE(buf_planes->plane_info.mp[0].len +
                         buf_planes->plane_info.mp[1].len,
                         CAM_PAD_TO_4K);
+        break;
+    case CAM_FORMAT_YUV_420_NV12_VENUS:
+#ifdef VENUS_PRESENT
+        // using Venus
+        stride = VENUS_Y_STRIDE(COLOR_FMT_NV12, dim->width);
+        scanline = VENUS_Y_SCANLINES(COLOR_FMT_NV12, dim->height);
+
+        buf_planes->plane_info.frame_len =
+            VENUS_BUFFER_SIZE(COLOR_FMT_NV12, dim->width, dim->height);
+        buf_planes->plane_info.num_planes = 2;
+        buf_planes->plane_info.mp[0].len = stride * scanline;
+        buf_planes->plane_info.mp[0].offset = 0;
+        buf_planes->plane_info.mp[0].offset_x =0;
+        buf_planes->plane_info.mp[0].offset_y = 0;
+        buf_planes->plane_info.mp[0].stride = stride;
+        buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
+        stride = VENUS_UV_STRIDE(COLOR_FMT_NV12, dim->width);
+        scanline = VENUS_UV_SCANLINES(COLOR_FMT_NV12, dim->height);
+        buf_planes->plane_info.mp[1].len =
+            buf_planes->plane_info.frame_len - buf_planes->plane_info.mp[0].len;
+        buf_planes->plane_info.mp[1].offset = 0;
+        buf_planes->plane_info.mp[1].offset_x =0;
+        buf_planes->plane_info.mp[1].offset_y = 0;
+        buf_planes->plane_info.mp[1].stride = stride;
+        buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width;
+        buf_planes->plane_info.mp[1].height = dim->height;
+#else
+        CDBG_ERROR("%s: Venus hardware not avail, cannot use this format", __func__);
+        rc = -1;
+#endif
+        break;
+    default:
+        CDBG_ERROR("%s: Invalid cam_format for preview %d",
+                   __func__, fmt);
+        rc = -1;
+        break;
+    }
+
+    return rc;
+}
+/*===========================================================================
+ * FUNCTION   : mm_stream_calc_offset_post_view
+ *
+ * DESCRIPTION: calculate postview frame offset based on format and
+ *              padding information
+ *
+ * PARAMETERS :
+ *   @fmt     : image format
+ *   @dim     : image dimension
+ *   @buf_planes : [out] buffer plane information
+ *
+ * RETURN     : int32_t type of status
+ *              0  -- success
+ *              -1 -- failure
+ *==========================================================================*/
+int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
+                                      cam_dimension_t *dim,
+                                      cam_stream_buf_plane_info_t *buf_planes)
+{
+    int32_t rc = 0;
+    int stride = 0, scanline = 0;
+
+    switch (fmt) {
+    case CAM_FORMAT_YUV_420_NV12:
+    case CAM_FORMAT_YUV_420_NV21:
+        /* 2 planes: Y + CbCr */
+        buf_planes->plane_info.num_planes = 2;
+
+        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_64);
+        scanline = PAD_TO_SIZE(dim->height, CAM_PAD_TO_64);
+        buf_planes->plane_info.mp[0].offset = 0;
+        buf_planes->plane_info.mp[0].len = stride * scanline;
+        buf_planes->plane_info.mp[0].offset_x = 0;
+        buf_planes->plane_info.mp[0].offset_y = 0;
+        buf_planes->plane_info.mp[0].stride = stride;
+        buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
+
+        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_64);
+        scanline = PAD_TO_SIZE(dim->height / 2, CAM_PAD_TO_64);
+        buf_planes->plane_info.mp[1].offset = 0;
+        buf_planes->plane_info.mp[1].len =
+            stride * scanline;
+        buf_planes->plane_info.mp[1].offset_x = 0;
+        buf_planes->plane_info.mp[1].offset_y = 0;
+        buf_planes->plane_info.mp[1].stride = stride;
+        buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width;
+        buf_planes->plane_info.mp[1].height = dim->height / 2;
+
+        buf_planes->plane_info.frame_len =
+            PAD_TO_SIZE(buf_planes->plane_info.mp[0].len +
+                        buf_planes->plane_info.mp[1].len,
+                        CAM_PAD_TO_4K);
+        break;
+    case CAM_FORMAT_YUV_420_NV21_ADRENO:
+        /* 2 planes: Y + CbCr */
+        buf_planes->plane_info.num_planes = 2;
+
+        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_32);
+        scanline = PAD_TO_SIZE(dim->height, CAM_PAD_TO_32);
+        buf_planes->plane_info.mp[0].offset = 0;
+        buf_planes->plane_info.mp[0].len =
+            PAD_TO_SIZE(stride * scanline,
+                        CAM_PAD_TO_4K);
+        buf_planes->plane_info.mp[0].offset_x = 0;
+        buf_planes->plane_info.mp[0].offset_y = 0;
+        buf_planes->plane_info.mp[0].stride = stride;
+        buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
+
+        stride = PAD_TO_SIZE(dim->width / 2, CAM_PAD_TO_32) * 2;
+        scanline = PAD_TO_SIZE(dim->height / 2, CAM_PAD_TO_32);
+        buf_planes->plane_info.mp[1].offset = 0;
+        buf_planes->plane_info.mp[1].len =
+            PAD_TO_SIZE(stride * scanline,
+                        CAM_PAD_TO_4K);
+        buf_planes->plane_info.mp[1].offset_x = 0;
+        buf_planes->plane_info.mp[1].offset_y = 0;
+        buf_planes->plane_info.mp[1].stride = stride;
+        buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width;
+        buf_planes->plane_info.mp[1].height = dim->height / 2;
+
+        buf_planes->plane_info.frame_len =
+            PAD_TO_SIZE(buf_planes->plane_info.mp[0].len +
+                        buf_planes->plane_info.mp[1].len,
+                        CAM_PAD_TO_4K);
+        break;
+    case CAM_FORMAT_YUV_420_YV12:
+        /* 3 planes: Y + Cr + Cb */
+        buf_planes->plane_info.num_planes = 3;
+
+        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_16);
+        scanline = PAD_TO_SIZE(dim->height, CAM_PAD_TO_2);
+        buf_planes->plane_info.mp[0].offset = 0;
+        buf_planes->plane_info.mp[0].len = stride * scanline;
+        buf_planes->plane_info.mp[0].offset_x = 0;
+        buf_planes->plane_info.mp[0].offset_y = 0;
+        buf_planes->plane_info.mp[0].stride = stride;
+        buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
+
+        stride = PAD_TO_SIZE(stride / 2, CAM_PAD_TO_16);
+        scanline = scanline / 2;
+        buf_planes->plane_info.mp[1].offset = 0;
+        buf_planes->plane_info.mp[1].len =
+            stride * scanline;
+        buf_planes->plane_info.mp[1].offset_x = 0;
+        buf_planes->plane_info.mp[1].offset_y = 0;
+        buf_planes->plane_info.mp[1].stride = stride;
+        buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width / 2;
+        buf_planes->plane_info.mp[1].height = dim->height / 2;
+
+        buf_planes->plane_info.mp[2].offset = 0;
+        buf_planes->plane_info.mp[2].len =
+            stride * scanline;
+        buf_planes->plane_info.mp[2].offset_x = 0;
+        buf_planes->plane_info.mp[2].offset_y = 0;
+        buf_planes->plane_info.mp[2].stride = stride;
+        buf_planes->plane_info.mp[2].scanline = scanline;
+        buf_planes->plane_info.mp[2].width = dim->width / 2;
+        buf_planes->plane_info.mp[2].height = dim->height / 2;
+
+        buf_planes->plane_info.frame_len =
+            PAD_TO_SIZE(buf_planes->plane_info.mp[0].len +
+                        buf_planes->plane_info.mp[1].len +
+                        buf_planes->plane_info.mp[2].len,
+                        CAM_PAD_TO_4K);
+        break;
+    case CAM_FORMAT_YUV_422_NV16:
+    case CAM_FORMAT_YUV_422_NV61:
+        /* 2 planes: Y + CbCr */
+        buf_planes->plane_info.num_planes = 2;
+
+        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_16);
+        scanline = dim->height;
+        buf_planes->plane_info.mp[0].offset = 0;
+        buf_planes->plane_info.mp[0].len = stride * scanline;
+        buf_planes->plane_info.mp[0].offset_x = 0;
+        buf_planes->plane_info.mp[0].offset_y = 0;
+        buf_planes->plane_info.mp[0].stride = stride;
+        buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
+
+        buf_planes->plane_info.mp[1].offset = 0;
+        buf_planes->plane_info.mp[1].len = stride * scanline;
+        buf_planes->plane_info.mp[1].offset_x = 0;
+        buf_planes->plane_info.mp[1].offset_y = 0;
+        buf_planes->plane_info.mp[1].stride = stride;
+        buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width;
+        buf_planes->plane_info.mp[1].height = dim->height;
+
+        buf_planes->plane_info.frame_len =
+            PAD_TO_SIZE(buf_planes->plane_info.mp[0].len +
+                        buf_planes->plane_info.mp[1].len,
+                        CAM_PAD_TO_4K);
+        break;
+    case CAM_FORMAT_YUV_420_NV12_VENUS:
+#ifdef VENUS_PRESENT
+        // using Venus
+        stride = VENUS_Y_STRIDE(COLOR_FMT_NV12, dim->width);
+        scanline = VENUS_Y_SCANLINES(COLOR_FMT_NV12, dim->height);
+
+        buf_planes->plane_info.frame_len =
+            VENUS_BUFFER_SIZE(COLOR_FMT_NV12, dim->width, dim->height);
+        buf_planes->plane_info.num_planes = 2;
+        buf_planes->plane_info.mp[0].len = stride * scanline;
+        buf_planes->plane_info.mp[0].offset = 0;
+        buf_planes->plane_info.mp[0].offset_x =0;
+        buf_planes->plane_info.mp[0].offset_y = 0;
+        buf_planes->plane_info.mp[0].stride = stride;
+        buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
+        stride = VENUS_UV_STRIDE(COLOR_FMT_NV12, dim->width);
+        scanline = VENUS_UV_SCANLINES(COLOR_FMT_NV12, dim->height);
+        buf_planes->plane_info.mp[1].len =
+            buf_planes->plane_info.frame_len - buf_planes->plane_info.mp[0].len;
+        buf_planes->plane_info.mp[1].offset = 0;
+        buf_planes->plane_info.mp[1].offset_x =0;
+        buf_planes->plane_info.mp[1].offset_y = 0;
+        buf_planes->plane_info.mp[1].stride = stride;
+        buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width;
+        buf_planes->plane_info.mp[1].height = dim->height;
+#else
+        CDBG_ERROR("%s: Venus hardware not avail, cannot use this format", __func__);
+        rc = -1;
+#endif
         break;
     default:
         CDBG_ERROR("%s: Invalid cam_format for preview %d",
@@ -1843,6 +2160,8 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
         buf_planes->plane_info.mp[0].offset_y = offset_y;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
 
         scanline = scanline / 2;
         buf_planes->plane_info.mp[1].len =
@@ -1855,6 +2174,8 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
         buf_planes->plane_info.mp[1].offset_y = offset_y;
         buf_planes->plane_info.mp[1].stride = stride;
         buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width;
+        buf_planes->plane_info.mp[1].height = dim->height / 2;
 
         buf_planes->plane_info.frame_len =
             PAD_TO_SIZE(buf_planes->plane_info.mp[0].len +
@@ -1874,6 +2195,8 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
         buf_planes->plane_info.mp[0].offset_y = offset_y;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
 
         stride = PAD_TO_SIZE(stride / 2, CAM_PAD_TO_16);
         scanline = scanline / 2;
@@ -1886,6 +2209,8 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
         buf_planes->plane_info.mp[1].offset_y = offset_y;
         buf_planes->plane_info.mp[1].stride = stride;
         buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width / 2;
+        buf_planes->plane_info.mp[1].height = dim->height / 2;
 
         buf_planes->plane_info.mp[2].offset =
             PAD_TO_SIZE(offset_x + stride * offset_y,
@@ -1896,6 +2221,8 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
         buf_planes->plane_info.mp[2].offset_y = offset_y;
         buf_planes->plane_info.mp[2].stride = stride;
         buf_planes->plane_info.mp[2].scanline = scanline;
+        buf_planes->plane_info.mp[2].width = dim->width / 2;
+        buf_planes->plane_info.mp[2].height = dim->height / 2;
 
         buf_planes->plane_info.frame_len =
             PAD_TO_SIZE(buf_planes->plane_info.mp[0].len +
@@ -1916,6 +2243,8 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
         buf_planes->plane_info.mp[0].offset_y = offset_y;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
 
         buf_planes->plane_info.mp[1].len =
             PAD_TO_SIZE(stride * scanline, padding->plane_padding);
@@ -1926,6 +2255,8 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
         buf_planes->plane_info.mp[1].offset_y = offset_y;
         buf_planes->plane_info.mp[1].stride = stride;
         buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].width = dim->width;
+        buf_planes->plane_info.mp[1].height = dim->height;
 
         buf_planes->plane_info.frame_len = PAD_TO_SIZE(
             buf_planes->plane_info.mp[0].len + buf_planes->plane_info.mp[1].len,
@@ -1971,7 +2302,6 @@ int32_t mm_stream_calc_offset_raw(cam_format_t fmt,
     case CAM_FORMAT_YUV_RAW_8BIT_UYVY:
     case CAM_FORMAT_YUV_RAW_8BIT_VYUY:
     case CAM_FORMAT_JPEG_RAW_8BIT:
-    case CAM_FORMAT_META_RAW_8BIT:
         /* 1 plane */
         /* Every 16 pixels occupy 16 bytes */
         stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_16);
@@ -1985,7 +2315,24 @@ int32_t mm_stream_calc_offset_raw(cam_format_t fmt,
         buf_planes->plane_info.mp[0].offset_y = 0;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = buf_planes->plane_info.mp[0].len;
+        buf_planes->plane_info.mp[0].height = 1;
         break;
+    case CAM_FORMAT_META_RAW_8BIT:
+        // Every 16 pixels occupy 16 bytes
+        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_16);
+        buf_planes->plane_info.num_planes = 1;
+        buf_planes->plane_info.mp[0].offset = 0;
+        buf_planes->plane_info.mp[0].len =
+            PAD_TO_SIZE(stride * scanline * 2, padding->plane_padding);
+        buf_planes->plane_info.frame_len =
+            PAD_TO_SIZE(buf_planes->plane_info.mp[0].len, CAM_PAD_TO_4K);
+        buf_planes->plane_info.mp[0].offset_x =0;
+        buf_planes->plane_info.mp[0].offset_y = 0;
+        buf_planes->plane_info.mp[0].stride = stride;
+        buf_planes->plane_info.mp[0].scanline = scanline;
+        break;
+
     case CAM_FORMAT_BAYER_QCOM_RAW_8BPP_GBRG:
     case CAM_FORMAT_BAYER_QCOM_RAW_8BPP_GRBG:
     case CAM_FORMAT_BAYER_QCOM_RAW_8BPP_RGGB:
@@ -2019,6 +2366,8 @@ int32_t mm_stream_calc_offset_raw(cam_format_t fmt,
         buf_planes->plane_info.mp[0].offset_y = 0;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = buf_planes->plane_info.mp[0].len;
+        buf_planes->plane_info.mp[0].height = 1;
         break;
     case CAM_FORMAT_BAYER_QCOM_RAW_10BPP_GBRG:
     case CAM_FORMAT_BAYER_QCOM_RAW_10BPP_GRBG:
@@ -2029,17 +2378,19 @@ int32_t mm_stream_calc_offset_raw(cam_format_t fmt,
     case CAM_FORMAT_BAYER_IDEAL_RAW_QCOM_10BPP_RGGB:
     case CAM_FORMAT_BAYER_IDEAL_RAW_QCOM_10BPP_BGGR:
         /* Every 12 pixels occupy 16 bytes */
-        stride = (dim->width + 11)/12 * 16;
+        stride = (dim->width + 11)/12 * 12;
         buf_planes->plane_info.num_planes = 1;
         buf_planes->plane_info.mp[0].offset = 0;
         buf_planes->plane_info.mp[0].len =
-            PAD_TO_SIZE(stride * scanline, padding->plane_padding);
+            PAD_TO_SIZE(stride * scanline * 8 / 6, padding->plane_padding);
         buf_planes->plane_info.frame_len =
             PAD_TO_SIZE(buf_planes->plane_info.mp[0].len, CAM_PAD_TO_4K);
         buf_planes->plane_info.mp[0].offset_x =0;
         buf_planes->plane_info.mp[0].offset_y = 0;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = buf_planes->plane_info.mp[0].len;
+        buf_planes->plane_info.mp[0].height = 1;
         break;
     case CAM_FORMAT_BAYER_QCOM_RAW_12BPP_GBRG:
     case CAM_FORMAT_BAYER_QCOM_RAW_12BPP_GRBG:
@@ -2050,17 +2401,19 @@ int32_t mm_stream_calc_offset_raw(cam_format_t fmt,
     case CAM_FORMAT_BAYER_IDEAL_RAW_QCOM_12BPP_RGGB:
     case CAM_FORMAT_BAYER_IDEAL_RAW_QCOM_12BPP_BGGR:
         /* Every 10 pixels occupy 16 bytes */
-        stride = (dim->width + 9)/10 * 16;
+        stride = (dim->width + 9)/10 * 10;
         buf_planes->plane_info.num_planes = 1;
         buf_planes->plane_info.mp[0].offset = 0;
         buf_planes->plane_info.mp[0].len =
-            PAD_TO_SIZE(stride * scanline, padding->plane_padding);
+            PAD_TO_SIZE(stride * scanline * 8 / 5, padding->plane_padding);
         buf_planes->plane_info.frame_len =
             PAD_TO_SIZE(buf_planes->plane_info.mp[0].len, CAM_PAD_TO_4K);
         buf_planes->plane_info.mp[0].offset_x =0;
         buf_planes->plane_info.mp[0].offset_y = 0;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = buf_planes->plane_info.mp[0].len;
+        buf_planes->plane_info.mp[0].height = 1;
         break;
     case CAM_FORMAT_BAYER_MIPI_RAW_10BPP_GBRG:
     case CAM_FORMAT_BAYER_MIPI_RAW_10BPP_GRBG:
@@ -2071,8 +2424,7 @@ int32_t mm_stream_calc_offset_raw(cam_format_t fmt,
     case CAM_FORMAT_BAYER_IDEAL_RAW_MIPI_10BPP_RGGB:
     case CAM_FORMAT_BAYER_IDEAL_RAW_MIPI_10BPP_BGGR:
         /* Every 64 pixels occupy 80 bytes */
-        stride = PAD_TO_SIZE(
-                PAD_TO_SIZE(dim->width, CAM_PAD_TO_4)*5/4, CAM_PAD_TO_16);
+        stride = PAD_TO_SIZE(dim->width * 5 / 4, CAM_PAD_TO_8);
         buf_planes->plane_info.num_planes = 1;
         buf_planes->plane_info.mp[0].offset = 0;
         buf_planes->plane_info.mp[0].len =
@@ -2083,6 +2435,8 @@ int32_t mm_stream_calc_offset_raw(cam_format_t fmt,
         buf_planes->plane_info.mp[0].offset_y = 0;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = buf_planes->plane_info.mp[0].len;
+        buf_planes->plane_info.mp[0].height = 1;
         break;
     case CAM_FORMAT_BAYER_MIPI_RAW_12BPP_GBRG:
     case CAM_FORMAT_BAYER_MIPI_RAW_12BPP_GRBG:
@@ -2093,17 +2447,19 @@ int32_t mm_stream_calc_offset_raw(cam_format_t fmt,
     case CAM_FORMAT_BAYER_IDEAL_RAW_MIPI_12BPP_RGGB:
     case CAM_FORMAT_BAYER_IDEAL_RAW_MIPI_12BPP_BGGR:
         /* Every 32 pixels occupy 48 bytes */
-        stride = PAD_TO_SIZE(PAD_TO_SIZE(dim->width, 2)*3/2, CAM_PAD_TO_16);
+        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_32);
         buf_planes->plane_info.num_planes = 1;
         buf_planes->plane_info.mp[0].offset = 0;
         buf_planes->plane_info.mp[0].len =
-            PAD_TO_SIZE(stride * scanline, padding->plane_padding);
+            PAD_TO_SIZE(stride * scanline * 3 / 2, padding->plane_padding);
         buf_planes->plane_info.frame_len =
             PAD_TO_SIZE(buf_planes->plane_info.mp[0].len, CAM_PAD_TO_4K);
         buf_planes->plane_info.mp[0].offset_x =0;
         buf_planes->plane_info.mp[0].offset_y = 0;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = buf_planes->plane_info.mp[0].len;
+        buf_planes->plane_info.mp[0].height = 1;
         break;
     case CAM_FORMAT_BAYER_IDEAL_RAW_PLAIN16_8BPP_GBRG:
     case CAM_FORMAT_BAYER_IDEAL_RAW_PLAIN16_8BPP_GRBG:
@@ -2118,17 +2474,19 @@ int32_t mm_stream_calc_offset_raw(cam_format_t fmt,
     case CAM_FORMAT_BAYER_IDEAL_RAW_PLAIN16_12BPP_RGGB:
     case CAM_FORMAT_BAYER_IDEAL_RAW_PLAIN16_12BPP_BGGR:
         /* Every 8 pixels occupy 16 bytes */
-        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_8) * 2;
+        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_8);
         buf_planes->plane_info.num_planes = 1;
         buf_planes->plane_info.mp[0].offset = 0;
         buf_planes->plane_info.mp[0].len =
-            PAD_TO_SIZE(stride * scanline, padding->plane_padding);
+            PAD_TO_SIZE(stride * scanline * 2, padding->plane_padding);
         buf_planes->plane_info.frame_len =
             PAD_TO_SIZE(buf_planes->plane_info.mp[0].len, CAM_PAD_TO_4K);
         buf_planes->plane_info.mp[0].offset_x =0;
         buf_planes->plane_info.mp[0].offset_y = 0;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = buf_planes->plane_info.mp[0].len;
+        buf_planes->plane_info.mp[0].height = 1;
         break;
     default:
         CDBG_ERROR("%s: Invalid cam_format %d for raw stream",
@@ -2173,6 +2531,8 @@ int32_t mm_stream_calc_offset_video(cam_dimension_t *dim,
     buf_planes->plane_info.mp[0].offset_y = 0;
     buf_planes->plane_info.mp[0].stride = stride;
     buf_planes->plane_info.mp[0].scanline = scanline;
+    buf_planes->plane_info.mp[0].width = dim->width;
+    buf_planes->plane_info.mp[0].height = dim->height;
     stride = VENUS_UV_STRIDE(COLOR_FMT_NV12, dim->width);
     scanline = VENUS_UV_SCANLINES(COLOR_FMT_NV12, dim->height);
     buf_planes->plane_info.mp[1].len =
@@ -2182,6 +2542,8 @@ int32_t mm_stream_calc_offset_video(cam_dimension_t *dim,
     buf_planes->plane_info.mp[1].offset_y = 0;
     buf_planes->plane_info.mp[1].stride = stride;
     buf_planes->plane_info.mp[1].scanline = scanline;
+    buf_planes->plane_info.mp[1].width = dim->width;
+    buf_planes->plane_info.mp[1].height = dim->height;
 
     return 0;
 }
@@ -2202,6 +2564,8 @@ int32_t mm_stream_calc_offset_video(cam_dimension_t *dim,
     buf_planes->plane_info.mp[0].offset_y = 0;
     buf_planes->plane_info.mp[0].stride = stride;
     buf_planes->plane_info.mp[0].scanline = scanline;
+    buf_planes->plane_info.mp[0].width = dim->width;
+    buf_planes->plane_info.mp[0].height = dim->height;
 
     stride = dim->width;
     scanline = dim->height / 2;
@@ -2212,6 +2576,8 @@ int32_t mm_stream_calc_offset_video(cam_dimension_t *dim,
     buf_planes->plane_info.mp[1].offset_y = 0;
     buf_planes->plane_info.mp[1].stride = stride;
     buf_planes->plane_info.mp[1].scanline = scanline;
+    buf_planes->plane_info.mp[0].width = dim->width;
+    buf_planes->plane_info.mp[0].height = dim->height / 2;
 
     buf_planes->plane_info.frame_len =
         PAD_TO_SIZE(buf_planes->plane_info.mp[0].len +
@@ -2253,6 +2619,8 @@ int32_t mm_stream_calc_offset_metadata(cam_dimension_t *dim,
     buf_planes->plane_info.mp[0].offset_y = 0;
     buf_planes->plane_info.mp[0].stride = dim->width;
     buf_planes->plane_info.mp[0].scanline = dim->height;
+    buf_planes->plane_info.mp[0].width = dim->width;
+    buf_planes->plane_info.mp[0].height = dim->height;
     return rc;
 }
 
@@ -2264,7 +2632,7 @@ int32_t mm_stream_calc_offset_metadata(cam_dimension_t *dim,
  * PARAMETERS :
  *   @stream_info: ptr to stream info
  *   @padding : padding information
- *   @buf_planes : [out] buffer plane information
+ *   @plns : [out] buffer plane information
  *
  * RETURN     : int32_t type of status
  *              0  -- success
@@ -2272,20 +2640,20 @@ int32_t mm_stream_calc_offset_metadata(cam_dimension_t *dim,
  *==========================================================================*/
 int32_t mm_stream_calc_offset_postproc(cam_stream_info_t *stream_info,
                                        cam_padding_info_t *padding,
-                                       cam_stream_buf_plane_info_t *buf_planes)
+                                       cam_stream_buf_plane_info_t *plns)
 {
     int32_t rc = 0;
     cam_stream_type_t type = CAM_STREAM_TYPE_DEFAULT;
     if (stream_info->reprocess_config.pp_type == CAM_OFFLINE_REPROCESS_TYPE) {
-        type = stream_info->reprocess_config.offline.input_stream_type;
+        type = stream_info->reprocess_config.offline.input_type;
         if (CAM_STREAM_TYPE_DEFAULT == type) {
-            if (buf_planes->plane_info.frame_len == 0) {
+            if (plns->plane_info.frame_len == 0) {
                 // take offset from input source
-                *buf_planes = stream_info->reprocess_config.offline.input_buf_planes;
+                *plns = stream_info->reprocess_config.offline.input_buf_planes;
                 return rc;
             }
         } else {
-            type = stream_info->reprocess_config.offline.input_stream_type;
+            type = stream_info->reprocess_config.offline.input_type;
         }
     } else {
         type = stream_info->reprocess_config.online.input_stream_type;
@@ -2294,32 +2662,35 @@ int32_t mm_stream_calc_offset_postproc(cam_stream_info_t *stream_info,
     switch (type) {
     case CAM_STREAM_TYPE_PREVIEW:
     case CAM_STREAM_TYPE_CALLBACK:
-    case CAM_STREAM_TYPE_POSTVIEW:
         rc = mm_stream_calc_offset_preview(stream_info->fmt,
                                            &stream_info->dim,
-                                           buf_planes);
+                                           plns);
+        break;
+    case CAM_STREAM_TYPE_POSTVIEW:
+        rc = mm_stream_calc_offset_post_view(stream_info->fmt,
+                                           &stream_info->dim,
+                                           plns);
         break;
     case CAM_STREAM_TYPE_SNAPSHOT:
-    case CAM_STREAM_TYPE_NON_ZSL_SNAPSHOT:
         rc = mm_stream_calc_offset_snapshot(stream_info->fmt,
                                             &stream_info->dim,
                                             padding,
-                                            buf_planes);
+                                            plns);
         break;
     case CAM_STREAM_TYPE_VIDEO:
         rc = mm_stream_calc_offset_video(&stream_info->dim,
-                                         buf_planes);
+                        plns);
         break;
     case CAM_STREAM_TYPE_RAW:
         rc = mm_stream_calc_offset_raw(stream_info->fmt,
                                        &stream_info->dim,
                                        padding,
-                                       buf_planes);
+                                       plns);
         break;
     case CAM_STREAM_TYPE_METADATA:
         rc = mm_stream_calc_offset_metadata(&stream_info->dim,
                                             padding,
-                                            buf_planes);
+                                            plns);
         break;
     default:
         CDBG_ERROR("%s: not supported for stream type %d",
@@ -2347,7 +2718,8 @@ int32_t mm_stream_calc_offset(mm_stream_t *my_obj)
     int32_t rc = 0;
 
     cam_dimension_t dim = my_obj->stream_info->dim;
-    if (my_obj->stream_info->pp_config.feature_mask & CAM_QCOM_FEATURE_ROTATION) {
+    if (my_obj->stream_info->pp_config.feature_mask & CAM_QCOM_FEATURE_ROTATION &&
+        my_obj->stream_info->stream_type != CAM_STREAM_TYPE_VIDEO) {
         if (my_obj->stream_info->pp_config.rotation == ROTATE_90 ||
             my_obj->stream_info->pp_config.rotation == ROTATE_270) {
             // rotated by 90 or 270, need to switch width and height
@@ -2359,13 +2731,16 @@ int32_t mm_stream_calc_offset(mm_stream_t *my_obj)
     switch (my_obj->stream_info->stream_type) {
     case CAM_STREAM_TYPE_PREVIEW:
     case CAM_STREAM_TYPE_CALLBACK:
-    case CAM_STREAM_TYPE_POSTVIEW:
         rc = mm_stream_calc_offset_preview(my_obj->stream_info->fmt,
                                            &dim,
                                            &my_obj->stream_info->buf_planes);
         break;
+    case CAM_STREAM_TYPE_POSTVIEW:
+      rc = mm_stream_calc_offset_post_view(my_obj->stream_info->fmt,
+                                         &dim,
+                                         &my_obj->stream_info->buf_planes);
+      break;
     case CAM_STREAM_TYPE_SNAPSHOT:
-    case CAM_STREAM_TYPE_NON_ZSL_SNAPSHOT:
         rc = mm_stream_calc_offset_snapshot(my_obj->stream_info->fmt,
                                             &dim,
                                             &my_obj->padding_info,
@@ -2516,8 +2891,8 @@ int32_t mm_stream_buf_done(mm_stream_t * my_obj,
             CDBG("<DEBUG> : Buf done for buffer:%d, stream:%d", frame->buf_idx, frame->stream_type);
             rc = mm_stream_qbuf(my_obj, frame);
             if(rc < 0) {
-                CDBG_ERROR("%s: mm_camera_stream_qbuf(idx=%d) errno=%d, %s\n",
-                           __func__, frame->buf_idx, errno, strerror(errno));
+                CDBG_ERROR("%s: mm_camera_stream_qbuf(idx=%d) err=%d\n",
+                           __func__, frame->buf_idx, rc);
             } else {
                 my_obj->buf_status[frame->buf_idx].in_kernel = 1;
             }

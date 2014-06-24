@@ -30,9 +30,9 @@
 #include "mm_qcamera_dbg.h"
 #include "mm_qcamera_app.h"
 
-#define MM_QCAMERA_APP_UTEST_MAX_MAIN_LOOP 4
-#define MM_QCAMERA_APP_UTEST_OUTER_LOOP 10
-#define MM_QCAMERA_APP_UTEST_INNER_LOOP 4
+#define MM_QCAMERA_APP_UTEST_MAX_MAIN_LOOP 1
+#define MM_QCAMERA_APP_UTEST_OUTER_LOOP 1
+#define MM_QCAMERA_APP_UTEST_INNER_LOOP 1
 #define MM_QCAM_APP_TEST_NUM 128
 
 static mm_app_tc_t mm_app_tc[MM_QCAM_APP_TEST_NUM];
@@ -133,7 +133,7 @@ int mm_app_tc_start_stop_zsl(mm_camera_app_t *cam_app)
             break;
         }
 
-        for (j = 0; j < MM_QCAMERA_APP_UTEST_INNER_LOOP; j++) {
+        for (j = 0; j < 1; j++) {
             rc = mm_app_start_preview_zsl(&test_obj);
             if (rc != MM_CAMERA_OK) {
                 CDBG_ERROR("%s: mm_app_start_preview_zsl() cam_idx=%d, err=%d\n",
@@ -372,6 +372,59 @@ int mm_app_tc_start_stop_live_snapshot(mm_camera_app_t *cam_app)
         }
 
         rc = mm_app_close(&test_obj);
+        if (rc != MM_CAMERA_OK) {
+            CDBG_ERROR("%s:mm_app_close() cam_idx=%d, err=%d\n",
+                       __func__, i, rc);
+            break;
+        }
+    }
+    if (rc == MM_CAMERA_OK) {
+        printf("\nPassed\n");
+    } else {
+        printf("\nFailed\n");
+    }
+    CDBG("%s:END, rc = %d\n", __func__, rc);
+    return rc;
+}
+
+int mm_app_tc_capture_raw(mm_camera_app_t *cam_app)
+{
+    int rc = MM_CAMERA_OK;
+    int i, j;
+    mm_camera_test_obj_t test_obj;
+    uint8_t num_snapshot = 1;
+    uint8_t num_rcvd_snapshot = 0;
+
+    printf("\n Verifying raw capture...\n");
+    for (i = 0; i < cam_app->num_cameras; i++) {
+        memset(&test_obj, 0, sizeof(mm_camera_test_obj_t));
+        rc = mm_app_open(cam_app, i, &test_obj);
+        if (rc != MM_CAMERA_OK) {
+            CDBG_ERROR("%s:mm_app_open() cam_idx=%d, err=%d\n",
+                       __func__, i, rc);
+            break;
+        }
+
+        for (j = 0; j < MM_QCAMERA_APP_UTEST_INNER_LOOP; j++) {
+            rc = mm_app_start_capture_raw(&test_obj, num_snapshot);
+            if (rc != MM_CAMERA_OK) {
+                CDBG_ERROR("%s: mm_app_start_capture() cam_idx=%d, err=%d\n",
+                           __func__, i, rc);
+                break;
+            }
+            while (num_rcvd_snapshot < num_snapshot) {
+                mm_camera_app_wait();
+                num_rcvd_snapshot++;
+            }
+            rc = mm_app_stop_capture_raw(&test_obj);
+            if (rc != MM_CAMERA_OK) {
+                CDBG_ERROR("%s: mm_app_stop_capture() cam_idx=%d, err=%d\n",
+                           __func__, i, rc);
+                break;
+            }
+        }
+
+        rc |= mm_app_close(&test_obj);
         if (rc != MM_CAMERA_OK) {
             CDBG_ERROR("%s:mm_app_close() cam_idx=%d, err=%d\n",
                        __func__, i, rc);
