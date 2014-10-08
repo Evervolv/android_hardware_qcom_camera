@@ -47,8 +47,6 @@ using namespace android;
 namespace qcamera {
 static const char ExifAsciiPrefix[] =
     { 0x41, 0x53, 0x43, 0x49, 0x49, 0x0, 0x0, 0x0 };          // "ASCII\0\0\0"
-static const char ExifUndefinedPrefix[] =
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };   // "\0\0\0\0\0\0\0\0"
 
 #define GPS_PROCESSING_METHOD_SIZE       101
 #define EXIF_ASCII_PREFIX_SIZE           8   //(sizeof(ExifAsciiPrefix))
