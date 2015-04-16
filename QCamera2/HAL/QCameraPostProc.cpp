@@ -596,7 +596,7 @@ int32_t QCameraPostProcessor::getJpegEncodingConfig(mm_jpeg_encode_params_t& enc
         encode_parm.dest_buf[i].index = i;
         encode_parm.dest_buf[i].buf_size = main_offset.frame_len;
         encode_parm.dest_buf[i].buf_vaddr = (uint8_t *)m_pJpegOutputMem[i];
-        encode_parm.dest_buf[i].fd = 0;
+        encode_parm.dest_buf[i].fd = -1;
         encode_parm.dest_buf[i].format = MM_JPEG_FMT_YUV;
         encode_parm.dest_buf[i].offset = main_offset;
     }
@@ -761,6 +761,19 @@ int32_t QCameraPostProcessor::processData(mm_camera_super_buf_t *frame)
         return UNKNOWN_ERROR;
     }
 
+    mm_camera_buf_def_t *meta_frame = NULL;
+    for (uint32_t i = 0; i < frame->num_bufs; i++) {
+        // look through input superbuf
+        if (frame->bufs[i]->stream_type == CAM_STREAM_TYPE_METADATA) {
+            meta_frame = frame->bufs[i];
+            break;
+        }
+    }
+    if (meta_frame != NULL) {
+        //Function to upadte metadata for frame based parameter
+        m_parent->updateMetadata((metadata_buffer_t *)meta_frame->buffer);
+    }
+
     if (m_parent->needReprocess()) {
         if ((!m_parent->isLongshotEnabled() &&
              !m_parent->m_stateMachine.isNonZSLCaptureRunning()) ||
@@ -796,20 +809,9 @@ int32_t QCameraPostProcessor::processData(mm_camera_super_buf_t *frame)
             pp_request_job = NULL;
             return NO_ERROR;
         }
-        if (m_parent->mParameters.isAdvCamFeaturesEnabled()) {
-            // find meta data frame
-            mm_camera_buf_def_t *meta_frame = NULL;
-            for (uint32_t i = 0; i < frame->num_bufs; i++) {
-                // look through input superbuf
-                if (frame->bufs[i]->stream_type == CAM_STREAM_TYPE_METADATA) {
-                    meta_frame = frame->bufs[i];
-                    break;
-                }
-            }
-
-            if (meta_frame != NULL) {
-               m_InputMetadata.add(meta_frame);
-            }
+        if (m_parent->mParameters.isAdvCamFeaturesEnabled()
+                && (meta_frame != NULL)) {
+            m_InputMetadata.add(meta_frame);
         }
     } else if (m_parent->mParameters.isNV16PictureFormat() ||
         m_parent->mParameters.isNV21PictureFormat()) {
@@ -834,16 +836,6 @@ int32_t QCameraPostProcessor::processData(mm_camera_super_buf_t *frame)
 
         memset(jpeg_job, 0, sizeof(qcamera_jpeg_data_t));
         jpeg_job->src_frame = frame;
-
-        // find meta data frame
-        mm_camera_buf_def_t *meta_frame = NULL;
-        for (uint32_t i = 0; i < frame->num_bufs; i++) {
-            // look through input superbuf
-            if (frame->bufs[i]->stream_type == CAM_STREAM_TYPE_METADATA) {
-                meta_frame = frame->bufs[i];
-                break;
-            }
-        }
 
         if (meta_frame != NULL) {
             // fill in meta data frame ptr
@@ -1994,6 +1986,10 @@ int32_t QCameraPostProcessor::encodeData(qcamera_jpeg_data_t *jpeg_job_data,
     jpg_job.encode_job.main_dim.dst_dim = dst_dim;
     jpg_job.encode_job.main_dim.crop = crop;
 
+    // get 3a sw version info
+    cam_q3a_version_t sw_version =
+        m_parent->getCamHalCapabilities()->q3a_version;
+
     // get exif data
     QCameraExif *pJpegExifObj = m_parent->getExifData();
     jpeg_job_data->pJpegExifObj = pJpegExifObj;
@@ -2001,6 +1997,14 @@ int32_t QCameraPostProcessor::encodeData(qcamera_jpeg_data_t *jpeg_job_data,
         jpg_job.encode_job.exif_info.exif_data = pJpegExifObj->getEntries();
         jpg_job.encode_job.exif_info.numOfEntries =
             pJpegExifObj->getNumOfEntries();
+        jpg_job.encode_job.exif_info.debug_data.sw_3a_version[0] =
+            sw_version.major_version;
+        jpg_job.encode_job.exif_info.debug_data.sw_3a_version[1] =
+            sw_version.minor_version;
+        jpg_job.encode_job.exif_info.debug_data.sw_3a_version[2] =
+            sw_version.patch_version;
+        jpg_job.encode_job.exif_info.debug_data.sw_3a_version[3] =
+            sw_version.new_feature_des;
     }
 
     // set rotation only when no online rotation or offline pp rotation is done before
@@ -2355,7 +2359,7 @@ void *QCameraPostProcessor::dataSaveRoutine(void *data)
                              pme->mSaveFrmCnt);
 
                     int file_fd = open(saveName, O_RDWR | O_CREAT, 0655);
-                    if (file_fd > 0) {
+                    if (file_fd >= 0) {
                         ssize_t written_len = write(file_fd, job_data->out_data.buf_vaddr,
                                 job_data->out_data.buf_filled_len);
                         if ((ssize_t)job_data->out_data.buf_filled_len != written_len) {

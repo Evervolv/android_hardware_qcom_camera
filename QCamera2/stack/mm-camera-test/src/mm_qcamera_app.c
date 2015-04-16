@@ -115,7 +115,7 @@ int mm_app_allocate_ion_memory(mm_camera_app_buf_t *buf, unsigned int ion_type)
     struct ion_handle_data handle_data;
     struct ion_allocation_data alloc;
     struct ion_fd_data ion_info_fd;
-    int main_ion_fd = 0;
+    int main_ion_fd = -1;
     void *data = NULL;
 
     main_ion_fd = open("/dev/ion", O_RDONLY);
@@ -180,17 +180,17 @@ int mm_app_deallocate_ion_memory(mm_camera_app_buf_t *buf)
 
   rc = munmap(buf->mem_info.data, buf->mem_info.size);
 
-  if (buf->mem_info.fd > 0) {
+  if (buf->mem_info.fd >= 0) {
       close(buf->mem_info.fd);
-      buf->mem_info.fd = 0;
+      buf->mem_info.fd = -1;
   }
 
-  if (buf->mem_info.main_ion_fd > 0) {
+  if (buf->mem_info.main_ion_fd >= 0) {
       memset(&handle_data, 0, sizeof(handle_data));
       handle_data.handle = buf->mem_info.handle;
       ioctl(buf->mem_info.main_ion_fd, ION_IOC_FREE, &handle_data);
       close(buf->mem_info.main_ion_fd);
-      buf->mem_info.main_ion_fd = 0;
+      buf->mem_info.main_ion_fd = -1;
   }
   return rc;
 }
@@ -222,7 +222,7 @@ int mm_app_cache_ops(mm_camera_app_meminfo_t *mem_info,
          cache_inv_data.vaddr, cache_inv_data.fd,
          (unsigned long)cache_inv_data.handle, cache_inv_data.length,
          mem_info->main_ion_fd);
-    if(mem_info->main_ion_fd > 0) {
+    if(mem_info->main_ion_fd >= 0) {
         if(ioctl(mem_info->main_ion_fd, ION_IOC_CUSTOM, &custom_data) < 0) {
             ALOGE("%s: Cache Invalidate failed\n", __func__);
             ret = -MM_CAMERA_E_GENERAL;
@@ -494,14 +494,14 @@ int mm_app_open(mm_camera_app_t *cam_app,
                 int cam_id,
                 mm_camera_test_obj_t *test_obj)
 {
-    int32_t rc;
+    int32_t rc = 0;
     cam_frame_len_offset_t offset_info;
 
     CDBG("%s:BEGIN\n", __func__);
 
-    test_obj->cam = cam_app->hal_lib.mm_camera_open((uint8_t)cam_id);
-    if(test_obj->cam == NULL) {
-        CDBG_ERROR("%s:dev open error\n", __func__);
+    rc = cam_app->hal_lib.mm_camera_open((uint8_t)cam_id, &(test_obj->cam));
+    if(rc) {
+        CDBG_ERROR("%s:dev open error. rc = %d, vtbl = %p\n", __func__, rc, test_obj->cam);
         return -MM_CAMERA_E_GENERAL;
     }
 

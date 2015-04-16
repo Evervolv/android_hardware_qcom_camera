@@ -134,7 +134,6 @@ const QCamera3HardwareInterface::QCameraMap<
 const QCamera3HardwareInterface::QCameraMap<
         camera_metadata_enum_android_control_scene_mode_t,
         cam_scene_mode_type> QCamera3HardwareInterface::SCENE_MODES_MAP[] = {
-    { ANDROID_CONTROL_SCENE_MODE_DISABLED,       CAM_SCENE_MODE_OFF},
     { ANDROID_CONTROL_SCENE_MODE_FACE_PRIORITY,  CAM_SCENE_MODE_FACE_PRIORITY },
     { ANDROID_CONTROL_SCENE_MODE_ACTION,         CAM_SCENE_MODE_ACTION },
     { ANDROID_CONTROL_SCENE_MODE_PORTRAIT,       CAM_SCENE_MODE_PORTRAIT },
@@ -372,11 +371,22 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
     }
 #endif
 
+    // Getting system props of different kinds
     char prop[PROPERTY_VALUE_MAX];
+    memset(prop, 0, sizeof(prop));
     property_get("persist.camera.raw.dump", prop, "0");
     mEnableRawDump = atoi(prop);
     if (mEnableRawDump)
         CDBG("%s: Raw dump from Camera HAL enabled", __func__);
+
+    memset(prop, 0, sizeof(prop));
+    property_get("persist.camera.facedetect", prop, "-1");
+    m_overrideAppFaceDetection = (int8_t)atoi(prop);
+    if (m_overrideAppFaceDetection >= 0)
+    {
+        CDBG_FATAL_IF(m_overrideAppFaceDetection > ANDROID_STATISTICS_FACE_DETECT_MODE_FULL);
+        CDBG("%s: Override face detection: %d", __func__, m_overrideAppFaceDetection);
+    }
 }
 
 /*===========================================================================
@@ -527,6 +537,14 @@ void QCamera3HardwareInterface::camEvtHandle(uint32_t /*camera_handle*/,
         switch(evt->server_event_type) {
             case CAM_EVENT_TYPE_DAEMON_DIED:
                 ALOGE("%s: Fatal, camera daemon died", __func__);
+                //close the camera backend
+                if (obj->mCameraHandle && obj->mCameraHandle->camera_handle
+                        && obj->mCameraHandle->ops) {
+                    obj->mCameraHandle->ops->error_close_camera(obj->mCameraHandle->camera_handle);
+                } else {
+                    ALOGE("%s: Could not close camera on error because the handle or ops is NULL",
+                            __func__);
+                }
                 camera3_notify_msg_t notify_msg;
                 memset(&notify_msg, 0, sizeof(camera3_notify_msg_t));
                 notify_msg.type = CAMERA3_MSG_ERROR;
@@ -612,10 +630,10 @@ int QCamera3HardwareInterface::openCamera()
         return UNKNOWN_ERROR;
     }
 
-    mCameraHandle = camera_open((uint8_t)mCameraId);
-    if (!mCameraHandle) {
-        ALOGE("camera_open failed.");
-        return UNKNOWN_ERROR;
+    rc = camera_open((uint8_t)mCameraId, &mCameraHandle);
+    if (rc) {
+        ALOGE("camera_open failed. rc = %d, mCameraHandle = %p", rc, mCameraHandle);
+        return rc;
     }
 
     mCameraOpened = true;
@@ -1090,7 +1108,7 @@ int QCamera3HardwareInterface::configureStreams(
     /* EIS setprop control */
     char eis_prop[PROPERTY_VALUE_MAX];
     memset(eis_prop, 0, sizeof(eis_prop));
-    property_get("camera.eis.enable", eis_prop, "0");
+    property_get("persist.camera.eis.enable", eis_prop, "0");
     eis_prop_set = (uint8_t)atoi(eis_prop);
 
     m_bEisEnable = eis_prop_set && (!oisSupported && eisSupported);
@@ -1332,21 +1350,20 @@ int QCamera3HardwareInterface::configureStreams(
         return rc;
     }
 
-    /* Create analysis stream if h/w support is available */
-    if (gCamCapability[mCameraId]->hw_analysis_supported) {
-        mAnalysisChannel = new QCamera3SupportChannel(
-                mCameraHandle->camera_handle,
-                mCameraHandle->ops,
-                &gCamCapability[mCameraId]->padding_info,
-                CAM_QCOM_FEATURE_PP_SUPERSET_HAL3,
-                CAM_STREAM_TYPE_ANALYSIS,
-                &gCamCapability[mCameraId]->analysis_recommended_res,
-                this);
-        if (!mAnalysisChannel) {
-            ALOGE("%s: H/W Analysis channel cannot be created", __func__);
-            pthread_mutex_unlock(&mMutex);
-            return -ENOMEM;
-        }
+    // Create analysis stream all the time, even when h/w support is not available
+    mAnalysisChannel = new QCamera3SupportChannel(
+            mCameraHandle->camera_handle,
+            mCameraHandle->ops,
+            &gCamCapability[mCameraId]->padding_info,
+            CAM_QCOM_FEATURE_PP_SUPERSET_HAL3,
+            CAM_STREAM_TYPE_ANALYSIS,
+            &gCamCapability[mCameraId]->analysis_recommended_res,
+            this,
+            0); // force buffer count to 0
+    if (!mAnalysisChannel) {
+        ALOGE("%s: H/W Analysis channel cannot be created", __func__);
+        pthread_mutex_unlock(&mMutex);
+        return -ENOMEM;
     }
 
     bool isRawStreamRequested = false;
@@ -3580,6 +3597,7 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         int32_t faceRectangles[MAX_ROI * 4];
         int32_t faceLandmarks[MAX_ROI * 6];
         size_t j = 0, k = 0;
+
         for (size_t i = 0; i < numFaces; i++) {
             faceIds[i] = faceDetectionInfo->faces[i].face_id;
             faceScores[i] = (uint8_t)faceDetectionInfo->faces[i].score;
@@ -4797,10 +4815,9 @@ int QCamera3HardwareInterface::initCapabilities(uint32_t cameraId)
     mm_camera_vtbl_t *cameraHandle = NULL;
     QCamera3HeapMemory *capabilityHeap = NULL;
 
-    cameraHandle = camera_open((uint8_t)cameraId);
-    if (!cameraHandle) {
-        ALOGE("%s: camera_open failed", __func__);
-        rc = -1;
+    rc = camera_open((uint8_t)cameraId, &cameraHandle);
+    if (rc || !cameraHandle) {
+        ALOGE("%s: camera_open failed. rc = %d, cameraHandle = %p", __func__, rc, cameraHandle);
         goto open_failed;
     }
 
@@ -5440,12 +5457,16 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     count = CAM_SCENE_MODE_MAX;
     count = MIN(gCamCapability[cameraId]->supported_scene_modes_cnt, count);
     for (size_t i = 0; i < count; i++) {
-        int val = lookupFwkName(SCENE_MODES_MAP, METADATA_MAP_SIZE(SCENE_MODES_MAP),
-                gCamCapability[cameraId]->supported_scene_modes[i]);
-        if (NAME_NOT_FOUND != val) {
-            avail_scene_modes[supported_scene_modes_cnt] = (uint8_t)val;
-            supported_indexes[supported_scene_modes_cnt] = (uint8_t)i;
-            supported_scene_modes_cnt++;
+        if (gCamCapability[cameraId]->supported_scene_modes[i] !=
+                CAM_SCENE_MODE_OFF) {
+            int val = lookupFwkName(SCENE_MODES_MAP,
+                    METADATA_MAP_SIZE(SCENE_MODES_MAP),
+                    gCamCapability[cameraId]->supported_scene_modes[i]);
+            if (NAME_NOT_FOUND != val) {
+                avail_scene_modes[supported_scene_modes_cnt] = (uint8_t)val;
+                supported_indexes[supported_scene_modes_cnt] = (uint8_t)i;
+                supported_scene_modes_cnt++;
+            }
         }
     }
     staticInfo.update(ANDROID_CONTROL_AVAILABLE_SCENE_MODES,
@@ -5459,6 +5480,11 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
                       scene_mode_overrides,
                       supported_indexes,
                       cameraId);
+
+    if (supported_scene_modes_cnt == 0) {
+        supported_scene_modes_cnt = 1;
+        avail_scene_modes[0] = ANDROID_CONTROL_SCENE_MODE_DISABLED;
+    }
 
     staticInfo.update(ANDROID_CONTROL_SCENE_MODE_OVERRIDES,
             scene_mode_overrides, supported_scene_modes_cnt * 3);
@@ -6503,7 +6529,8 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     static const int32_t testpatternMode = ANDROID_SENSOR_TEST_PATTERN_MODE_OFF;
     settings.update(ANDROID_SENSOR_TEST_PATTERN_MODE, &testpatternMode, 1);
 
-    static const uint8_t faceDetectMode = ANDROID_STATISTICS_FACE_DETECT_MODE_FULL;
+    /* face detection (default to OFF) */
+    static const uint8_t faceDetectMode = ANDROID_STATISTICS_FACE_DETECT_MODE_OFF;
     settings.update(ANDROID_STATISTICS_FACE_DETECT_MODE, &faceDetectMode, 1);
 
     static const uint8_t histogramMode = ANDROID_STATISTICS_HISTOGRAM_MODE_OFF;
@@ -6619,10 +6646,6 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     /* black level lock */
     uint8_t blacklevel_lock = ANDROID_BLACK_LEVEL_LOCK_OFF;
     settings.update(ANDROID_BLACK_LEVEL_LOCK, &blacklevel_lock, 1);
-
-    /* face detect mode */
-    uint8_t facedetect_mode = ANDROID_STATISTICS_FACE_DETECT_MODE_OFF;
-    settings.update(ANDROID_STATISTICS_FACE_DETECT_MODE, &facedetect_mode, 1);
 
     /* lens shading map mode */
     uint8_t shadingmap_mode = ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF;
@@ -7407,12 +7430,16 @@ int QCamera3HardwareInterface::translateToHalMetadata
         }
     }
 
-
     if (frame_settings.exists(ANDROID_STATISTICS_FACE_DETECT_MODE)) {
         uint8_t fwk_facedetectMode =
                 frame_settings.find(ANDROID_STATISTICS_FACE_DETECT_MODE).data.u8[0];
+
+        fwk_facedetectMode = (m_overrideAppFaceDetection < 0) ?
+                                    fwk_facedetectMode : (uint8_t)m_overrideAppFaceDetection;
+
         int val = lookupHalName(FACEDETECT_MODES_MAP, METADATA_MAP_SIZE(FACEDETECT_MODES_MAP),
                 fwk_facedetectMode);
+
         if (NAME_NOT_FOUND != val) {
             uint8_t facedetectMode = (uint8_t)val;
             if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_STATS_FACEDETECT_MODE,

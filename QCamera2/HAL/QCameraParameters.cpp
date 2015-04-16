@@ -783,6 +783,8 @@ QCameraParameters::QCameraParameters()
       m_bNeedRestart(false),
       m_bNoDisplayMode(false),
       m_bWNROn(false),
+      m_bTNRPreviewOn(false),
+      m_bTNRVideoOn(false),
       m_bInited(false),
       m_nBurstNum(1),
       m_nRetroBurstNum(0),
@@ -854,6 +856,7 @@ QCameraParameters::QCameraParameters()
     mCurPPCount = 0;
     mBufBatchCnt = 0;
     mRotation = 0;
+    mJpegRotation = 0;
 }
 
 /*===========================================================================
@@ -937,6 +940,7 @@ QCameraParameters::QCameraParameters(const String8 &params)
     mParmZoomLevel = 0;
     mCurPPCount = 0;
     mRotation = 0;
+    mJpegRotation = 0;
 }
 
 /*===========================================================================
@@ -3965,8 +3969,10 @@ int32_t QCameraParameters::setTemporalDenoise(const QCameraParameters& params)
             if ((video_prev_str == NULL) || (strcmp(video_str, video_prev_str) != 0)) {
                 if (!strcmp(video_str, VALUE_ON)) {
                     m_bTNRVideoOn = true;
+                    m_bTNRPreviewOn = true;
                 } else {
                     m_bTNRVideoOn = false;
+                    m_bTNRPreviewOn = false;
                 }
                 updateParamEntry(KEY_QC_VIDEO_TNR_MODE, video_str);
             } else {
@@ -3982,10 +3988,21 @@ int32_t QCameraParameters::setTemporalDenoise(const QCameraParameters& params)
                 m_bTNRVideoOn = false;
             }
             updateParamEntry(KEY_QC_VIDEO_TNR_MODE, video_value);
+
+            char preview_value[PROPERTY_VALUE_MAX];
+            memset(preview_value, 0, sizeof(preview_value));
+            property_get("persist.camera.tnr.preview", preview_value, video_value);
+            if (!strcmp(preview_value, VALUE_ON)) {
+                m_bTNRPreviewOn = true;
+            } else {
+                m_bTNRPreviewOn = false;
+            }
+            updateParamEntry(KEY_QC_TNR_MODE, preview_value);
         }
+
         cam_denoise_param_t temp;
         memset(&temp, 0, sizeof(temp));
-        if (m_bTNRVideoOn) {
+        if (m_bTNRVideoOn || m_bTNRPreviewOn) {
             temp.denoise_enable = 1;
             temp.process_plates = getDenoiseProcessPlate(CAM_INTF_PARM_TEMPORAL_DENOISE);
 
@@ -9358,15 +9375,15 @@ uint32_t QCameraParameters::getJpegQuality()
 }
 
 /*===========================================================================
- * FUNCTION   : getJpegRotation
+ * FUNCTION   : getRotation
  *
- * DESCRIPTION: get jpeg rotation value
+ * DESCRIPTION: get application configured rotation
  *
  * PARAMETERS : none
  *
- * RETURN     : jpeg rotation value
+ * RETURN     : rotation value
  *==========================================================================*/
-uint32_t QCameraParameters::getJpegRotation() {
+uint32_t QCameraParameters::getRotation() {
     int rotation = 0;
 
     //If exif rotation is set, do not rotate captured image
@@ -9377,6 +9394,22 @@ uint32_t QCameraParameters::getJpegRotation() {
         }
     }
     return (uint32_t)rotation;
+}
+
+/*===========================================================================
+ * FUNCTION   : setJpegRotation
+ *
+ * DESCRIPTION: set jpeg rotation value configured internally
+ *
+ * PARAMETERS : none
+ *
+ * RETURN     : jpeg rotation value
+ *==========================================================================*/
+void QCameraParameters::setJpegRotation(int rotation) {
+    if (rotation == 0 || rotation == 90 ||
+            rotation == 180 || rotation == 270) {
+        mJpegRotation = (uint32_t)rotation;
+    }
 }
 
 /*===========================================================================

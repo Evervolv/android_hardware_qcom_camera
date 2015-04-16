@@ -194,6 +194,22 @@ private:
     QCameraCmdThread mProcTh;
     bool             mActive;
 };
+
+class QCameraPerfLock {
+public:
+    void    lock_init();
+    void    lock_deinit();
+    int32_t lock_rel();
+    int32_t lock_acq();
+private:
+    int32_t        (*perf_lock_acq)(int, int, int[], int);
+    int32_t        (*perf_lock_rel)(int);
+    void           *dlhandle;
+    uint32_t        mPerfLockEnable;
+    pthread_mutex_t dl_mutex;
+    int32_t         mPerfLockHandle;  // Performance lock library handle
+};
+
 class QCamera2HardwareInterface : public QCameraAllocator,
         public QCameraThermalCallback, public QCameraAdjustFPS
 {
@@ -247,6 +263,7 @@ public:
 
     static int getCapabilities(uint32_t cameraId, struct camera_info *info);
     static int initCapabilities(uint32_t cameraId, mm_camera_vtbl_t *cameraHandle);
+    cam_capability_t *getCamHalCapabilities();
 
     // Implementation of QCameraAllocator
     virtual QCameraMemory *allocateStreamBuf(cam_stream_type_t stream_type,
@@ -523,6 +540,7 @@ private:
     QCameraPostProcessor m_postprocessor; // post processor
     QCameraThermalAdapter &m_thermalAdapter;
     QCameraCbNotifier m_cbNotifier;
+    QCameraPerfLock m_perfLock;
     pthread_mutex_t m_lock;
     pthread_cond_t m_cond;
     api_result_list *m_apiResultList;

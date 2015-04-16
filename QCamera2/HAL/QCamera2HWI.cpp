@@ -39,6 +39,7 @@
 #include <utils/Trace.h>
 #include <gralloc_priv.h>
 #include <gui/Surface.h>
+#include <dlfcn.h>
 
 #include "QCamera2HWI.h"
 #include "QCameraMem.h"
@@ -56,6 +57,8 @@
 //for the output of pproc
 #define CAMERA_PPROC_OUT_BUFFER_MULTIPLIER 2
 
+#define ALL_CPUS_PWR_CLPS_DIS 0x101
+#define INDEFINITE_DURATION     0
 
 #define HDR_CONFIDENCE_THRESHOLD 0.4
 
@@ -295,6 +298,7 @@ int QCamera2HardwareInterface::start_preview(struct camera_device *device)
         return BAD_VALUE;
     }
     ALOGI("[KPI Perf] %s: E PROFILE_START_PREVIEW", __func__);
+    hw->m_perfLock.lock_acq();
     hw->lockAPI();
     qcamera_api_result_t apiResult;
     qcamera_sm_evt_enum_t evt = QCAMERA_SM_EVT_START_PREVIEW;
@@ -309,6 +313,7 @@ int QCamera2HardwareInterface::start_preview(struct camera_device *device)
     hw->unlockAPI();
     hw->m_bPreviewStarted = true;
     ALOGI("[KPI Perf] %s: X", __func__);
+    hw->m_perfLock.lock_rel();
     return ret;
 }
 
@@ -331,6 +336,8 @@ void QCamera2HardwareInterface::stop_preview(struct camera_device *device)
         ALOGE("NULL camera device");
         return;
     }
+    hw->m_perfLock.lock_acq();
+
     ALOGI("[KPI Perf] %s: E PROFILE_STOP_PREVIEW", __func__);
     hw->lockAPI();
     qcamera_api_result_t apiResult;
@@ -339,6 +346,7 @@ void QCamera2HardwareInterface::stop_preview(struct camera_device *device)
         hw->waitAPIResult(QCAMERA_SM_EVT_STOP_PREVIEW, &apiResult);
     }
     hw->unlockAPI();
+    hw->m_perfLock.lock_rel();
     ALOGI("[KPI Perf] %s: X", __func__);
 }
 
@@ -641,6 +649,9 @@ int QCamera2HardwareInterface::take_picture(struct camera_device *device)
         return BAD_VALUE;
     }
     ALOGI("[KPI Perf] %s: E PROFILE_TAKE_PICTURE", __func__);
+    if (!hw->mLongshotEnabled) {
+        hw->m_perfLock.lock_acq();
+    }
     hw->lockAPI();
     qcamera_api_result_t apiResult;
 
@@ -716,6 +727,10 @@ int QCamera2HardwareInterface::take_picture(struct camera_device *device)
         }
     }
     hw->unlockAPI();
+    if (ret != NO_ERROR) {
+      hw->m_perfLock.lock_rel();
+    }
+
     ALOGI("[KPI Perf] %s: X", __func__);
     return ret;
 }
@@ -982,6 +997,7 @@ int QCamera2HardwareInterface::close_camera_device(hw_device_t *hw_dev)
     ATRACE_CALL();
     int ret = NO_ERROR;
     ALOGI("[KPI Perf] %s: E",__func__);
+
     QCamera2HardwareInterface *hw =
         reinterpret_cast<QCamera2HardwareInterface *>(
             reinterpret_cast<camera_device_t *>(hw_dev)->priv);
@@ -990,6 +1006,7 @@ int QCamera2HardwareInterface::close_camera_device(hw_device_t *hw_dev)
         return BAD_VALUE;
     }
     delete hw;
+
     ALOGI("[KPI Perf] %s: X",__func__);
     return ret;
 }
@@ -1133,6 +1150,8 @@ QCamera2HardwareInterface::QCamera2HardwareInterface(uint32_t cameraId)
     }
 #endif
 
+    m_perfLock.lock_init();
+
     memset(mDeffOngoingJobs, 0, sizeof(mDeffOngoingJobs));
 
     mDefferedWorkThread.launch(defferedWorkRoutine, this);
@@ -1150,6 +1169,7 @@ QCamera2HardwareInterface::QCamera2HardwareInterface(uint32_t cameraId)
  *==========================================================================*/
 QCamera2HardwareInterface::~QCamera2HardwareInterface()
 {
+    m_perfLock.lock_acq();
     mDefferedWorkThread.sendCmd(CAMERA_CMD_TYPE_STOP_DATA_PROC, TRUE, TRUE);
     mDefferedWorkThread.exit();
 
@@ -1158,6 +1178,8 @@ QCamera2HardwareInterface::~QCamera2HardwareInterface()
     unlockAPI();
     m_stateMachine.releaseThread();
     closeCamera();
+    m_perfLock.lock_rel();
+    m_perfLock.lock_deinit();
     pthread_mutex_destroy(&m_lock);
     pthread_cond_destroy(&m_cond);
     pthread_mutex_destroy(&m_evtLock);
@@ -1189,6 +1211,9 @@ int QCamera2HardwareInterface::openCamera(struct hw_device_t **hw_device)
     }
     ALOGI("[KPI Perf] %s: E PROFILE_OPEN_CAMERA camera id %d",
         __func__,mCameraId);
+
+    m_perfLock.lock_acq();
+
     rc = openCamera();
     if (rc == NO_ERROR){
         *hw_device = &mCameraDevice.common;
@@ -1202,6 +1227,7 @@ int QCamera2HardwareInterface::openCamera(struct hw_device_t **hw_device)
     ALOGI("[KPI Perf] %s: X PROFILE_OPEN_CAMERA camera id %d, rc: %d",
         __func__,mCameraId, rc);
 
+    m_perfLock.lock_rel();
     return rc;
 }
 
@@ -1223,15 +1249,16 @@ int QCamera2HardwareInterface::openCamera()
     m_max_pic_width = 0;
     m_max_pic_height = 0;
     size_t i;
+    int32_t rc = 0;
 
     if (mCameraHandle) {
         ALOGE("Failure: Camera already opened");
         return ALREADY_EXISTS;
     }
-    mCameraHandle = camera_open((uint8_t)mCameraId);
-    if (!mCameraHandle) {
-        ALOGE("camera_open failed.");
-        return UNKNOWN_ERROR;
+    rc = camera_open((uint8_t)mCameraId, &mCameraHandle);
+    if (rc) {
+        ALOGE("camera_open failed. rc = %d, mCameraHandle = %p", rc, mCameraHandle);
+        return rc;
     }
     if (NULL == gCamCaps[mCameraId])
         initCapabilities(mCameraId,mCameraHandle);
@@ -1253,7 +1280,7 @@ int QCamera2HardwareInterface::openCamera()
       }
     }
 
-    int32_t rc = m_postprocessor.init(jpegEvtHandle, this);
+    rc = m_postprocessor.init(jpegEvtHandle, this);
     if (rc != 0) {
         ALOGE("Init Postprocessor failed");
         mCameraHandle->ops->close_camera(mCameraHandle->camera_handle);
@@ -1447,6 +1474,22 @@ int QCamera2HardwareInterface::getCapabilities(uint32_t cameraId,
     memcpy(info, p_info, sizeof (struct camera_info));
     pthread_mutex_unlock(&g_camlock);
     return rc;
+}
+
+/*===========================================================================
+ * FUNCTION   : getCamHalCapabilities
+ *
+ * DESCRIPTION: get the HAL capabilities structure
+ *
+ * PARAMETERS :
+ *   @cameraId  : camera Id
+ *
+ * RETURN     : capability structure of respective camera
+ *
+ *==========================================================================*/
+cam_capability_t* QCamera2HardwareInterface::getCamHalCapabilities()
+{
+    return gCamCaps[mCameraId];
 }
 
 /*===========================================================================
@@ -2971,6 +3014,10 @@ int QCamera2HardwareInterface::takePicture()
     uint8_t numRetroSnapshots = mParameters.getNumOfRetroSnapshots();
     CDBG_HIGH("%s: E", __func__);
 
+    //Set rotation value from user settings as Jpeg rotation
+    //to configure back-end modules.
+    mParameters.setJpegRotation(mParameters.getRotation());
+
     // Check if retro-active snapshots are not enabled
     if (!isRetroPicture() || !mParameters.isZSLMode()) {
       numRetroSnapshots = 0;
@@ -3370,6 +3417,9 @@ int QCamera2HardwareInterface::cancelPicture()
     unconfigureAdvancedCapture();
 
     mParameters.setDisplayFrame(TRUE);
+    if (!mLongshotEnabled) {
+        m_perfLock.lock_rel();
+    }
 
     if (mParameters.isZSLMode()) {
         QCameraPicChannel *pZSLChannel =
@@ -3603,6 +3653,10 @@ int QCamera2HardwareInterface::takeBackendPic_internal(bool *JpegMemOpt, char *r
     qcamera_api_result_t apiResult;
 
     lockAPI();
+    //Set rotation value from user settings as Jpeg rotation
+    //to configure back-end modules.
+    mParameters.setJpegRotation(mParameters.getRotation());
+
     setRetroPicture(0);
     /* Prepare snapshot in case LED needs to be flashed */
     if (mFlashNeeded == 1 || mParameters.isChromaFlashEnabled()) {
@@ -3724,6 +3778,10 @@ int QCamera2HardwareInterface::takeLiveSnapshot_internal()
 
     QCameraChannel *pChannel = NULL;
 
+    //Set rotation value from user settings as Jpeg rotation
+    //to configure back-end modules.
+    mParameters.setJpegRotation(mParameters.getRotation());
+
     // Configure advanced capture
     if (mParameters.isUbiFocusEnabled() ||
             mParameters.isUbiRefocus() ||
@@ -3819,6 +3877,9 @@ int QCamera2HardwareInterface::cancelLiveSnapshot()
     int rc = NO_ERROR;
 
     unconfigureAdvancedCapture();
+    if (!mLongshotEnabled) {
+        m_perfLock.lock_rel();
+    }
 
     if (mLiveSnapshotThread != 0) {
         pthread_join(mLiveSnapshotThread,NULL);
@@ -3926,6 +3987,7 @@ int QCamera2HardwareInterface::sendCommand(int32_t command,
     switch (command) {
 #ifndef VANILLA_HAL
     case CAMERA_CMD_LONGSHOT_ON:
+        m_perfLock.lock_acq();
         arg1 = 0;
         // Longshot can only be enabled when image capture
         // is not active.
@@ -3968,6 +4030,7 @@ int QCamera2HardwareInterface::sendCommand(int32_t command,
         }
         break;
     case CAMERA_CMD_LONGSHOT_OFF:
+        m_perfLock.lock_rel();
         if ( mLongshotEnabled && m_stateMachine.isCaptureRunning() ) {
             cancelPicture();
             processEvt(QCAMERA_SM_EVT_SNAPSHOT_DONE, NULL);
@@ -7721,6 +7784,171 @@ void QCamera2HardwareInterface::getLogLevel()
 cam_sensor_t QCamera2HardwareInterface::getSensorType()
 {
     return gCamCaps[mCameraId]->sensor_type.sens_type;
+}
+
+/*===========================================================================
+ * FUNCTION   : lock_init
+ *
+ * DESCRIPTION: opens the performance lib and initilizes the perf lock functions
+ *
+ * PARAMETERS :
+ *   None
+ *
+ * RETURN     : void
+ *
+ *==========================================================================*/
+void QCameraPerfLock::lock_init()
+{
+    const char *rc;
+    char value[PROPERTY_VALUE_MAX];
+    int len;
+    property_get("persist.camera.perflock.enable", value, "0");
+    mPerfLockEnable = atoi(value);
+    if (mPerfLockEnable) {
+        ALOGI("%s E", __func__);
+        perf_lock_acq = NULL;
+        perf_lock_rel = NULL;
+        mPerfLockHandle = 0;
+        /* Retrieve name of vendor extension library */
+        if (property_get("ro.vendor.extension_library", value, NULL)<= 0) {
+            return;
+        }
+
+        dlhandle = dlopen(value, RTLD_NOW | RTLD_LOCAL);
+
+        if (dlhandle == NULL) {
+            return;
+        }
+
+        dlerror();
+
+        perf_lock_acq = (int (*) (int, int, int[], int))dlsym(dlhandle, "perf_lock_acq");
+        if ((rc = dlerror()) != NULL) {
+            ALOGE("failed to perf_lock_acq function handle");
+            goto cleanup;
+        }
+
+        perf_lock_rel = (int (*) (int))dlsym(dlhandle, "perf_lock_rel");
+        if ((rc = dlerror()) != NULL) {
+            ALOGE("failed to perf_lock_rel function handle");
+            goto cleanup;
+        }
+        ALOGI("%s X", __func__);
+        return;
+
+    cleanup:
+        perf_lock_acq  = NULL;
+        perf_lock_rel  = NULL;
+        mPerfLockEnable = 0;
+        if (dlhandle) {
+            dlclose(dlhandle);
+            dlhandle = NULL;
+        }
+        ALOGI("%s X", __func__);
+    }
+}
+
+/*===========================================================================
+ * FUNCTION   : lock_deinit
+ *
+ * DESCRIPTION: deinitialize the perf lock parameters
+ *
+ * PARAMETERS :
+ *   None
+ *
+ * RETURN     : void
+ *
+ *==========================================================================*/
+void QCameraPerfLock::lock_deinit()
+{
+    if (mPerfLockEnable) {
+        ALOGI("%s E", __func__);
+        pthread_mutex_lock(&dl_mutex);
+        if (dlhandle) {
+            perf_lock_acq  = NULL;
+            perf_lock_rel  = NULL;
+
+            dlclose(dlhandle);
+            dlhandle       = NULL;
+        }
+        pthread_mutex_unlock(&dl_mutex);
+        ALOGI("%s X", __func__);
+    }
+}
+
+/*===========================================================================
+ * FUNCTION   : lock_acq
+ *
+ * DESCRIPTION: acquire the performance lock
+ *
+ * PARAMETERS :
+ *   None
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *
+ *==========================================================================*/
+int32_t QCameraPerfLock::lock_acq()
+{
+    int ret = -1;
+    if (mPerfLockEnable) {
+        int32_t perf_lock_params[] = { ALL_CPUS_PWR_CLPS_DIS};
+        ALOGI("%s E", __func__);
+        pthread_mutex_lock(&dl_mutex);
+        if ((NULL != perf_lock_acq) && (0 == mPerfLockHandle)) {
+            ret = (*perf_lock_acq)(mPerfLockHandle, INDEFINITE_DURATION, perf_lock_params,
+                                   sizeof(perf_lock_params) / sizeof(int32_t));
+            ALOGE("%s ret %d", __func__, ret);
+            if (ret < 0) {
+                ALOGE("failed to acquire lock");
+            }
+        }
+        mPerfLockHandle++;
+        CDBG_HIGH("%s perf_handle_acq %d ",__func__, mPerfLockHandle );
+        pthread_mutex_unlock(&dl_mutex);
+        ALOGI("%s X", __func__);
+
+    }
+    return ret;
+}
+
+/*===========================================================================
+ * FUNCTION   : lock_rel
+ *
+ * DESCRIPTION: release the performance lock
+ *
+ * PARAMETERS :
+ *   None
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *
+ *==========================================================================*/
+int32_t QCameraPerfLock::lock_rel()
+{
+    int ret = -1;
+    if (mPerfLockEnable) {
+        ALOGI("%s E", __func__);
+        pthread_mutex_lock(&dl_mutex);
+        mPerfLockHandle--;
+        if (mPerfLockHandle < 0) {
+            ALOGE("Error: mPerfLockHandle < 0,check if lock is released properly");
+            mPerfLockHandle = 0;
+        }
+        CDBG_HIGH("%s perf_handle_rel %d ",__func__, mPerfLockHandle );
+
+        if ((NULL != perf_lock_rel) && (0 == mPerfLockHandle)) {
+            ret = (*perf_lock_rel)(mPerfLockHandle);
+            if (ret < 0) {
+                ALOGE("failed to release lock");
+            }
+        }
+        pthread_mutex_unlock(&dl_mutex);
+        ALOGI("%s X", __func__);
+    }
+    return ret;
 }
 
 }; // namespace qcamera
