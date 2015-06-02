@@ -77,8 +77,7 @@ public:
 
     QCameraMemory(bool cached,
                   QCameraMemoryPool *pool = NULL,
-                  cam_stream_type_t streamType = CAM_STREAM_TYPE_DEFAULT,
-                  cam_stream_buf_type buf_Type = CAM_STREAM_BUF_TYPE_MPLANE);
+                  cam_stream_type_t streamType = CAM_STREAM_TYPE_DEFAULT);
     virtual ~QCameraMemory();
 
     void getBufDef(const cam_frame_len_offset_t &offset,
@@ -87,7 +86,8 @@ public:
     int32_t getUserBufDef(const cam_stream_user_buf_info_t &buf_info,
             mm_camera_buf_def_t &bufDef, uint32_t index,
             const cam_frame_len_offset_t &plane_offset,
-            mm_camera_buf_def_t *planebufDef, QCameraMemory *bufs) const;
+            mm_camera_buf_def_t *planebufDef, uint32_t plane_index,
+            QCameraMemory *bufs) const;
 
     void traceLogAllocStart(size_t size, int count, const char *allocName);
     void traceLogAllocEnd(size_t size);
@@ -118,7 +118,6 @@ protected:
     struct QCameraMemInfo mMemInfo[MM_CAMERA_MAX_NUM_FRAMES];
     QCameraMemoryPool *mMemoryPool;
     cam_stream_type_t mStreamType;
-    cam_stream_buf_type mBufType;
 };
 
 class QCameraMemoryPool {
@@ -172,8 +171,7 @@ public:
     QCameraStreamMemory(camera_request_memory getMemory,
                         bool cached,
                         QCameraMemoryPool *pool = NULL,
-                        cam_stream_type_t streamType = CAM_STREAM_TYPE_DEFAULT,
-                        cam_stream_buf_type buf_Type = CAM_STREAM_BUF_TYPE_MPLANE);
+                        cam_stream_type_t streamType = CAM_STREAM_TYPE_DEFAULT);
     virtual ~QCameraStreamMemory();
 
     virtual int allocate(uint8_t count, size_t size, uint32_t is_secure);
@@ -194,8 +192,7 @@ protected:
 // framework. They are allocated from /dev/ion or gralloc.
 class QCameraVideoMemory : public QCameraStreamMemory {
 public:
-    QCameraVideoMemory(camera_request_memory getMemory, bool cached,
-            cam_stream_buf_type bufType = CAM_STREAM_BUF_TYPE_MPLANE);
+    QCameraVideoMemory(camera_request_memory getMemory, bool cached);
     virtual ~QCameraVideoMemory();
 
     virtual int allocate(uint8_t count, size_t size, uint32_t is_secure);
@@ -203,14 +200,11 @@ public:
     virtual void deallocate();
     virtual camera_memory_t *getMemory(uint32_t index, bool metadata) const;
     virtual int getMatchBufIndex(const void *opaque, bool metadata) const;
-    int allocateMeta(uint8_t buf_cnt);
-    void deallocateMeta();
 
 private:
     camera_memory_t *mMetadata[MM_CAMERA_MAX_NUM_FRAMES];
-    uint8_t mMetaBufCount;
 };
-
+;
 
 // Gralloc Memory is acquired from preview window
 class QCameraGrallocMemory : public QCameraMemory {
