@@ -59,6 +59,7 @@ namespace qcamera {
 #define EMPTY_PIPELINE_DELAY 2
 #define PARTIAL_RESULT_COUNT 2
 #define FRAME_SKIP_DELAY     0
+#define CAM_MAX_SYNC_LATENCY 4
 
 #define MAX_VALUE_8BIT ((1<<8)-1)
 #define MAX_VALUE_10BIT ((1<<10)-1)
@@ -82,6 +83,7 @@ namespace qcamera {
 
 cam_capability_t *gCamCapability[MM_CAMERA_MAX_NUM_SENSORS];
 const camera_metadata_t *gStaticMetadata[MM_CAMERA_MAX_NUM_SENSORS];
+static pthread_mutex_t gCamLock = PTHREAD_MUTEX_INITIALIZER;
 volatile uint32_t gCamHal3LogLevel = 1;
 
 const QCamera3HardwareInterface::QCameraPropMap QCamera3HardwareInterface::CDS_MAP [] = {
@@ -305,6 +307,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       m_bIs4KVideo(false),
       m_bEisSupportedSize(false),
       m_bEisEnable(false),
+      m_MobicatMask(0),
       mMinProcessedFrameDuration(0),
       mMinJpegFrameDuration(0),
       mMinRawFrameDuration(0),
@@ -1856,6 +1859,8 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                     i->timestamp, i->request_id, i->jpegMetadata, i->pipeline_depth,
                     i->capture_intent);
 
+            saveExifParams(metadata);
+
             if (i->blob_request) {
                 {
                     //Dump tuning metadata if enabled and available
@@ -2250,6 +2255,8 @@ int QCamera3HardwareInterface::processCaptureRequest(
         int32_t tintless_value = 1;
         ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
                 CAM_INTF_PARM_TINTLESS, tintless_value);
+
+        setMobicat();
 
         /*set the capture intent, hal version, tintless, stream info,
          *and disenable parameters to the backend*/
@@ -3710,6 +3717,62 @@ QCamera3HardwareInterface::translateFromHalMetadata(
 }
 
 /*===========================================================================
+ * FUNCTION   : saveExifParams
+ *
+ * DESCRIPTION:
+ *
+ * PARAMETERS :
+ *   @metadata : metadata information from callback
+ *
+ * RETURN     : none
+ *
+ *==========================================================================*/
+void QCamera3HardwareInterface::saveExifParams(metadata_buffer_t *metadata)
+{
+    IF_META_AVAILABLE(cam_ae_exif_debug_t, ae_exif_debug_params,
+            CAM_INTF_META_EXIF_DEBUG_AE, metadata) {
+        mExifParams.ae_debug_params = *ae_exif_debug_params;
+        mExifParams.ae_debug_params_valid = TRUE;
+    }
+    IF_META_AVAILABLE(cam_awb_exif_debug_t,awb_exif_debug_params,
+            CAM_INTF_META_EXIF_DEBUG_AWB, metadata) {
+        mExifParams.awb_debug_params = *awb_exif_debug_params;
+        mExifParams.awb_debug_params_valid = TRUE;
+    }
+    IF_META_AVAILABLE(cam_af_exif_debug_t,af_exif_debug_params,
+            CAM_INTF_META_EXIF_DEBUG_AF, metadata) {
+        mExifParams.af_debug_params = *af_exif_debug_params;
+        mExifParams.af_debug_params_valid = TRUE;
+    }
+    IF_META_AVAILABLE(cam_asd_exif_debug_t, asd_exif_debug_params,
+            CAM_INTF_META_EXIF_DEBUG_ASD, metadata) {
+        mExifParams.asd_debug_params = *asd_exif_debug_params;
+        mExifParams.asd_debug_params_valid = TRUE;
+    }
+    IF_META_AVAILABLE(cam_stats_buffer_exif_debug_t,stats_exif_debug_params,
+            CAM_INTF_META_EXIF_DEBUG_STATS, metadata) {
+        mExifParams.stats_debug_params = *stats_exif_debug_params;
+        mExifParams.stats_debug_params_valid = TRUE;
+    }
+}
+
+/*===========================================================================
+ * FUNCTION   : get3AExifParams
+ *
+ * DESCRIPTION:
+ *
+ * PARAMETERS : none
+ *
+ *
+ * RETURN     : mm_jpeg_exif_params_t
+ *
+ *==========================================================================*/
+mm_jpeg_exif_params_t QCamera3HardwareInterface::get3AExifParams()
+{
+    return mExifParams;
+}
+
+/*===========================================================================
  * FUNCTION   : translateCbUrgentMetadataToResultMetadata
  *
  * DESCRIPTION:
@@ -4969,7 +5032,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
                       io_format_map, 0);
 
     int32_t max_latency = (limitedDevice) ?
-            ANDROID_SYNC_MAX_LATENCY_UNKNOWN : ANDROID_SYNC_MAX_LATENCY_PER_FRAME_CONTROL;
+            CAM_MAX_SYNC_LATENCY : ANDROID_SYNC_MAX_LATENCY_PER_FRAME_CONTROL;
     staticInfo.update(ANDROID_SYNC_MAX_LATENCY,
                       &max_latency,
                       1);
@@ -5111,7 +5174,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     if (gCamCapability[cameraId]->supported_focus_modes_cnt > 1) {
         available_result_keys.add(ANDROID_CONTROL_AF_REGIONS);
     }
-    if (!limitedDevice) {
+    if (CAM_SENSOR_YUV != gCamCapability[cameraId]->sensor_type.sens_type) {
        available_result_keys.add(ANDROID_SENSOR_NOISE_PROFILE);
        available_result_keys.add(ANDROID_SENSOR_GREEN_SPLIT);
     }
@@ -5509,10 +5572,11 @@ int QCamera3HardwareInterface::getCamInfo(uint32_t cameraId,
     ATRACE_CALL();
     int rc = 0;
 
+    pthread_mutex_lock(&gCamLock);
     if (NULL == gCamCapability[cameraId]) {
         rc = initCapabilities(cameraId);
         if (rc < 0) {
-            //pthread_mutex_unlock(&g_camlock);
+            pthread_mutex_unlock(&gCamLock);
             return rc;
         }
     }
@@ -5520,6 +5584,7 @@ int QCamera3HardwareInterface::getCamInfo(uint32_t cameraId,
     if (NULL == gStaticMetadata[cameraId]) {
         rc = initStaticMetadata(cameraId);
         if (rc < 0) {
+            pthread_mutex_unlock(&gCamLock);
             return rc;
         }
     }
@@ -5543,6 +5608,8 @@ int QCamera3HardwareInterface::getCamInfo(uint32_t cameraId,
     info->orientation = (int)gCamCapability[cameraId]->sensor_mount_angle;
     info->device_version = CAMERA_DEVICE_API_VERSION_3_2;
     info->static_camera_characteristics = gStaticMetadata[cameraId];
+
+    pthread_mutex_unlock(&gCamLock);
 
     return rc;
 }
@@ -7193,6 +7260,58 @@ QCamera3ReprocessChannel *QCamera3HardwareInterface::addOfflineReprocChannel(
         return NULL;
     }
     return pChannel;
+}
+
+/*===========================================================================
+ * FUNCTION   : getMobicatMask
+ *
+ * DESCRIPTION: returns mobicat mask
+ *
+ * PARAMETERS : none
+ *
+ * RETURN     : mobicat mask
+ *
+ *==========================================================================*/
+uint8_t QCamera3HardwareInterface::getMobicatMask()
+{
+    return m_MobicatMask;
+}
+
+/*===========================================================================
+ * FUNCTION   : setMobicat
+ *
+ * DESCRIPTION: set Mobicat on/off.
+ *
+ * PARAMETERS :
+ *   @params  : none
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCamera3HardwareInterface::setMobicat()
+{
+    char value [PROPERTY_VALUE_MAX];
+    property_get("persist.camera.mobicat", value, "0");
+    int32_t ret = NO_ERROR;
+    uint8_t enableMobi = (uint8_t)atoi(value);
+
+    if (enableMobi) {
+        tune_cmd_t tune_cmd;
+        tune_cmd.type = SET_RELOAD_CHROMATIX;
+        tune_cmd.module = MODULE_ALL;
+        tune_cmd.value = TRUE;
+        ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
+                CAM_INTF_PARM_SET_VFE_COMMAND,
+                tune_cmd);
+
+        ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
+                CAM_INTF_PARM_SET_PP_COMMAND,
+                tune_cmd);
+    }
+    m_MobicatMask = enableMobi;
+
+    return ret;
 }
 
 /*===========================================================================
