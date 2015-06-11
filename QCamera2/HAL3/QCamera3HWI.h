@@ -37,6 +37,7 @@
 #include <camera/CameraMetadata.h>
 #include "QCamera3HALHeader.h"
 #include "QCamera3Channel.h"
+#include "QCamera3CropRegionMapper.h"
 
 #include <hardware/power.h>
 
@@ -65,9 +66,6 @@ namespace qcamera {
 #ifndef FALSE
 #define FALSE 0
 #endif
-
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 /* Time related macros */
 typedef int64_t nsecs_t;
@@ -210,6 +208,7 @@ private:
 
     int validateCaptureRequest(camera3_capture_request_t *request);
     int validateStreamDimensions(camera3_stream_configuration_t *streamList);
+    int validateStreamRotations(camera3_stream_configuration_t *streamList);
     void deriveMinFrameDuration();
     int32_t handlePendingReprocResults(uint32_t frame_number);
     int64_t getMinFrameDuration(const camera3_capture_request_t *request);
@@ -227,6 +226,10 @@ private:
 
     bool isSupportChannelNeeded(camera3_stream_configuration_t *streamList);
     int32_t setMobicat();
+
+    void updatePowerHint(bool bWasVideo, bool bIsVideo);
+    int32_t getSensorOutputSize(cam_dimension_t &sensor_dim);
+
     camera3_device_t   mCameraDevice;
     uint32_t           mCameraId;
     mm_camera_vtbl_t  *mCameraHandle;
@@ -335,6 +338,9 @@ private:
 
     uint8_t mCaptureIntent;
     metadata_buffer_t mRreprocMeta; //scratch meta buffer
+
+    /* sensor output size with current stream configuration */
+    QCamera3CropRegionMapper mCropRegionMapper;
 
     static const QCameraMap<camera_metadata_enum_android_control_effect_mode_t,
             cam_effect_mode_type> EFFECT_MODES_MAP[];

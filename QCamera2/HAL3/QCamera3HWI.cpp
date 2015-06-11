@@ -384,6 +384,9 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
         mAnalysisChannel->stop();
     }
 
+    /* Turn off video hint */
+    updatePowerHint(m_bIsVideo, false);
+
     for (List<stream_info_t *>::iterator it = mStreamInfo.begin();
         it != mStreamInfo.end(); it++) {
         QCamera3Channel *channel = (*it)->channel;
@@ -520,16 +523,6 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
     } else
         *hw_device = NULL;
 
-#ifdef HAS_MULTIMEDIA_HINTS
-    if (rc == 0) {
-        if (m_pPowerModule) {
-            if (m_pPowerModule->powerHint) {
-                m_pPowerModule->powerHint(m_pPowerModule, POWER_HINT_VIDEO_ENCODE,
-                        (void *)"state=1");
-            }
-        }
-    }
-#endif
     return rc;
 }
 
@@ -592,17 +585,6 @@ int QCamera3HardwareInterface::closeCamera()
     rc = mCameraHandle->ops->close_camera(mCameraHandle->camera_handle);
     mCameraHandle = NULL;
     mCameraOpened = false;
-
-#ifdef HAS_MULTIMEDIA_HINTS
-    if (rc == NO_ERROR) {
-        if (m_pPowerModule) {
-            if (m_pPowerModule->powerHint) {
-                m_pPowerModule->powerHint(m_pPowerModule, POWER_HINT_VIDEO_ENCODE,
-                        (void *)"state=0");
-            }
-        }
-    }
-#endif
 
     return rc;
 }
@@ -670,6 +652,14 @@ int QCamera3HardwareInterface::validateStreamDimensions(
         size_t jpeg_sizes_cnt = 0;
         camera3_stream_t *newStream = streamList->streams[j];
 
+        uint32_t rotatedHeight = newStream->height;
+        uint32_t rotatedWidth = newStream->width;
+        if ((newStream->rotation == CAMERA3_STREAM_ROTATION_90) ||
+                (newStream->rotation == CAMERA3_STREAM_ROTATION_270)) {
+            rotatedHeight = newStream->width;
+            rotatedWidth = newStream->height;
+        }
+
         /*
         * Sizes are different for each type of stream format check against
         * appropriate table.
@@ -680,8 +670,8 @@ int QCamera3HardwareInterface::validateStreamDimensions(
         case HAL_PIXEL_FORMAT_RAW10:
             count = MIN(gCamCapability[mCameraId]->supported_raw_dim_cnt, MAX_SIZES_CNT);
             for (size_t i = 0; i < count; i++) {
-                if ((gCamCapability[mCameraId]->raw_dim[i].width == (int32_t)newStream->width) &&
-                        (gCamCapability[mCameraId]->raw_dim[i].height == (int32_t)newStream->height)) {
+                if ((gCamCapability[mCameraId]->raw_dim[i].width == (int32_t)rotatedWidth) &&
+                        (gCamCapability[mCameraId]->raw_dim[i].height == (int32_t)rotatedHeight)) {
                     sizeFound = true;
                     break;
                 }
@@ -704,8 +694,8 @@ int QCamera3HardwareInterface::validateStreamDimensions(
 
             /* Verify set size against generated sizes table */
             for (size_t i = 0; i < (jpeg_sizes_cnt / 2); i++) {
-                if (((int32_t)newStream->width == available_jpeg_sizes[i*2]) &&
-                        ((int32_t)newStream->height == available_jpeg_sizes[i*2+1])) {
+                if (((int32_t)rotatedWidth == available_jpeg_sizes[i*2]) &&
+                        ((int32_t)rotatedHeight == available_jpeg_sizes[i*2+1])) {
                     sizeFound = true;
                     break;
                 }
@@ -718,9 +708,9 @@ int QCamera3HardwareInterface::validateStreamDimensions(
         default:
             /* ZSL stream will be full active array size validate that*/
             if (newStream->stream_type == CAMERA3_STREAM_BIDIRECTIONAL) {
-                if (((int32_t)newStream->width ==
+                if (((int32_t)rotatedWidth ==
                             gCamCapability[mCameraId]->active_array_size.width) &&
-                        ((int32_t)newStream->height ==
+                        ((int32_t)rotatedHeight ==
                                 gCamCapability[mCameraId]->active_array_size.height)) {
                     sizeFound = true;
                 }
@@ -736,9 +726,9 @@ int QCamera3HardwareInterface::validateStreamDimensions(
             count = MIN(gCamCapability[mCameraId]->picture_sizes_tbl_cnt,
                     MAX_SIZES_CNT);
             for (size_t i = 0; i < count; i++) {
-                if (((int32_t)newStream->width ==
+                if (((int32_t)rotatedWidth ==
                             gCamCapability[mCameraId]->picture_sizes_tbl[i].width) &&
-                        ((int32_t)newStream->height ==
+                        ((int32_t)rotatedHeight ==
                                 gCamCapability[mCameraId]->picture_sizes_tbl[i].height)) {
                     sizeFound = true;
                 break;
@@ -749,8 +739,9 @@ int QCamera3HardwareInterface::validateStreamDimensions(
 
         /* We error out even if a single stream has unsupported size set */
         if (!sizeFound) {
-            ALOGE("%s: Error: Unsupported size of %d x %d requested for stream type:%d",
-                    __func__, newStream->width, newStream->height, newStream->format);
+            ALOGE("%s: Error: Unsupported size of  %d x %d requested for stream"
+                  "type:%d", __func__, rotatedWidth, rotatedHeight,
+                  newStream->format);
             rc = -EINVAL;
             break;
         }
@@ -788,6 +779,90 @@ bool QCamera3HardwareInterface::isSupportChannelNeeded(camera3_stream_configurat
     return true;
 }
 
+/*==============================================================================
+ * FUNCTION   : getSensorOutputSize
+ *
+ * DESCRIPTION: Get sensor output size based on current stream configuratoin
+ *
+ * PARAMETERS :
+ *   @sensor_dim : sensor output dimension (output)
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *
+ *==========================================================================*/
+int32_t QCamera3HardwareInterface::getSensorOutputSize(cam_dimension_t &sensor_dim)
+{
+    int32_t rc = NO_ERROR;
+
+    cam_dimension_t max_dim = {0, 0};
+    for (uint32_t i = 0; i < mStreamConfigInfo.num_streams; i++) {
+        if (mStreamConfigInfo.stream_sizes[i].width > max_dim.width)
+            max_dim.width = mStreamConfigInfo.stream_sizes[i].width;
+        if (mStreamConfigInfo.stream_sizes[i].height > max_dim.height)
+            max_dim.height = mStreamConfigInfo.stream_sizes[i].height;
+    }
+
+    clear_metadata_buffer(mParameters);
+
+    rc = ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_MAX_DIMENSION,
+            max_dim);
+    if (rc != NO_ERROR) {
+        ALOGE("%s:Failed to update table for CAM_INTF_PARM_MAX_DIMENSION", __func__);
+        return rc;
+    }
+
+    rc = mCameraHandle->ops->set_parms(mCameraHandle->camera_handle, mParameters);
+    if (rc != NO_ERROR) {
+        ALOGE("%s: Failed to set CAM_INTF_PARM_MAX_DIMENSION", __func__);
+        return rc;
+    }
+
+    clear_metadata_buffer(mParameters);
+    ADD_GET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_RAW_DIMENSION);
+
+    rc = mCameraHandle->ops->get_parms(mCameraHandle->camera_handle,
+            mParameters);
+    if (rc != NO_ERROR) {
+        ALOGE("%s: Failed to get CAM_INTF_PARM_RAW_DIMENSION", __func__);
+        return rc;
+    }
+
+    READ_PARAM_ENTRY(mParameters, CAM_INTF_PARM_RAW_DIMENSION, sensor_dim);
+    ALOGI("%s: sensor output dimension = %d x %d", __func__, sensor_dim.width, sensor_dim.height);
+
+    return rc;
+}
+
+/*==============================================================================
+ * FUNCTION   : updatePowerHint
+ *
+ * DESCRIPTION: update power hint based on whether it's video mode or not.
+ *
+ * PARAMETERS :
+ *   @bWasVideo : whether video mode before the switch
+ *   @bIsVideo  : whether new mode is video or not.
+ *
+ * RETURN     : NULL
+ *
+ *==========================================================================*/
+void QCamera3HardwareInterface::updatePowerHint(bool bWasVideo, bool bIsVideo)
+{
+#ifdef HAS_MULTIMEDIA_HINTS
+    if (bWasVideo == bIsVideo)
+        return;
+
+    if (m_pPowerModule && m_pPowerModule->powerHint) {
+        if (bIsVideo)
+            m_pPowerModule->powerHint(m_pPowerModule,
+                    POWER_HINT_VIDEO_ENCODE, (void *)"state=1");
+        else
+            m_pPowerModule->powerHint(m_pPowerModule,
+                    POWER_HINT_VIDEO_ENCODE, (void *)"state=0");
+     }
+#endif
+}
 
 /*===========================================================================
  * FUNCTION   : configureStreams
@@ -806,6 +881,7 @@ int QCamera3HardwareInterface::configureStreams(
 {
     ATRACE_CALL();
     int rc = 0;
+    bool bWasVideo = m_bIsVideo;
 
     // Sanity check stream_list
     if (streamList == NULL) {
@@ -923,9 +999,10 @@ int QCamera3HardwareInterface::configureStreams(
     /* stream configurations */
     for (size_t i = 0; i < streamList->num_streams; i++) {
         camera3_stream_t *newStream = streamList->streams[i];
-        ALOGI("%s: stream[%d] type = %d, format = %d, width = %d, height = %d",
+        ALOGI("%s: stream[%d] type = %d, format = %d, width = %d, "
+                "height = %d, rotation = %d",
                 __func__, i, newStream->stream_type, newStream->format,
-                newStream->width, newStream->height);
+                newStream->width, newStream->height, newStream->rotation);
         if (newStream->stream_type == CAMERA3_STREAM_BIDIRECTIONAL &&
                 newStream->format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED){
             isZsl = true;
@@ -1025,6 +1102,9 @@ int QCamera3HardwareInterface::configureStreams(
     }
 
     rc = validateStreamDimensions(streamList);
+    if (rc == NO_ERROR) {
+        rc = validateStreamRotations(streamList);
+    }
     if (rc != NO_ERROR) {
         ALOGE("%s: Invalid stream configuration requested!", __func__);
         pthread_mutex_unlock(&mMutex);
@@ -1035,9 +1115,10 @@ int QCamera3HardwareInterface::configureStreams(
     camera3_stream_t *jpegStream = NULL;
     for (size_t i = 0; i < streamList->num_streams; i++) {
         camera3_stream_t *newStream = streamList->streams[i];
-        CDBG_HIGH("%s: newStream type = %d, stream format = %d stream size : %d x %d",
+        CDBG_HIGH("%s: newStream type = %d, stream format = %d "
+                "stream size : %d x %d, stream rotation = %d",
                 __func__, newStream->stream_type, newStream->format,
-                 newStream->width, newStream->height);
+                newStream->width, newStream->height, newStream->rotation);
         //if the stream is in the mStreamList validate it
         bool stream_exists = false;
         for (List<stream_info_t*>::iterator it=mStreamInfo.begin();
@@ -1175,6 +1256,14 @@ int QCamera3HardwareInterface::configureStreams(
                     mStreamConfigInfo.type[i] = CAM_STREAM_TYPE_PREVIEW;
                  }
                  mStreamConfigInfo.postprocess_mask[i] = CAM_QCOM_FEATURE_PP_SUPERSET_HAL3;
+
+                 if ((newStream->rotation == CAMERA3_STREAM_ROTATION_90) ||
+                         (newStream->rotation == CAMERA3_STREAM_ROTATION_270)) {
+                     mStreamConfigInfo.stream_sizes[i].width =
+                             newStream->height;
+                     mStreamConfigInfo.stream_sizes[i].height =
+                             newStream->width;
+                 }
               }
               break;
            case HAL_PIXEL_FORMAT_YCbCr_420_888:
@@ -1399,6 +1488,9 @@ int QCamera3HardwareInterface::configureStreams(
     mFirstRequest = true;
     //Get min frame duration for this streams configuration
     deriveMinFrameDuration();
+
+    /* Turn on video hint only if video stream is configured */
+    updatePowerHint(bWasVideo, m_bIsVideo);
 
     pthread_mutex_unlock(&mMutex);
     return rc;
@@ -2262,6 +2354,19 @@ int QCamera3HardwareInterface::processCaptureRequest(
          *and disenable parameters to the backend*/
         mCameraHandle->ops->set_parms(mCameraHandle->camera_handle,
                     mParameters);
+
+        cam_dimension_t sensor_dim;
+        memset(&sensor_dim, 0, sizeof(sensor_dim));
+        rc = getSensorOutputSize(sensor_dim);
+        if (rc != NO_ERROR) {
+            ALOGE("%s: Failed to get sensor output size", __func__);
+            pthread_mutex_unlock(&mMutex);
+            return rc;
+        }
+
+        mCropRegionMapper.update(gCamCapability[mCameraId]->active_array_size.width,
+                gCamCapability[mCameraId]->active_array_size.height,
+                sensor_dim.width, sensor_dim.height);
 
         for (size_t i = 0; i < request->num_output_buffers; i++) {
             const camera3_stream_buffer_t& output = request->output_buffers[i];
@@ -3228,6 +3333,12 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         scalerCropRegion[1] = hScalerCropRegion->top;
         scalerCropRegion[2] = hScalerCropRegion->width;
         scalerCropRegion[3] = hScalerCropRegion->height;
+
+        // Adjust crop region from sensor output coordinate system to active
+        // array coordinate system.
+        mCropRegionMapper.toActiveArray(scalerCropRegion[0], scalerCropRegion[1],
+                scalerCropRegion[2], scalerCropRegion[3]);
+
         camMetadata.update(ANDROID_SCALER_CROP_REGION, scalerCropRegion, 4);
     }
 
@@ -6531,6 +6642,11 @@ int QCamera3HardwareInterface::translateToHalMetadata
         scalerCropRegion.top = frame_settings.find(ANDROID_SCALER_CROP_REGION).data.i32[1];
         scalerCropRegion.width = frame_settings.find(ANDROID_SCALER_CROP_REGION).data.i32[2];
         scalerCropRegion.height = frame_settings.find(ANDROID_SCALER_CROP_REGION).data.i32[3];
+
+        // Map coordinate system from active array to sensor output.
+        mCropRegionMapper.toSensor(scalerCropRegion.left, scalerCropRegion.top,
+                scalerCropRegion.width, scalerCropRegion.height);
+
         if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_SCALER_CROP_REGION,
                 scalerCropRegion)) {
             rc = BAD_VALUE;
@@ -6873,6 +6989,14 @@ int QCamera3HardwareInterface::translateToHalMetadata
         ADD_SET_PARAM_ARRAY_TO_BATCH(hal_metadata, CAM_INTF_META_PRIVATE_DATA,
                 privatedata.data.i32, privatedata.count, count);
         if (privatedata.count != count) {
+            rc = BAD_VALUE;
+        }
+    }
+
+    if (frame_settings.exists(QCAMERA3_USE_AV_TIMER)) {
+        uint8_t* use_av_timer =
+                frame_settings.find(QCAMERA3_USE_AV_TIMER).data.u8;
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_USE_AV_TIMER, *use_av_timer)) {
             rc = BAD_VALUE;
         }
     }
@@ -7346,6 +7470,49 @@ void QCamera3HardwareInterface::getLogLevel()
         gCamHal3LogLevel = globalLogLevel;
 
     return;
+}
+
+/*===========================================================================
+ * FUNCTION   : validateStreamRotations
+ *
+ * DESCRIPTION: Check if the rotations requested are supported
+ *
+ * PARAMETERS :
+ *   @stream_list : streams to be configured
+ *
+ * RETURN     : NO_ERROR on success
+ *              -EINVAL on failure
+ *
+ *==========================================================================*/
+int QCamera3HardwareInterface::validateStreamRotations(
+        camera3_stream_configuration_t *streamList)
+{
+    int rc = NO_ERROR;
+
+    /*
+    * Loop through all streams requested in configuration
+    * Check if unsupported rotations have been requested on any of them
+    */
+    for (size_t j = 0; j < streamList->num_streams; j++){
+        camera3_stream_t *newStream = streamList->streams[j];
+
+        bool isRotated = (newStream->rotation != CAMERA3_STREAM_ROTATION_0);
+        bool isImplDef = (newStream->format ==
+                HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED);
+        bool isZsl = (newStream->stream_type == CAMERA3_STREAM_BIDIRECTIONAL &&
+                isImplDef);
+
+        if (isRotated && (!isImplDef || isZsl)) {
+            ALOGE("%s: Error: Unsupported rotation of %d requested for stream"
+                    "type:%d and stream format:%d", __func__,
+                    newStream->rotation, newStream->stream_type,
+                    newStream->format);
+            rc = -EINVAL;
+            break;
+        }
+    }
+
+    return rc;
 }
 
 }; //end namespace qcamera
