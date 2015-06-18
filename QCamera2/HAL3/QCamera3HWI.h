@@ -224,7 +224,8 @@ private:
     void extractJpegMetadata(CameraMetadata& jpegMetadata,
             const camera3_capture_request_t *request);
 
-    bool isSupportChannelNeeded(camera3_stream_configuration_t *streamList);
+    bool isSupportChannelNeeded(camera3_stream_configuration_t *streamList,
+            cam_stream_size_info_t stream_config_info);
     int32_t setMobicat();
 
     void updatePowerHint(bool bWasVideo, bool bIsVideo);
@@ -238,7 +239,6 @@ private:
     camera_metadata_t *mDefaultMetadata[CAMERA3_TEMPLATE_COUNT];
     const camera3_callback_ops_t *mCallbackOps;
 
-    camera3_stream_t *mInputStream;
     QCamera3MetadataChannel *mMetadataChannel;
     QCamera3PicChannel *mPictureChannel;
     QCamera3RawChannel *mRawChannel;
