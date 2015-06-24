@@ -110,6 +110,8 @@
 #define QCAMERA_MAX_FILEPATH_LENGTH 64
 
 #define CAM_INTF_AEC_DATA_MAX   (10)
+#define LIKELY(x)       __builtin_expect((x), true)
+#define UNLIKELY(x)     __builtin_expect((x), false)
 
 #define MAX_REPROCESS_STALL 2
 
