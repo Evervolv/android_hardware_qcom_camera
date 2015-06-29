@@ -1488,7 +1488,6 @@ typedef enum {
     CAM_INTF_META_FACE_DETECTION,
     /* Whether optical image stabilization is enabled. */
     CAM_INTF_META_LENS_OPT_STAB_MODE,
-
     /* specific to HAl1 */
     CAM_INTF_META_AUTOFOCUS_DATA,
     CAM_INTF_PARM_QUERY_FLASH4SNAP,
@@ -1772,6 +1771,9 @@ typedef enum {
     CAM_INTF_META_BLACK_LEVEL_SOURCE_PATTERN,
     CAM_INTF_META_BLACK_LEVEL_APPLIED_PATTERN,
     CAM_INTF_META_CDS_DATA,
+
+    /* Whether EIS is enabled */
+    CAM_INTF_META_VIDEO_STAB_MODE,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 

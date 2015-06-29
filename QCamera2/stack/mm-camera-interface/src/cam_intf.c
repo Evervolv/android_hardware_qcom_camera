@@ -133,6 +133,8 @@ void *get_pointer_of(cam_intf_parm_type_t meta_id,
             return POINTER_OF_META(CAM_INTF_META_LENS_STATE, metadata);
         case CAM_INTF_META_LENS_OPT_STAB_MODE:
             return POINTER_OF_META(CAM_INTF_META_LENS_OPT_STAB_MODE, metadata);
+        case CAM_INTF_META_VIDEO_STAB_MODE:
+            return POINTER_OF_META(CAM_INTF_META_VIDEO_STAB_MODE, metadata);
         case CAM_INTF_META_NOISE_REDUCTION_MODE:
             return POINTER_OF_META(CAM_INTF_META_NOISE_REDUCTION_MODE, metadata);
         case CAM_INTF_META_NOISE_REDUCTION_STRENGTH:
@@ -480,6 +482,8 @@ uint32_t get_size_of(cam_intf_parm_type_t param_id)
             return SIZE_OF_PARAM(CAM_INTF_META_LENS_STATE, metadata);
         case CAM_INTF_META_LENS_OPT_STAB_MODE:
             return SIZE_OF_PARAM(CAM_INTF_META_LENS_OPT_STAB_MODE, metadata);
+        case CAM_INTF_META_VIDEO_STAB_MODE:
+            return SIZE_OF_PARAM(CAM_INTF_META_VIDEO_STAB_MODE, metadata);
         case CAM_INTF_META_NOISE_REDUCTION_MODE:
             return SIZE_OF_PARAM(CAM_INTF_META_NOISE_REDUCTION_MODE, metadata);
         case CAM_INTF_META_NOISE_REDUCTION_STRENGTH:
