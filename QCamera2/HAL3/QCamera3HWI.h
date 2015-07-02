@@ -235,7 +235,6 @@ private:
             metadata_buffer_t *hal_metadata);
     int32_t extractSceneMode(const CameraMetadata &frame_settings, uint8_t metaMode,
             metadata_buffer_t *hal_metadata);
-    int32_t setBatchMetaStreamID(cam_stream_ID_t &streamID);
 
     void updatePowerHint(bool bWasVideo, bool bIsVideo);
     int32_t getSensorOutputSize(cam_dimension_t &sensor_dim);
