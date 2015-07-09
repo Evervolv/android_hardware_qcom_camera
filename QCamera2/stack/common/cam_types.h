@@ -115,6 +115,8 @@
 
 #define MAX_REPROCESS_STALL 2
 
+#define QCAMERA_MAX_FILEPATH_LENGTH 64
+
 typedef enum {
     CAM_HAL_V1 = 1,
     CAM_HAL_V3 = 3
@@ -721,6 +723,12 @@ typedef enum {
     CAM_BLACK_LEVEL_LOCK_OFF,
     CAM_BLACK_LEVEL_LOCK_ON,
 } cam_black_level_lock_t;
+
+typedef enum {
+    CAM_HOTPIXEL_MODE_OFF,
+    CAM_HOTPIXEL_MODE_FAST,
+    CAM_HOTPIXEL_MODE_HIGH_QUALITY,
+} cam_hotpixel_mode_t;
 
 typedef enum {
     CAM_LENS_SHADING_MAP_MODE_OFF,
