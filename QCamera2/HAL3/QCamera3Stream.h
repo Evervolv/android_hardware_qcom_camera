@@ -155,6 +155,7 @@ private:
             int32_t index);
     int32_t aggregateBufToBatch(mm_camera_buf_def_t& bufDef);
     int32_t handleBatchBuffer(mm_camera_super_buf_t *superBuf);
+    void flushFreeBatchBufQ();
 };
 
 }; // namespace qcamera

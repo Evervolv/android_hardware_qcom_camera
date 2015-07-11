@@ -460,10 +460,9 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
 
     mPendingBuffersMap.mPendingBufferList.clear();
     mPendingReprocessResultList.clear();
-    for (List<PendingRequestInfo>::iterator i = mPendingRequestsList.begin();
-                i != mPendingRequestsList.end(); i++) {
-        clearInputBuffer(i->input_buffer);
-        i = mPendingRequestsList.erase(i);
+    for (pendingRequestIterator i = mPendingRequestsList.begin();
+            i != mPendingRequestsList.end(); i++) {
+        i = erasePendingRequest(i);
     }
     for (size_t i = 0; i < CAMERA3_TEMPLATE_COUNT; i++)
         if (mDefaultMetadata[i])
@@ -473,6 +472,27 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
 
     pthread_mutex_destroy(&mMutex);
     CDBG("%s: X", __func__);
+}
+
+/*===========================================================================
+ * FUNCTION   : erasePendingRequest
+ *
+ * DESCRIPTION: function to erase a desired pending request after freeing any
+ *              allocated memory
+ *
+ * PARAMETERS :
+ *   @i       : iterator pointing to pending request to be erased
+ *
+ * RETURN     : iterator pointing to the next request
+ *==========================================================================*/
+QCamera3HardwareInterface::pendingRequestIterator
+        QCamera3HardwareInterface::erasePendingRequest (pendingRequestIterator i)
+{
+    if (i->input_buffer != NULL) {
+        free(i->input_buffer);
+        i->input_buffer = NULL;
+    }
+    return mPendingRequestsList.erase(i);
 }
 
 /*===========================================================================
@@ -732,6 +752,13 @@ int QCamera3HardwareInterface::validateStreamDimensions(
             }
             break;
         case HAL_PIXEL_FORMAT_BLOB:
+            if (((int32_t)rotatedWidth ==
+                    gCamCapability[mCameraId]->active_array_size.width) &&
+                    ((int32_t)rotatedHeight ==
+                    gCamCapability[mCameraId]->active_array_size.height)) {
+                sizeFound = true;
+                break;
+            }
             count = MIN(gCamCapability[mCameraId]->picture_sizes_tbl_cnt, MAX_SIZES_CNT);
             /* Generate JPEG sizes table */
             makeTable(gCamCapability[mCameraId]->picture_sizes_tbl,
@@ -755,37 +782,23 @@ int QCamera3HardwareInterface::validateStreamDimensions(
                 }
             }
             break;
-
-
         case HAL_PIXEL_FORMAT_YCbCr_420_888:
         case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
         default:
-            /* ZSL stream will be full active array size validate that*/
-            if (newStream->stream_type == CAMERA3_STREAM_BIDIRECTIONAL
-                || newStream->stream_type == CAMERA3_STREAM_INPUT
-                || newStream->usage & GRALLOC_USAGE_HW_CAMERA_ZSL) {
-                if (((int32_t)rotatedWidth ==
+            if (((int32_t)rotatedWidth ==
                             gCamCapability[mCameraId]->active_array_size.width) &&
-                        ((int32_t)rotatedHeight ==
-                                gCamCapability[mCameraId]->active_array_size.height)) {
-                    sizeFound = true;
-                }
-                /* We could potentially break here to enforce ZSL stream
-                 * set from frameworks always has full active array size
-                 * but it is not clear from spec if framework will always
-                 * follow that, also we have logic to override to full array
-                 * size, so keeping this logic lenient at the moment.
-                 */
+                            ((int32_t)rotatedHeight ==
+                            gCamCapability[mCameraId]->active_array_size.height)) {
+                sizeFound = true;
+                break;
             }
-
-            /* Non ZSL stream still need to conform to advertised sizes*/
             count = MIN(gCamCapability[mCameraId]->picture_sizes_tbl_cnt,
                     MAX_SIZES_CNT);
             for (size_t i = 0; i < count; i++) {
                 if (((int32_t)rotatedWidth ==
                             gCamCapability[mCameraId]->picture_sizes_tbl[i].width) &&
-                        ((int32_t)rotatedHeight ==
-                                gCamCapability[mCameraId]->picture_sizes_tbl[i].height)) {
+                            ((int32_t)rotatedHeight ==
+                            gCamCapability[mCameraId]->picture_sizes_tbl[i].height)) {
                     sizeFound = true;
                 break;
                 }
@@ -1637,10 +1650,9 @@ int QCamera3HardwareInterface::configureStreams(
     mStreamConfigInfo.buffer_info.max_buffers = MAX_INFLIGHT_REQUESTS;
 
     /* Initialize mPendingRequestInfo and mPendnigBuffersMap */
-    for (List<PendingRequestInfo>::iterator i = mPendingRequestsList.begin();
-                i != mPendingRequestsList.end(); i++) {
-        clearInputBuffer(i->input_buffer);
-        i = mPendingRequestsList.erase(i);
+    for (pendingRequestIterator i = mPendingRequestsList.begin();
+            i != mPendingRequestsList.end(); i++) {
+        i = erasePendingRequest(i);
     }
     mPendingFrameDropList.clear();
     // Initialize/Reset the pending buffers list
@@ -1888,8 +1900,8 @@ int32_t QCamera3HardwareInterface::handlePendingReprocResults(uint32_t frame_num
             CDBG("%s: Delayed reprocess notify %d", __func__,
                     frame_number);
 
-            for (List<PendingRequestInfo>::iterator k = mPendingRequestsList.begin();
-                k != mPendingRequestsList.end(); k++) {
+            for (pendingRequestIterator k = mPendingRequestsList.begin();
+                    k != mPendingRequestsList.end(); k++) {
 
                 if (k->frame_number == j->frame_number) {
                     CDBG("%s: Found reprocess frame number %d in pending reprocess List "
@@ -1906,8 +1918,7 @@ int32_t QCamera3HardwareInterface::handlePendingReprocResults(uint32_t frame_num
                     result.partial_result = PARTIAL_RESULT_COUNT;
                     mCallbackOps->process_capture_result(mCallbackOps, &result);
 
-                    clearInputBuffer(k->input_buffer);
-                    mPendingRequestsList.erase(k);
+                    k = erasePendingRequest(k);
                     mPendingRequest--;
                     break;
                 }
@@ -2086,8 +2097,8 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
 
         //Recieved an urgent Frame Number, handle it
         //using partial results
-        for (List<PendingRequestInfo>::iterator i =
-            mPendingRequestsList.begin(); i != mPendingRequestsList.end(); i++) {
+        for (pendingRequestIterator i =
+                mPendingRequestsList.begin(); i != mPendingRequestsList.end(); i++) {
             CDBG("%s: Iterator Frame = %d urgent frame = %d",
                 __func__, i->frame_number, urgent_frame_number);
 
@@ -2134,8 +2145,8 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
     CDBG("%s: valid frame_number = %u, capture_time = %lld", __func__,
             frame_number, capture_time);
 
-    for (List<PendingRequestInfo>::iterator i = mPendingRequestsList.begin();
-        i != mPendingRequestsList.end() && i->frame_number <= frame_number;) {
+    for (pendingRequestIterator i = mPendingRequestsList.begin();
+            i != mPendingRequestsList.end() && i->frame_number <= frame_number;) {
         camera3_capture_result_t result;
         memset(&result, 0, sizeof(camera3_capture_result_t));
 
@@ -2318,8 +2329,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
             free_camera_metadata((camera_metadata_t *)result.result);
         }
         // erase the element from the list
-        clearInputBuffer(i->input_buffer);
-        i = mPendingRequestsList.erase(i);
+        i = erasePendingRequest(i);
 
         if (!mPendingReprocessResultList.empty()) {
             handlePendingReprocResults(frame_number + 1);
@@ -2327,8 +2337,8 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
     }
 
 done_metadata:
-    for (List<PendingRequestInfo>::iterator i = mPendingRequestsList.begin();
-        i != mPendingRequestsList.end() ;i++) {
+    for (pendingRequestIterator i = mPendingRequestsList.begin();
+            i != mPendingRequestsList.end() ;i++) {
         i->pipeline_depth++;
     }
     unblockRequestIfNecessary();
@@ -2353,13 +2363,13 @@ void QCamera3HardwareInterface::handleBufferWithLock(
     // If the frame number doesn't exist in the pending request list,
     // directly send the buffer to the frameworks, and update pending buffers map
     // Otherwise, book-keep the buffer.
-    List<PendingRequestInfo>::iterator i = mPendingRequestsList.begin();
+    pendingRequestIterator i = mPendingRequestsList.begin();
     while (i != mPendingRequestsList.end() && i->frame_number != frame_number){
         i++;
     }
     if (i == mPendingRequestsList.end()) {
         // Verify all pending requests frame_numbers are greater
-        for (List<PendingRequestInfo>::iterator j = mPendingRequestsList.begin();
+        for (pendingRequestIterator j = mPendingRequestsList.begin();
                 j != mPendingRequestsList.end(); j++) {
             if (j->frame_number < frame_number) {
                 ALOGE("%s: Error: pending frame number %d is smaller than %d",
@@ -2450,7 +2460,7 @@ void QCamera3HardwareInterface::handleBufferWithLock(
                 __func__, mPendingBuffersMap.num_buffers);
 
             bool notifyNow = true;
-            for (List<PendingRequestInfo>::iterator j = mPendingRequestsList.begin();
+            for (pendingRequestIterator j = mPendingRequestsList.begin();
                     j != mPendingRequestsList.end(); j++) {
                 if (j->frame_number < frame_number) {
                     notifyNow = false;
@@ -2471,8 +2481,7 @@ void QCamera3HardwareInterface::handleBufferWithLock(
                 mCallbackOps->notify(mCallbackOps, &notify_msg);
                 mCallbackOps->process_capture_result(mCallbackOps, &result);
                 CDBG("%s: Notify reprocess now %d!", __func__, frame_number);
-                clearInputBuffer(i->input_buffer);
-                i = mPendingRequestsList.erase(i);
+                i = erasePendingRequest(i);
                 mPendingRequest--;
             } else {
                 // Cache reprocess result for later
@@ -2932,7 +2941,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
     if (request->input_buffer) {
         pendingRequest.input_buffer =
                 (camera3_stream_buffer_t*)malloc(sizeof(camera3_stream_buffer_t));
-        memcpy(pendingRequest.input_buffer, request->input_buffer, sizeof(camera3_stream_buffer_t));
+        *(pendingRequest.input_buffer) = *(request->input_buffer);
         pInputBuffer = pendingRequest.input_buffer;
     } else {
        pendingRequest.input_buffer = NULL;
@@ -3028,7 +3037,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
         } else if (output.stream->format == HAL_PIXEL_FORMAT_YCbCr_420_888) {
             rc = channel->request(output.buffer, frameNumber,
                     pInputBuffer,
-                    pInputBuffer? &mReprocMeta : mParameters);
+                    (pInputBuffer ? &mReprocMeta : mParameters));
             if (rc < 0) {
                 ALOGE("%s: Fail to request on YUV channel", __func__);
                 pthread_mutex_unlock(&mMutex);
@@ -3142,8 +3151,8 @@ void QCamera3HardwareInterface::dump(int fd)
     dprintf(fd, "-------+-------------------+-------------+----------+---------------------\n");
     dprintf(fd, " Frame | Number of Buffers |   Req Id:   | Blob Req | Input buffer present\n");
     dprintf(fd, "-------+-------------------+-------------+----------+---------------------\n");
-    for(List<PendingRequestInfo>::iterator i = mPendingRequestsList.begin();
-        i != mPendingRequestsList.end(); i++) {
+    for(pendingRequestIterator i = mPendingRequestsList.begin();
+            i != mPendingRequestsList.end(); i++) {
         dprintf(fd, " %5d | %17d | %11d | %8d | %p \n",
         i->frame_number, i->num_buffers, i->request_id, i->blob_request,
         i->input_buffer);
@@ -3236,7 +3245,7 @@ int QCamera3HardwareInterface::flush()
     mPendingRequest = 0;
     pthread_cond_signal(&mRequestCond);
 
-    List<PendingRequestInfo>::iterator i = mPendingRequestsList.begin();
+    pendingRequestIterator i = mPendingRequestsList.begin();
     frameNum = i->frame_number;
     CDBG("%s: Oldest frame num on  mPendingRequestsList = %d",
       __func__, frameNum);
@@ -3373,10 +3382,9 @@ int QCamera3HardwareInterface::flush()
     }
 
     /* Reset pending buffer list and requests list */
-    for (List<PendingRequestInfo>::iterator i = mPendingRequestsList.begin();
-                i != mPendingRequestsList.end(); i++) {
-        clearInputBuffer(i->input_buffer);
-        i = mPendingRequestsList.erase(i);
+    for (pendingRequestIterator i = mPendingRequestsList.begin();
+            i != mPendingRequestsList.end(); i++) {
+        i = erasePendingRequest(i);
     }
     /* Reset pending frame Drop list and requests list */
     mPendingFrameDropList.clear();
@@ -3553,24 +3561,6 @@ template <class mapType> cam_cds_mode_type_t lookupProp(const mapType *arr,
         }
     }
     return CAM_CDS_MODE_MAX;
-}
-
-/*===========================================================================
- * FUNCTION   : clearInputBuffer
- *
- * DESCRIPTION: free the input buffer
- *
- * PARAMETERS :
- *   @input_buffer : ptr to input buffer data to be freed
- *
- * RETURN     : NONE
- *==========================================================================*/
-void QCamera3HardwareInterface::clearInputBuffer(camera3_stream_buffer_t *input_buffer)
-{
-    if (input_buffer) {
-        free(input_buffer);
-        input_buffer = NULL;
-    }
 }
 
 /*===========================================================================
@@ -5066,6 +5056,28 @@ cam_dimension_t QCamera3HardwareInterface::calcMaxJpegDim()
     return max_jpeg_dim;
 }
 
+/*===========================================================================
+ * FUNCTION   : addStreamConfig
+ *
+ * DESCRIPTION: adds the stream configuration to the array
+ *
+ * PARAMETERS :
+ * @available_stream_configs : pointer to stream configuration array
+ * @scalar_format            : scalar format
+ * @dim                      : configuration dimension
+ * @config_type              : input or output configuration type
+ *
+ * RETURN     : NONE
+ *==========================================================================*/
+void QCamera3HardwareInterface::addStreamConfig(Vector<int32_t> &available_stream_configs,
+        int32_t scalar_format, const cam_dimension_t &dim, int32_t config_type)
+{
+    available_stream_configs.add(scalar_format);
+    available_stream_configs.add(dim.width);
+    available_stream_configs.add(dim.height);
+    available_stream_configs.add(config_type);
+}
+
 
 /*===========================================================================
  * FUNCTION   : initStaticMetadata
@@ -5281,50 +5293,49 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
             gCamCapability[cameraId]->max_downscale_factor);
     /*android.scaler.availableStreamConfigurations*/
     size_t max_stream_configs_size = count * scalar_formats_count * 4;
-    int32_t available_stream_configs[max_stream_configs_size];
+    Vector<int32_t> available_stream_configs;
+    cam_dimension_t active_array_dim;
+    active_array_dim.width = gCamCapability[cameraId]->active_array_size.width;
+    active_array_dim.height = gCamCapability[cameraId]->active_array_size.height;
     /* Add input/output stream configurations for each scalar formats*/
-    size_t idx = 0;
     for (size_t j = 0; j < scalar_formats_count; j++) {
         switch (scalar_formats[j]) {
         case ANDROID_SCALER_AVAILABLE_FORMATS_RAW16:
         case ANDROID_SCALER_AVAILABLE_FORMATS_RAW_OPAQUE:
         case HAL_PIXEL_FORMAT_RAW10:
             for (size_t i = 0; i < gCamCapability[cameraId]->supported_raw_dim_cnt; i++) {
-                available_stream_configs[idx] = scalar_formats[j];
-                available_stream_configs[idx+1] =
-                    gCamCapability[cameraId]->raw_dim[i].width;
-                available_stream_configs[idx+2] =
-                    gCamCapability[cameraId]->raw_dim[i].height;
-                available_stream_configs[idx+3] =
-                    ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT;
-                idx+=4;
+                addStreamConfig(available_stream_configs, scalar_formats[j],
+                        gCamCapability[cameraId]->raw_dim[i],
+                        ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT);
             }
             break;
         case HAL_PIXEL_FORMAT_BLOB:
+            //add the active array size
+            addStreamConfig(available_stream_configs, scalar_formats[j],
+                  active_array_dim,
+                  ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT);
+            cam_dimension_t jpeg_size;
             for (size_t i = 0; i < jpeg_sizes_cnt/2; i++) {
-                available_stream_configs[idx] = scalar_formats[j];
-                available_stream_configs[idx+1] = available_jpeg_sizes[i*2];
-                available_stream_configs[idx+2] = available_jpeg_sizes[i*2+1];
-                available_stream_configs[idx+3] = ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT;
-                idx+=4;
+                jpeg_size.width  = available_jpeg_sizes[i*2];
+                jpeg_size.height = available_jpeg_sizes[i*2+1];
+                addStreamConfig(available_stream_configs, scalar_formats[j],
+                        jpeg_size,
+                        ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT);
             }
             break;
-
-        case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
         case HAL_PIXEL_FORMAT_YCbCr_420_888:
+        case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
         default:
             cam_dimension_t largest_picture_size;
             memset(&largest_picture_size, 0, sizeof(cam_dimension_t));
+            //add the active array size
+            addStreamConfig(available_stream_configs, scalar_formats[j],
+                    active_array_dim,
+                    ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT);
             for (size_t i = 0; i < gCamCapability[cameraId]->picture_sizes_tbl_cnt; i++) {
-                available_stream_configs[idx] = scalar_formats[j];
-                available_stream_configs[idx+1] =
-                    gCamCapability[cameraId]->picture_sizes_tbl[i].width;
-                available_stream_configs[idx+2] =
-                    gCamCapability[cameraId]->picture_sizes_tbl[i].height;
-                available_stream_configs[idx+3] =
-                    ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT;
-                idx+=4;
-
+                addStreamConfig(available_stream_configs, scalar_formats[j],
+                        gCamCapability[cameraId]->picture_sizes_tbl[i],
+                        ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT);
                 /* Book keep largest */
                 if (gCamCapability[cameraId]->picture_sizes_tbl[i].width
                         >= largest_picture_size.width &&
@@ -5332,22 +5343,23 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
                         >= largest_picture_size.height)
                     largest_picture_size = gCamCapability[cameraId]->picture_sizes_tbl[i];
             }
-
             /*For below 2 formats we also support i/p streams for reprocessing advertise those*/
             if (scalar_formats[j] == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED ||
                     scalar_formats[j] == HAL_PIXEL_FORMAT_YCbCr_420_888) {
-                available_stream_configs[idx] = scalar_formats[j];
-                available_stream_configs[idx+1] = largest_picture_size.width;
-                available_stream_configs[idx+2] = largest_picture_size.height;
-                available_stream_configs[idx+3] = ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_INPUT;
-                idx+=4;
+                //add the active array size
+                 addStreamConfig(available_stream_configs, scalar_formats[j],
+                         active_array_dim,
+                         ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_INPUT);
+                 addStreamConfig(available_stream_configs, scalar_formats[j],
+                         largest_picture_size,
+                         ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_INPUT);
             }
             break;
         }
     }
 
     staticInfo.update(ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS,
-                      available_stream_configs, idx);
+                      available_stream_configs.array(), available_stream_configs.size());
     static const uint8_t hotpixelMode = ANDROID_HOT_PIXEL_MODE_FAST;
     staticInfo.update(ANDROID_HOT_PIXEL_MODE, &hotpixelMode, 1);
 
@@ -5356,7 +5368,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
 
     /* android.scaler.availableMinFrameDurations */
     int64_t available_min_durations[max_stream_configs_size];
-    idx = 0;
+    size_t idx = 0;
     for (size_t j = 0; j < scalar_formats_count; j++) {
         switch (scalar_formats[j]) {
         case ANDROID_SCALER_AVAILABLE_FORMATS_RAW16:
@@ -5454,7 +5466,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     //Advertise HFR capability only if the property is set
     char prop[PROPERTY_VALUE_MAX];
     memset(prop, 0, sizeof(prop));
-    property_get("persist.camera.hal3hfr.enable", prop, "0");
+    property_get("persist.camera.hal3hfr.enable", prop, "1");
     uint8_t hfrEnable = (uint8_t)atoi(prop);
 
     if(hfrEnable && available_hfr_configs.array()) {

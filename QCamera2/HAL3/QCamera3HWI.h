@@ -208,6 +208,9 @@ private:
     int closeCamera();
     static size_t calcMaxJpegSize(uint32_t camera_id);
     cam_dimension_t getMaxRawSize(uint32_t camera_id);
+    static void addStreamConfig(Vector<int32_t> &available_stream_configs,
+            int32_t scalar_format, const cam_dimension_t &dim,
+            int32_t config_type);
 
     int validateCaptureRequest(camera3_capture_request_t *request);
     int validateStreamDimensions(camera3_stream_configuration_t *streamList);
@@ -241,7 +244,6 @@ private:
 
     void updatePowerHint(bool bWasVideo, bool bIsVideo);
     int32_t getSensorOutputSize(cam_dimension_t &sensor_dim);
-    void clearInputBuffer(camera3_stream_buffer_t *input_buffer);
 
     camera3_device_t   mCameraDevice;
     uint32_t           mCameraId;
@@ -323,6 +325,8 @@ private:
     } PendingReprocessResult;
 
     typedef KeyedVector<uint32_t, Vector<PendingBufferInfo> > FlushMap;
+    typedef List<QCamera3HardwareInterface::PendingRequestInfo>::iterator
+            pendingRequestIterator;
 
     List<PendingReprocessResult> mPendingReprocessResultList;
     List<PendingRequestInfo> mPendingRequestsList;
@@ -392,6 +396,8 @@ private:
             cam_hfr_mode_t> HFR_MODE_MAP[];
 
     static const QCameraPropMap CDS_MAP[];
+
+    pendingRequestIterator erasePendingRequest(pendingRequestIterator i);
 };
 
 }; // namespace qcamera
