@@ -3762,6 +3762,21 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         camMetadata.update(ANDROID_REPROCESS_EFFECTIVE_EXPOSURE_FACTOR, effectiveExposureFactor, 1);
     }
 
+    IF_META_AVAILABLE(cam_black_level_metadata_t, blackLevelInd, CAM_INTF_META_BLACK_LEVEL_IND, metadata) {
+        int32_t fwk_blackLevelInd[4];
+        fwk_blackLevelInd[0] = blackLevelInd->cam_black_level[0];
+        fwk_blackLevelInd[1] = blackLevelInd->cam_black_level[1];
+        fwk_blackLevelInd[2] = blackLevelInd->cam_black_level[2];
+        fwk_blackLevelInd[3] = blackLevelInd->cam_black_level[3];
+
+        ALOGE("%s: dynamicblackLevel = %d %d %d %d", __func__,
+          blackLevelInd->cam_black_level[0],
+          blackLevelInd->cam_black_level[1],
+          blackLevelInd->cam_black_level[2],
+          blackLevelInd->cam_black_level[3]);
+        camMetadata.update(QCAMERA3_SENSOR_DYNAMIC_BLACK_LEVEL_PATTERN, fwk_blackLevelInd, 4);
+    }
+
     IF_META_AVAILABLE(cam_crop_region_t, hScalerCropRegion,
             CAM_INTF_META_SCALER_CROP_REGION, metadata) {
         int32_t scalerCropRegion[4];

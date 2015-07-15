@@ -1722,6 +1722,9 @@ typedef enum {
     CAM_INTF_META_USE_AV_TIMER,
 
     CAM_INTF_META_EFFECTIVE_EXPOSURE_FACTOR,
+
+    /*Black level parameters*/
+    CAM_INTF_META_BLACK_LEVEL_IND,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
@@ -1736,6 +1739,10 @@ typedef struct {
       float    force_snap_gain_value;
     } u;
 } cam_ez_force_params_t;
+
+typedef struct {
+    uint32_t cam_black_level[4];
+} cam_black_level_metadata_t;
 
 typedef enum {
     CAM_EZTUNE_CMD_STATUS,
