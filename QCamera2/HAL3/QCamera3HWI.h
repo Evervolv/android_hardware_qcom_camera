@@ -244,6 +244,10 @@ private:
 
     void updatePowerHint(bool bWasVideo, bool bIsVideo);
     int32_t getSensorOutputSize(cam_dimension_t &sensor_dim);
+    int32_t dynamicUpdateMetaStreamInfo();
+    int32_t startAllChannels();
+    int32_t stopAllChannels();
+    int32_t notifyErrorForPendingRequests();
 
     camera3_device_t   mCameraDevice;
     uint32_t           mCameraId;
@@ -259,6 +263,7 @@ private:
     QCamera3SupportChannel *mSupportChannel;
     QCamera3SupportChannel *mAnalysisChannel;
     QCamera3RawDumpChannel *mRawDumpChannel;
+    QCamera3RegularChannel *mDummyBatchChannel;
 
     void saveExifParams(metadata_buffer_t *metadata);
     mm_jpeg_exif_params_t mExifParams;
@@ -360,8 +365,11 @@ private:
     uint8_t mToBeQueuedVidBufs;
     // Fixed video fps
     float mHFRVideoFps;
-    cam_stream_ID_t mBatchStreamID;
     uint8_t mOpMode;
+    uint32_t mPrevUrgentFrameNumber;
+    uint32_t mPrevFrameNumber;
+    camera3_stream_t mDummyBatchStream;
+    bool mNeedSensorRestart;
 
     /* sensor output size with current stream configuration */
     QCamera3CropRegionMapper mCropRegionMapper;
