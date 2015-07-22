@@ -7027,7 +7027,6 @@ int QCamera3HardwareInterface::translateToHalMetadata
                 fwk_aeMode);
         if (NAME_NOT_FOUND != val) {
             int32_t flashMode = (int32_t)val;
-            ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_LED_MODE, flashMode);
             ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_LED_MODE, flashMode);
         }
 
@@ -7043,7 +7042,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
                 fwk_whiteLevel);
         if (NAME_NOT_FOUND != val) {
             uint8_t whiteLevel = (uint8_t)val;
-            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_WHITE_BALANCE, whiteLevel)) {
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_WHITE_BALANCE, whiteLevel)) {
                 rc = BAD_VALUE;
             }
         }
@@ -7071,7 +7070,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
                 fwk_focusMode);
         if (NAME_NOT_FOUND != val) {
             uint8_t focusMode = (uint8_t)val;
-            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_FOCUS_MODE, focusMode)) {
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_FOCUS_MODE, focusMode)) {
                 rc = BAD_VALUE;
             }
         }
@@ -7079,7 +7078,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     if (frame_settings.exists(ANDROID_LENS_FOCUS_DISTANCE)) {
         float focalDistance = frame_settings.find(ANDROID_LENS_FOCUS_DISTANCE).data.f[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_LENS_FOCUS_DISTANCE,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_LENS_FOCUS_DISTANCE,
                 focalDistance)) {
             rc = BAD_VALUE;
         }
@@ -7092,7 +7091,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
                 METADATA_MAP_SIZE(ANTIBANDING_MODES_MAP), fwk_antibandingMode);
         if (NAME_NOT_FOUND != val) {
             uint32_t hal_antibandingMode = (uint32_t)val;
-            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_ANTIBANDING,
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_ANTIBANDING,
                     hal_antibandingMode)) {
                 rc = BAD_VALUE;
             }
@@ -7127,7 +7126,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     if (frame_settings.exists(ANDROID_CONTROL_AWB_LOCK)) {
         uint8_t awbLock = frame_settings.find(ANDROID_CONTROL_AWB_LOCK).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_AWB_LOCK, awbLock)) {
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_AWB_LOCK, awbLock)) {
             rc = BAD_VALUE;
         }
     }
@@ -7138,7 +7137,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
                 fwk_effectMode);
         if (NAME_NOT_FOUND != val) {
             uint8_t effectMode = (uint8_t)val;
-            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_EFFECT, effectMode)) {
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_EFFECT, effectMode)) {
                 rc = BAD_VALUE;
             }
         }
@@ -7146,7 +7145,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     if (frame_settings.exists(ANDROID_COLOR_CORRECTION_MODE)) {
         uint8_t colorCorrectMode = frame_settings.find(ANDROID_COLOR_CORRECTION_MODE).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_COLOR_CORRECT_MODE,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_COLOR_CORRECT_MODE,
                 colorCorrectMode)) {
             rc = BAD_VALUE;
         }
@@ -7158,7 +7157,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
             colorCorrectGains.gains[i] =
                     frame_settings.find(ANDROID_COLOR_CORRECTION_GAINS).data.f[i];
         }
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_COLOR_CORRECT_GAINS,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_COLOR_CORRECT_GAINS,
                 colorCorrectGains)) {
             rc = BAD_VALUE;
         }
@@ -7218,7 +7217,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     if (frame_settings.exists(ANDROID_DEMOSAIC_MODE)) {
         int32_t demosaic = frame_settings.find(ANDROID_DEMOSAIC_MODE).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_DEMOSAIC, demosaic)) {
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_DEMOSAIC, demosaic)) {
             rc = BAD_VALUE;
         }
     }
@@ -7259,7 +7258,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
             // To check: CAM_INTF_META_FLASH_MODE usage
             if (NAME_NOT_FOUND != val) {
                 uint8_t flashMode = (uint8_t)val;
-                if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_LED_MODE, flashMode)) {
+                if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_LED_MODE, flashMode)) {
                     rc = BAD_VALUE;
                 }
             }
@@ -7268,7 +7267,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     if (frame_settings.exists(ANDROID_FLASH_FIRING_POWER)) {
         uint8_t flashPower = frame_settings.find(ANDROID_FLASH_FIRING_POWER).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_FLASH_POWER, flashPower)) {
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_FLASH_POWER, flashPower)) {
             rc = BAD_VALUE;
         }
     }
@@ -7291,7 +7290,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     if (frame_settings.exists(ANDROID_LENS_APERTURE)) {
         float lensAperture = frame_settings.find( ANDROID_LENS_APERTURE).data.f[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_LENS_APERTURE,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_LENS_APERTURE,
                 lensAperture)) {
             rc = BAD_VALUE;
         }
@@ -7299,7 +7298,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     if (frame_settings.exists(ANDROID_LENS_FILTER_DENSITY)) {
         float filterDensity = frame_settings.find(ANDROID_LENS_FILTER_DENSITY).data.f[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_LENS_FILTERDENSITY,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_LENS_FILTERDENSITY,
                 filterDensity)) {
             rc = BAD_VALUE;
         }
@@ -7307,7 +7306,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     if (frame_settings.exists(ANDROID_LENS_FOCAL_LENGTH)) {
         float focalLength = frame_settings.find(ANDROID_LENS_FOCAL_LENGTH).data.f[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_LENS_FOCAL_LENGTH, focalLength)) {
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_LENS_FOCAL_LENGTH, focalLength)) {
             rc = BAD_VALUE;
         }
     }
@@ -7315,14 +7314,14 @@ int QCamera3HardwareInterface::translateToHalMetadata
     if (frame_settings.exists(ANDROID_LENS_OPTICAL_STABILIZATION_MODE)) {
         uint8_t optStabMode =
                 frame_settings.find(ANDROID_LENS_OPTICAL_STABILIZATION_MODE).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_LENS_OPT_STAB_MODE, optStabMode)) {
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_LENS_OPT_STAB_MODE, optStabMode)) {
             rc = BAD_VALUE;
         }
     }
 
     if (frame_settings.exists(ANDROID_NOISE_REDUCTION_MODE)) {
         uint8_t noiseRedMode = frame_settings.find(ANDROID_NOISE_REDUCTION_MODE).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_NOISE_REDUCTION_MODE,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_NOISE_REDUCTION_MODE,
                 noiseRedMode)) {
             rc = BAD_VALUE;
         }
@@ -7331,7 +7330,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
     if (frame_settings.exists(ANDROID_NOISE_REDUCTION_STRENGTH)) {
         uint8_t noiseRedStrength =
                 frame_settings.find(ANDROID_NOISE_REDUCTION_STRENGTH).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_NOISE_REDUCTION_STRENGTH,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_NOISE_REDUCTION_STRENGTH,
                 noiseRedStrength)) {
             rc = BAD_VALUE;
         }
@@ -7340,7 +7339,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
     if (frame_settings.exists(ANDROID_REPROCESS_EFFECTIVE_EXPOSURE_FACTOR)) {
         float reprocessEffectiveExposureFactor =
             frame_settings.find(ANDROID_REPROCESS_EFFECTIVE_EXPOSURE_FACTOR).data.f[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_EFFECTIVE_EXPOSURE_FACTOR,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_EFFECTIVE_EXPOSURE_FACTOR,
                 reprocessEffectiveExposureFactor)) {
             rc = BAD_VALUE;
         }
@@ -7404,14 +7403,14 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     if (frame_settings.exists(ANDROID_SHADING_MODE)) {
         uint8_t shadingMode = frame_settings.find(ANDROID_SHADING_MODE).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_SHADING_MODE, shadingMode)) {
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_SHADING_MODE, shadingMode)) {
             rc = BAD_VALUE;
         }
     }
 
     if (frame_settings.exists(ANDROID_SHADING_STRENGTH)) {
         uint8_t shadingStrength = frame_settings.find(ANDROID_SHADING_STRENGTH).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_SHADING_STRENGTH,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_SHADING_STRENGTH,
                 shadingStrength)) {
             rc = BAD_VALUE;
         }
@@ -7425,7 +7424,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
                 fwk_facedetectMode);
         if (NAME_NOT_FOUND != val) {
             uint8_t facedetectMode = (uint8_t)val;
-            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STATS_FACEDETECT_MODE,
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_STATS_FACEDETECT_MODE,
                     facedetectMode)) {
                 rc = BAD_VALUE;
             }
@@ -7435,7 +7434,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
     if (frame_settings.exists(ANDROID_STATISTICS_HISTOGRAM_MODE)) {
         uint8_t histogramMode =
                 frame_settings.find(ANDROID_STATISTICS_HISTOGRAM_MODE).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STATS_HISTOGRAM_MODE,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_STATS_HISTOGRAM_MODE,
                 histogramMode)) {
             rc = BAD_VALUE;
         }
@@ -7444,7 +7443,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
     if (frame_settings.exists(ANDROID_STATISTICS_SHARPNESS_MAP_MODE)) {
         uint8_t sharpnessMapMode =
                 frame_settings.find(ANDROID_STATISTICS_SHARPNESS_MAP_MODE).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STATS_SHARPNESS_MAP_MODE,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_STATS_SHARPNESS_MAP_MODE,
                 sharpnessMapMode)) {
             rc = BAD_VALUE;
         }
@@ -7453,7 +7452,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
     if (frame_settings.exists(ANDROID_TONEMAP_MODE)) {
         uint8_t tonemapMode =
                 frame_settings.find(ANDROID_TONEMAP_MODE).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_TONEMAP_MODE, tonemapMode)) {
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_TONEMAP_MODE, tonemapMode)) {
             rc = BAD_VALUE;
         }
     }
@@ -7515,7 +7514,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     if (frame_settings.exists(ANDROID_CONTROL_CAPTURE_INTENT)) {
         uint8_t captureIntent = frame_settings.find(ANDROID_CONTROL_CAPTURE_INTENT).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_CAPTURE_INTENT,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_CAPTURE_INTENT,
                 captureIntent)) {
             rc = BAD_VALUE;
         }
@@ -7523,7 +7522,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     if (frame_settings.exists(ANDROID_BLACK_LEVEL_LOCK)) {
         uint8_t blackLevelLock = frame_settings.find(ANDROID_BLACK_LEVEL_LOCK).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_BLACK_LEVEL_LOCK,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_BLACK_LEVEL_LOCK,
                 blackLevelLock)) {
             rc = BAD_VALUE;
         }
@@ -7532,7 +7531,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
     if (frame_settings.exists(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE)) {
         uint8_t lensShadingMapMode =
                 frame_settings.find(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE).data.u8[0];
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_LENS_SHADING_MAP_MODE,
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_LENS_SHADING_MAP_MODE,
                 lensShadingMapMode)) {
             rc = BAD_VALUE;
         }
@@ -7578,7 +7577,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
         if ((CAM_CDS_MODE_MAX <= (*cds)) || (0 > (*cds))) {
             ALOGE("%s: Invalid CDS mode %d!", __func__, *cds);
         } else {
-            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_CDS_MODE, *cds)) {
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_CDS_MODE, *cds)) {
                 rc = BAD_VALUE;
             }
         }

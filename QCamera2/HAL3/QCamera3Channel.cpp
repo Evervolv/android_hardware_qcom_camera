@@ -2770,7 +2770,7 @@ int32_t QCamera3PicChannel::queueJpegSetting(uint32_t index, metadata_buffer_t *
         memset(settings->gps_processing_method, 0,
                 sizeof(settings->gps_processing_method));
         strlcpy(settings->gps_processing_method, (const char *)proc_methods,
-                sizeof(settings->gps_processing_method)+1);
+                sizeof(settings->gps_processing_method));
     }
 
     return m_postprocessor.processJpegSettingData(settings);
