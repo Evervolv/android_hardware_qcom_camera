@@ -86,7 +86,6 @@ vendor_tag_info_t qcamera3_opaque_raw[QCAMERA3_OPAQUE_RAW_END -
 vendor_tag_info_t qcamera3_crop[QCAMERA3_CROP_END- QCAMERA3_CROP_START] = {
     { "count", TYPE_INT32 },
     { "data", TYPE_INT32},
-    { "streamids", TYPE_INT32},
     { "roimap", TYPE_INT32 }
 };
 
@@ -127,7 +126,6 @@ uint32_t qcamera3_all_tags[] = {
 
     (uint32_t)QCAMERA3_CROP_COUNT_REPROCESS,
     (uint32_t)QCAMERA3_CROP_REPROCESS,
-    (uint32_t)QCAMERA3_CROP_STREAM_ID_REPROCESS,
     (uint32_t)QCAMERA3_CROP_ROI_MAP_REPROCESS,
 
     // QCAMERA3_TUNING_META_DATA
