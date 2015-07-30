@@ -7344,6 +7344,8 @@ QCameraExif *QCamera2HardwareInterface::getExifData()
         ALOGE("%s: getExifGpsDataTimeStamp failed", __func__);
     }
 
+#ifdef ENABLE_MODEL_INFO_EXIF
+
     char value[PROPERTY_VALUE_MAX];
     if (property_get("ro.product.manufacturer", value, "QCOM-AA") > 0) {
         exif->addEntry(EXIFTAGID_MAKE, EXIF_ASCII,
@@ -7365,6 +7367,8 @@ QCameraExif *QCamera2HardwareInterface::getExifData()
     } else {
         ALOGE("%s: getExifSoftware failed", __func__);
     }
+
+#endif
 
     if (mParameters.useJpegExifRotation()) {
         int16_t orientation;

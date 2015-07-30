@@ -2389,6 +2389,8 @@ QCamera3Exif *QCamera3PostProcessor::getExifData(metadata_buffer_t *metadata,
         ALOGE("%s: no metadata provided ", __func__);
     }
 
+#ifdef ENABLE_MODEL_INFO_EXIF
+
     char value[PROPERTY_VALUE_MAX];
     if (property_get("ro.product.manufacturer", value, "QCOM-AA") > 0) {
         exif->addEntry(EXIFTAGID_MAKE, EXIF_ASCII,
@@ -2411,6 +2413,7 @@ QCamera3Exif *QCamera3PostProcessor::getExifData(metadata_buffer_t *metadata,
         ALOGE("%s: getExifSoftware failed", __func__);
     }
 
+#endif
     return exif;
 }
 
