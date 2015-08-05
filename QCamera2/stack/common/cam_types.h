@@ -152,10 +152,6 @@ typedef enum {
     CAM_FORMAT_YUV_422_NV61,
     CAM_FORMAT_YUV_420_NV12_VENUS,
 
-    /* Please note below are the defintions for raw image.
-     * Any format other than raw image format should be declared
-     * before this line!!!!!!!!!!!!! */
-
     /* Note: For all raw formats, each scanline needs to be 16 bytes aligned */
 
     /* Packed YUV/YVU raw format, 16 bpp: 8 bits Y and 8 bits UV.
@@ -296,6 +292,9 @@ typedef enum {
 
     CAM_FORMAT_YUV_444_NV24,
     CAM_FORMAT_YUV_444_NV42,
+
+    /* Y plane only, used for FD */
+    CAM_FORMAT_Y_ONLY,
 
     CAM_FORMAT_MAX
 } cam_format_t;

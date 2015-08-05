@@ -536,8 +536,10 @@ public:
                     uint32_t postprocess_mask,
                     cam_stream_type_t streamType,
                     cam_dimension_t *dim,
+                    cam_format_t streamFormat,
                     void *userData,
-                    uint32_t numBuffers = MIN_STREAMING_BUFFER_NUM);
+                    uint32_t numBuffers = MIN_STREAMING_BUFFER_NUM
+                    );
     virtual ~QCamera3SupportChannel();
 
     virtual int32_t initialize(cam_is_type_t isType);
@@ -556,6 +558,7 @@ private:
     QCamera3StreamMem *mMemory;
     cam_dimension_t mDim;
     cam_stream_type_t mStreamType;
+    cam_format_t mStreamFormat;
 };
 
 }; // namespace qcamera

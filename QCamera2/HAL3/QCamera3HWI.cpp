@@ -1390,6 +1390,7 @@ int QCamera3HardwareInterface::configureStreams(
                 CAM_QCOM_FEATURE_PP_SUPERSET_HAL3,
                 CAM_STREAM_TYPE_ANALYSIS,
                 &gCamCapability[mCameraId]->analysis_recommended_res,
+                gCamCapability[mCameraId]->analysis_recommended_format,
                 this,
                 0); // force buffer count to 0
         if (!mAnalysisChannel) {
@@ -1695,6 +1696,7 @@ int QCamera3HardwareInterface::configureStreams(
                 CAM_QCOM_FEATURE_PP_SUPERSET_HAL3,
                 CAM_STREAM_TYPE_CALLBACK,
                 &QCamera3SupportChannel::kDim,
+                CAM_FORMAT_YUV_420_NV21,
                 this);
         if (!mSupportChannel) {
             ALOGE("%s: dummy channel cannot be created", __func__);
