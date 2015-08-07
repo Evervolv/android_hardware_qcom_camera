@@ -581,7 +581,7 @@ QCamera3ProcessingChannel::QCamera3ProcessingChannel(uint32_t cam_handle,
             m_pMetaChannel(metadataChannel),
             mMetaFrame(NULL),
             mOfflineMemory(0),
-            mOfflineMetaMemory(1)
+            mOfflineMetaMemory(numBuffers)
 {
     int32_t rc = m_postprocessor.init(&mMemory, mPostProcMask);
     if (rc != 0) {
@@ -722,7 +722,7 @@ int32_t QCamera3ProcessingChannel::request(buffer_handle_t *buffer,
         memset(&reproc_cfg, 0, sizeof(reprocess_config_t));
         memset(&dim, 0, sizeof(dim));
         setReprocConfig(reproc_cfg, pInputBuffer, metadata, mStreamFormat, dim);
-        startPostProc((NULL != pInputBuffer), reproc_cfg);
+        startPostProc(reproc_cfg);
 
         qcamera_fwk_input_pp_data_t *src_frame = NULL;
         src_frame = (qcamera_fwk_input_pp_data_t *)calloc(1,
@@ -796,8 +796,19 @@ int32_t QCamera3ProcessingChannel::request(buffer_handle_t *buffer,
  *==========================================================================*/
 int32_t QCamera3ProcessingChannel::initialize(cam_is_type_t isType)
 {
-    mIsType = isType;
-    return NO_ERROR;
+    int32_t rc = NO_ERROR;
+    rc = mOfflineMetaMemory.allocate(mNumBuffers, sizeof(metadata_buffer_t), false);
+    if (rc == NO_ERROR) {
+        Mutex::Autolock lock(mFreeOfflineMetaBuffersLock);
+        mFreeOfflineMetaBuffersList.clear();
+        for (uint32_t i = 0; i < mNumBuffers; i++) {
+            mFreeOfflineMetaBuffersList.push_back(i);
+        }
+    } else {
+        ALOGE("%s: Could not allocate offline meta buffers for input reprocess",
+                __func__);
+    }
+    return rc;
 }
 
 /*===========================================================================
@@ -872,13 +883,6 @@ int32_t QCamera3ProcessingChannel::setFwkInputPPData(qcamera_fwk_input_pp_data_t
         uint32_t frameNumber)
 {
     int32_t rc = NO_ERROR;
-    if (0 < mOfflineMetaMemory.getCnt()) {
-        mOfflineMetaMemory.deallocate();
-    }
-    if (0 < mOfflineMemory.getCnt()) {
-        mOfflineMemory.unregisterBuffers();
-    }
-
     int input_index = mOfflineMemory.getMatchBufIndex((void*)pInputBuffer->buffer);
     if(input_index < 0) {
         rc = mOfflineMemory.registerBuffer(pInputBuffer->buffer, mStreamType);
@@ -893,6 +897,7 @@ int32_t QCamera3ProcessingChannel::setFwkInputPPData(qcamera_fwk_input_pp_data_t
             return DEAD_OBJECT;
         }
     }
+    mOfflineMemory.markFrameNumber(input_index, frameNumber);
 
     src_frame->src_frame = *pInputBuffer;
     rc = mOfflineMemory.getBufDef(reproc_cfg->input_stream_plane_info.plane_info,
@@ -912,11 +917,21 @@ int32_t QCamera3ProcessingChannel::setFwkInputPPData(qcamera_fwk_input_pp_data_t
         ALOGE("%s: Metadata stream plane info calculation failed!", __func__);
         return rc;
     }
-    rc = mOfflineMetaMemory.allocate(1, sizeof(metadata_buffer_t), false);
-    if (NO_ERROR != rc) {
-        ALOGE("%s: Couldn't allocate offline metadata buffer!", __func__);
-        return rc;
+    uint32_t metaBufIdx;
+    {
+        Mutex::Autolock lock(mFreeOfflineMetaBuffersLock);
+        if (mFreeOfflineMetaBuffersList.empty()) {
+            ALOGE("%s: mFreeOfflineMetaBuffersList is null. Fatal", __func__);
+            return BAD_VALUE;
+        }
+
+        metaBufIdx = *(mFreeOfflineMetaBuffersList.begin());
+        mFreeOfflineMetaBuffersList.erase(mFreeOfflineMetaBuffersList.begin());
+        CDBG("%s: erasing %d", __func__, metaBufIdx);
     }
+
+    mOfflineMetaMemory.markFrameNumber(metaBufIdx, frameNumber);
+
     mm_camera_buf_def_t meta_buf;
     cam_frame_len_offset_t offset = meta_planes.plane_info;
     rc = mOfflineMetaMemory.getBufDef(offset, meta_buf, 0);
@@ -1041,18 +1056,12 @@ int32_t QCamera3ProcessingChannel::stop()
  *
  * RETURN     : NONE
  *==========================================================================*/
-void QCamera3ProcessingChannel::startPostProc(bool inputBufExists,
-                                        const reprocess_config_t &config)
+void QCamera3ProcessingChannel::startPostProc(const reprocess_config_t &config)
 {
-    // This component needs to be re-configured
-    // once we switch from input(framework) buffer
-    // reprocess to standard capture!
-    bool restartNeeded = ((!mInputBufferConfig) != inputBufExists);
-    if((!mPostProcStarted) || restartNeeded) {
+    if(!mPostProcStarted) {
         m_postprocessor.start(config);
         mPostProcStarted = true;
     }
-    mInputBufferConfig = !inputBufExists;
 }
 
 /*===========================================================================
@@ -1189,8 +1198,8 @@ int32_t QCamera3ProcessingChannel::setReprocConfig(reprocess_config_t &reproc_cf
     } else {
         reproc_cfg.input_stream_dim.width = (int32_t)dim.width;
         reproc_cfg.input_stream_dim.height = (int32_t)dim.height;
-        reproc_cfg.src_channel = this;
     }
+    reproc_cfg.src_channel = this;
     reproc_cfg.output_stream_dim.width = mCamera3Stream->width;
     reproc_cfg.output_stream_dim.height = mCamera3Stream->height;
     reproc_cfg.reprocess_type = getReprocessType();
@@ -1254,9 +1263,35 @@ void QCamera3ProcessingChannel::reprocessCbRoutine(buffer_handle_t *resultBuffer
         uint32_t resultFrameNumber)
 {
     ATRACE_CALL();
-    camera3_stream_buffer_t result;
-    int rc = 0;
+    int rc = NO_ERROR;
 
+    rc = releaseOfflineMemory(resultFrameNumber);
+    if (NO_ERROR != rc) {
+        ALOGE("%s: Error releasing offline memory %d", __func__, rc);
+    }
+
+    issueChannelCb(resultBuffer, resultFrameNumber);
+
+    return;
+}
+
+/*===========================================================================
+ * FUNCTION   : issueChannelCb
+ *
+ * DESCRIPTION: function to set the result and issue channel callback
+ *
+ * PARAMETERS :
+ * @resultBuffer      : buffer containing the data
+ * @resultFrameNumber : frame number on which the buffer was requested
+ *
+ * RETURN     : NONE
+ *
+ *
+ *==========================================================================*/
+void QCamera3ProcessingChannel::issueChannelCb(buffer_handle_t *resultBuffer,
+        uint32_t resultFrameNumber)
+{
+    camera3_stream_buffer_t result;
     //Use below data to issue framework callback
     result.stream = mCamera3Stream;
     result.buffer = resultBuffer;
@@ -1265,10 +1300,49 @@ void QCamera3ProcessingChannel::reprocessCbRoutine(buffer_handle_t *resultBuffer
     result.release_fence = -1;
 
     mChannelCB(NULL, &result, resultFrameNumber, mUserData);
-
-    return;
 }
 
+/*===========================================================================
+ * FUNCTION   : releaseOfflineMemory
+ *
+ * DESCRIPTION: function to clean up the offline memory used for input reprocess
+ *
+ * PARAMETERS :
+ * @resultFrameNumber : frame number on which the buffer was requested
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              non-zero failure code
+ *
+ *
+ *==========================================================================*/
+int32_t QCamera3ProcessingChannel::releaseOfflineMemory(uint32_t resultFrameNumber)
+{
+    int32_t rc = NO_ERROR;
+    int32_t inputBufIndex =
+            mOfflineMemory.getGrallocBufferIndex(resultFrameNumber);
+    if (0 <= inputBufIndex) {
+        rc = mOfflineMemory.unregisterBuffer(inputBufIndex);
+    } else {
+        ALOGE("%s: Could not find offline input buffer, resultFrameNumber %d",
+                __func__, resultFrameNumber);
+    }
+    if (rc != NO_ERROR) {
+        ALOGE("%s: Failed to unregister offline input buffer", __func__);
+    }
+
+    int32_t metaBufIndex =
+            mOfflineMetaMemory.getHeapBufferIndex(resultFrameNumber);
+    if (0 <= metaBufIndex) {
+        Mutex::Autolock lock(mFreeOfflineMetaBuffersLock);
+        mFreeOfflineMetaBuffersList.push_back((uint32_t)metaBufIndex);
+    } else {
+        ALOGE("%s: Could not find offline meta buffer, resultFrameNumber %d",
+                __func__, resultFrameNumber);
+    }
+
+    return rc;
+}
 
 /* Regular Channel methods */
 
@@ -2267,6 +2341,18 @@ int32_t QCamera3YUVChannel::initialize(cam_is_type_t isType)
         }
     }
 
+    if (NO_ERROR != rc) {
+        ALOGE("%s: Initialize failed, rc = %d", __func__, rc);
+        return rc;
+    }
+
+    /* initialize offline meta memory for input reprocess */
+    rc = QCamera3ProcessingChannel::initialize(isType);
+    if (NO_ERROR != rc) {
+        ALOGE("%s: Processing Channel initialize failed, rc = %d",
+                __func__, rc);
+    }
+
     return rc;
 }
 
@@ -2356,7 +2442,7 @@ int32_t QCamera3YUVChannel::request(buffer_handle_t *buffer,
         setReprocConfig(reproc_cfg, NULL, metadata, mStreamFormat, dim);
 
         // Start postprocessor without input buffer
-        startPostProc(false, reproc_cfg);
+        startPostProc(reproc_cfg);
 
         uint32_t bufIdx = *(mFreeHeapBufferList.begin());
         mFreeHeapBufferList.erase(mFreeHeapBufferList.begin());
@@ -2473,6 +2559,15 @@ void QCamera3YUVChannel::reprocessCbRoutine(buffer_handle_t *resultBuffer,
     CDBG("%s E: frame number %d", __func__, resultFrameNumber);
     Vector<mm_camera_super_buf_t *> pendingCbs;
 
+    /* release the input buffer and input metadata buffer if used */
+    if ((!mBypass) || (0 < mMemory.getHeapBufferIndex(resultFrameNumber))) {
+        /* mOfflineMemory and mOfflineMetaMemory used only for input reprocessing */
+        int32_t rc = releaseOfflineMemory(resultFrameNumber);
+        if (NO_ERROR != rc) {
+            ALOGE("%s: Error releasing offline memory rc = %d", __func__, rc);
+        }
+    }
+
     if (mBypass) {
         int32_t rc = handleOfflinePpCallback(resultFrameNumber, pendingCbs);
         if (rc != NO_ERROR) {
@@ -2486,9 +2581,7 @@ void QCamera3YUVChannel::reprocessCbRoutine(buffer_handle_t *resultBuffer,
                 pendingCbs[i], mStreams[0]);
     }
 
-
-    QCamera3ProcessingChannel::reprocessCbRoutine(
-            resultBuffer, resultFrameNumber);
+    issueChannelCb(resultBuffer, resultFrameNumber);
 }
 
 /*===========================================================================
@@ -2756,8 +2849,30 @@ void QCamera3PicChannel::jpegEvtHandle(jpeg_job_status_t status,
 
             // release internal data for jpeg job
             if ((NULL != job->fwk_frame) || (NULL != job->fwk_src_buffer)) {
-                obj->mOfflineMetaMemory.deallocate();
-                obj->mOfflineMemory.unregisterBuffers();
+                /* unregister offline input buffer */
+                int32_t inputBufIndex =
+                        obj->mOfflineMemory.getGrallocBufferIndex((uint32_t)resultFrameNumber);
+                if (0 <= inputBufIndex) {
+                    rc = obj->mOfflineMemory.unregisterBuffer(inputBufIndex);
+                } else {
+                    ALOGE("%s: could not find the input buf index, frame number %d",
+                            __func__, resultFrameNumber);
+                }
+                if (NO_ERROR != rc) {
+                    ALOGE("%s: Error %d unregistering input buffer %d",
+                            __func__, rc, bufIdx);
+                }
+
+                /* unregister offline meta buffer */
+                int32_t metaBufIndex =
+                        obj->mOfflineMetaMemory.getHeapBufferIndex((uint32_t)resultFrameNumber);
+                if (0 <= metaBufIndex) {
+                    Mutex::Autolock lock(obj->mFreeOfflineMetaBuffersLock);
+                    obj->mFreeOfflineMetaBuffersList.push_back((uint32_t)metaBufIndex);
+                } else {
+                    ALOGE("%s: could not find the input meta buf index, frame number %d",
+                            __func__, resultFrameNumber);
+                }
             }
             obj->m_postprocessor.releaseOfflineBuffers();
             obj->m_postprocessor.releaseJpegJobData(job);
@@ -2851,6 +2966,18 @@ int32_t QCamera3PicChannel::initialize(cam_is_type_t isType)
         mFreeBufferList.push_back(i);
     }
 
+    if (NO_ERROR != rc) {
+        ALOGE("%s: Initialize failed, rc = %d", __func__, rc);
+        return rc;
+    }
+
+    /* initialize offline meta memory for input reprocess */
+    rc = QCamera3ProcessingChannel::initialize(isType);
+    if (NO_ERROR != rc) {
+        ALOGE("%s: Processing Channel initialize failed, rc = %d",
+                __func__, rc);
+    }
+
     return rc;
 }
 
@@ -2916,7 +3043,7 @@ int32_t QCamera3PicChannel::request(buffer_handle_t *buffer,
     rc = mMemory.markFrameNumber((uint32_t)index, frameNumber);
 
     // Start postprocessor
-    startPostProc((NULL != pInputBuffer), reproc_cfg);
+    startPostProc(reproc_cfg);
 
     // Queue jpeg settings
     rc = queueJpegSetting((uint32_t)index, metadata);
