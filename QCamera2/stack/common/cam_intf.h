@@ -396,6 +396,7 @@ typedef struct{
     /* Max cpp batch size */
     uint8_t max_batch_bufs_supported;
     uint8_t flash_dev_name[QCAMERA_MAX_FILEPATH_LENGTH];
+    uint8_t eeprom_version_info[MAX_EEPROM_VERSION_INFO_LEN];
 
     /* maximum pixel bandwidth shared between cameras */
     uint64_t max_pixel_bandwidth;
@@ -770,6 +771,7 @@ typedef struct {
     INCLUDE(CAM_INTF_META_USE_AV_TIMER,                 uint8_t,                     1);
     INCLUDE(CAM_INTF_META_EFFECTIVE_EXPOSURE_FACTOR,    float,                       1);
     INCLUDE(CAM_INTF_META_BLACK_LEVEL_IND,              cam_black_level_metadata_t,  1);
+    INCLUDE(CAM_INTF_META_LDAF_EXIF,                    uint32_t,                    2);
 } metadata_data_t;
 
 /* Update clear_metadata_buffer() function when a new is_xxx_valid is added to

@@ -183,6 +183,7 @@ public:
     bool needReprocess(uint32_t postprocess_mask);
     bool needJpegRotation();
     cam_denoise_process_type_t getWaveletDenoiseProcessPlate();
+    cam_denoise_process_type_t getTemporalDenoiseProcessPlate();
 
     void captureResultCb(mm_camera_super_buf_t *metadata,
                 camera3_stream_buffer_t *buffer, uint32_t frame_number);
@@ -195,6 +196,8 @@ public:
     static void getFlashInfo(const int cameraId,
             bool& hasFlash,
             char (&flashNode)[QCAMERA_MAX_FILEPATH_LENGTH]);
+    const char *getEepromVersionInfo();
+    const uint32_t *getLdafCalib();
 
     template <typename fwkType, typename halType> struct QCameraMap {
         fwkType fwk_name;
@@ -239,7 +242,8 @@ private:
             const camera3_capture_request_t *request);
 
     bool isSupportChannelNeeded(camera3_stream_configuration_t *streamList,
-            cam_stream_size_info_t stream_config_info);
+            cam_stream_size_info_t stream_config_info,
+            uint32_t fullFeatureMask);
     int32_t setMobicat();
 
     int32_t setHalFpsRange(const CameraMetadata &settings,
@@ -294,6 +298,7 @@ private:
     cam_dimension_t mInputStreamSize;
     uint8_t m_MobicatMask;
     int8_t  m_overrideAppFaceDetection;
+    uint8_t m_bTnrEnabled;
 
     /* Data structure to store pending request */
     typedef struct {
@@ -395,6 +400,10 @@ private:
 
     /* Whether PPROC bypass is enabled for YUV888 */
     bool mPprocBypass;
+
+    /* Ldaf calibration data */
+    bool mLdafCalibExist;
+    uint32_t mLdafCalib[2];
 
     static const QCameraMap<camera_metadata_enum_android_control_effect_mode_t,
             cam_effect_mode_type> EFFECT_MODES_MAP[];

@@ -101,6 +101,7 @@
 #define MAX_TEST_PATTERN_CNT     8
 
 #define GPS_PROCESSING_METHOD_SIZE 33
+#define EXIF_IMAGE_DESCRIPTION_SIZE 100
 
 #define MAX_INFLIGHT_REQUESTS  6
 #define MIN_INFLIGHT_REQUESTS  3
@@ -116,6 +117,8 @@
 #define MAX_REPROCESS_STALL 2
 
 #define QCAMERA_MAX_FILEPATH_LENGTH 64
+
+#define MAX_EEPROM_VERSION_INFO_LEN 32
 
 typedef enum {
     CAM_HAL_V1 = 1,
@@ -1740,6 +1743,7 @@ typedef enum {
 
     /*Black level parameters*/
     CAM_INTF_META_BLACK_LEVEL_IND,
+    CAM_INTF_META_LDAF_EXIF,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 

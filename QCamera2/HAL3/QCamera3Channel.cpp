@@ -1219,7 +1219,6 @@ int32_t QCamera3ProcessingChannel::setReprocConfig(reprocess_config_t &reproc_cf
     }
 
     switch (reproc_cfg.stream_type) {
-        case CAM_STREAM_TYPE_CALLBACK:
         case CAM_STREAM_TYPE_PREVIEW:
             rc = mm_stream_calc_offset_preview(streamFormat,
                     &reproc_cfg.input_stream_dim,
@@ -1234,6 +1233,7 @@ int32_t QCamera3ProcessingChannel::setReprocConfig(reprocess_config_t &reproc_cf
                     reproc_cfg.padding, &reproc_cfg.input_stream_plane_info);
             break;
         case CAM_STREAM_TYPE_SNAPSHOT:
+        case CAM_STREAM_TYPE_CALLBACK:
         default:
             rc = mm_stream_calc_offset_snapshot(streamFormat, &reproc_cfg.input_stream_dim,
                     reproc_cfg.padding, &reproc_cfg.input_stream_plane_info);
@@ -2320,8 +2320,16 @@ int32_t QCamera3YUVChannel::initialize(cam_is_type_t isType)
     if (mBypass) {
          // Allocate heap buffers up front
         cam_stream_buf_plane_info_t buf_planes;
+        cam_padding_info_t paddingInfo = *mPaddingInfo;
+
         memset(&buf_planes, 0, sizeof(buf_planes));
-        rc = mm_stream_calc_offset_preview(mStreamFormat, &streamDim, &buf_planes);
+        //to ensure a big enough buffer size set the height and width
+        //padding to max(height padding, width padding)
+        paddingInfo.width_padding = MAX(paddingInfo.width_padding, paddingInfo.height_padding);
+        paddingInfo.height_padding = paddingInfo.width_padding;
+
+        rc = mm_stream_calc_offset_snapshot(mStreamFormat, &streamDim, &paddingInfo,
+                &buf_planes);
         if (rc < 0) {
             ALOGE("%s: mm_stream_calc_offset_preview failed", __func__);
             return rc;
@@ -3225,6 +3233,7 @@ void QCamera3PicChannel::putStreamBufs()
 
 int32_t QCamera3PicChannel::queueJpegSetting(uint32_t index, metadata_buffer_t *metadata)
 {
+    QCamera3HardwareInterface* hal_obj = (QCamera3HardwareInterface*)mUserData;
     jpeg_settings_t *settings =
             (jpeg_settings_t *)malloc(sizeof(jpeg_settings_t));
 
@@ -3272,6 +3281,24 @@ int32_t QCamera3PicChannel::queueJpegSetting(uint32_t index, metadata_buffer_t *
                 sizeof(settings->gps_processing_method));
         strlcpy(settings->gps_processing_method, (const char *)proc_methods,
                 sizeof(settings->gps_processing_method));
+    }
+
+    // Image description
+    const char *eepromVersion = hal_obj->getEepromVersionInfo();
+    const uint32_t *ldafCalib = hal_obj->getLdafCalib();
+    if ((eepromVersion && strlen(eepromVersion)) ||
+            ldafCalib) {
+        int len = 0;
+        settings->image_desc_valid = true;
+        if (eepromVersion && strlen(eepromVersion)) {
+            len = snprintf(settings->image_desc, sizeof(settings->image_desc),
+                    "M:%s ", eepromVersion);
+        }
+        if (ldafCalib) {
+            snprintf(settings->image_desc + len,
+                    sizeof(settings->image_desc) - len, "L:%u-%u",
+                    ldafCalib[0], ldafCalib[1]);
+        }
     }
 
     return m_postprocessor.processJpegSettingData(settings);
