@@ -360,7 +360,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
     gCamCapability[cameraId]->min_num_pp_bufs = 3;
 
     pthread_cond_init(&mRequestCond, NULL);
-    mPendingRequest = 0;
+    mPendingLiveRequest = 0;
     mCurrentRequestId = -1;
     pthread_mutex_init(&mMutex, NULL);
 
@@ -2070,7 +2070,6 @@ int32_t QCamera3HardwareInterface::handlePendingReprocResults(uint32_t frame_num
                     mCallbackOps->process_capture_result(mCallbackOps, &result);
 
                     erasePendingRequest(k);
-                    mPendingRequest--;
                     break;
                 }
             }
@@ -2348,15 +2347,14 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
 
     for (pendingRequestIterator i = mPendingRequestsList.begin();
             i != mPendingRequestsList.end() && i->frame_number <= frame_number;) {
+        // Flush out all entries with less or equal frame numbers.
+
         camera3_capture_result_t result;
         memset(&result, 0, sizeof(camera3_capture_result_t));
 
         CDBG("%s: frame_number in the list is %u", __func__, i->frame_number);
         i->partial_result_cnt++;
         result.partial_result = i->partial_result_cnt;
-
-        // Flush out all entries with less or equal frame numbers.
-        mPendingRequest--;
 
         // Check whether any stream buffer corresponding to this is dropped or not
         // If dropped, then send the ERROR_BUFFER for the corresponding stream
@@ -2429,6 +2427,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                 CDBG("%s: Input request metadata notify frame_number = %u, capture_time = %llu",
                        __func__, i->frame_number, notify_msg.message.shutter.timestamp);
             } else {
+                mPendingLiveRequest--;
                 CameraMetadata dummyMetadata;
                 dummyMetadata.update(ANDROID_SENSOR_TIMESTAMP,
                         &i->timestamp, 1);
@@ -2441,6 +2440,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
             CDBG("%s: Support notification !!!! notify frame_number = %u, capture_time = %llu",
                        __func__, i->frame_number, notify_msg.message.shutter.timestamp);
         } else {
+            mPendingLiveRequest--;
             /* Clear notify_msg structure */
             camera3_notify_msg_t notify_msg;
             memset(&notify_msg, 0, sizeof(camera3_notify_msg_t));
@@ -2576,6 +2576,7 @@ done_metadata:
             i != mPendingRequestsList.end() ;i++) {
         i->pipeline_depth++;
     }
+    CDBG("%s: mPendingLiveRequest = %d", __func__, mPendingLiveRequest);
     unblockRequestIfNecessary();
 
 }
@@ -2717,7 +2718,6 @@ void QCamera3HardwareInterface::handleBufferWithLock(
                 mCallbackOps->process_capture_result(mCallbackOps, &result);
                 CDBG("%s: Notify reprocess now %d!", __func__, frame_number);
                 i = erasePendingRequest(i);
-                mPendingRequest--;
             } else {
                 // Cache reprocess result for later
                 PendingReprocessResult pendingResult;
@@ -2786,7 +2786,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
     uint32_t minInFlightRequests = MIN_INFLIGHT_REQUESTS;
     uint32_t maxInFlightRequests = MAX_INFLIGHT_REQUESTS;
     bool isVidBufRequested = false;
-    camera3_stream_buffer_t *pInputBuffer;
+    camera3_stream_buffer_t *pInputBuffer = NULL;
 
     pthread_mutex_lock(&mMutex);
 
@@ -3085,7 +3085,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
             }
         }
         mWokenUpByDaemon = false;
-        mPendingRequest = 0;
+        mPendingLiveRequest = 0;
         mFirstConfiguration = false;
     }
 
@@ -3375,7 +3375,10 @@ int QCamera3HardwareInterface::processCaptureRequest(
             /* reset to zero coz, the batch is queued */
             mToBeQueuedVidBufs = 0;
         }
+        mPendingLiveRequest++;
     }
+
+    CDBG("%s: mPendingLiveRequest = %d", __func__, mPendingLiveRequest);
 
     mFirstRequest = false;
     // Added a timed condition wait
@@ -3391,14 +3394,12 @@ int QCamera3HardwareInterface::processCaptureRequest(
       ts.tv_sec += 5;
     }
     //Block on conditional variable
-
-    mPendingRequest++;
     if (mBatchSize) {
         /* For HFR, more buffers are dequeued upfront to improve the performance */
         minInFlightRequests = (MIN_INFLIGHT_REQUESTS + 1) * mBatchSize;
         maxInFlightRequests = MAX_INFLIGHT_REQUESTS * mBatchSize;
     }
-    while (mPendingRequest >= minInFlightRequests) {
+    while ((mPendingLiveRequest >= minInFlightRequests) && !pInputBuffer) {
         if (!isValidTimeout) {
             CDBG("%s: Blocking on conditional wait", __func__);
             pthread_cond_wait(&mRequestCond, &mMutex);
@@ -3415,7 +3416,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
         CDBG("%s: Unblocked", __func__);
         if (mWokenUpByDaemon) {
             mWokenUpByDaemon = false;
-            if (mPendingRequest < maxInFlightRequests)
+            if (mPendingLiveRequest < maxInFlightRequests)
                 break;
         }
     }
@@ -3514,7 +3515,7 @@ int QCamera3HardwareInterface::flush()
     pthread_mutex_lock(&mMutex);
 
     // Unblock process_capture_request
-    mPendingRequest = 0;
+    mPendingLiveRequest = 0;
     pthread_cond_signal(&mRequestCond);
 
     rc = notifyErrorForPendingRequests();
