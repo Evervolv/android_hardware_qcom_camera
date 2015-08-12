@@ -39,7 +39,6 @@
 #include "QCamera3Channel.h"
 #include "QCamera3CropRegionMapper.h"
 #include "QCameraPerf.h"
-#include <hardware/power.h>
 
 extern "C" {
 #include <mm_camera_interface.h>
@@ -86,7 +85,6 @@ typedef enum {
 } optype_t;
 
 #define MODULE_ALL 0
-
 
 extern volatile uint32_t gCamHal3LogLevel;
 
@@ -256,7 +254,8 @@ private:
     int32_t numOfSizesOnEncoder(const camera3_stream_configuration_t *streamList,
             const cam_dimension_t &maxViewfinderSize);
 
-    void updatePowerHint(bool bWasVideo, bool bIsVideo);
+    void enablePowerHint();
+    void disablePowerHint();
     int32_t getSensorOutputSize(cam_dimension_t &sensor_dim);
     int32_t dynamicUpdateMetaStreamInfo();
     int32_t startAllChannels();
@@ -266,6 +265,7 @@ private:
 
     bool isOnEncoder(const cam_dimension_t max_viewfinder_size,
             uint32_t width, uint32_t height);
+    void hdrPlusPerfLock(mm_camera_super_buf_t *metadata_buf);
 
     int32_t setBundleInfo();
 
@@ -392,7 +392,6 @@ private:
     int64_t mMinProcessedFrameDuration;
     int64_t mMinJpegFrameDuration;
     int64_t mMinRawFrameDuration;
-    power_module_t *m_pPowerModule;   // power module
 
     uint32_t mMetaFrameCount;
     bool    mUpdateDebugLevel;
@@ -418,6 +417,8 @@ private:
     /* Ldaf calibration data */
     bool mLdafCalibExist;
     uint32_t mLdafCalib[2];
+    bool mPowerHintEnabled;
+    int32_t mLastCustIntentFrmNum;
 
     static const QCameraMap<camera_metadata_enum_android_control_effect_mode_t,
             cam_effect_mode_type> EFFECT_MODES_MAP[];

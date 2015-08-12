@@ -81,6 +81,7 @@ namespace qcamera {
 #define DEFAULT_VIDEO_FPS      (30.0)
 #define MAX_HFR_BATCH_SIZE     (8)
 #define REGIONS_TUPLE_COUNT    5
+#define HDR_PLUS_PERF_TIME_OUT  (7000) // milliseconds
 
 #define METADATA_MAP_SIZE(MAP) (sizeof(MAP)/sizeof(MAP[0]))
 
@@ -337,7 +338,6 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mMinProcessedFrameDuration(0),
       mMinJpegFrameDuration(0),
       mMinRawFrameDuration(0),
-      m_pPowerModule(NULL),
       mMetaFrameCount(0U),
       mUpdateDebugLevel(false),
       mCallbacks(callbacks),
@@ -349,7 +349,9 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mPrevUrgentFrameNumber(0),
       mPrevFrameNumber(0),
       mNeedSensorRestart(false),
-      mLdafCalibExist(false)
+      mLdafCalibExist(false),
+      mPowerHintEnabled(false),
+      mLastCustIntentFrmNum(-1)
 {
     getLogLevel();
     m_perfLock.lock_init();
@@ -362,7 +364,6 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
     // TODO: hardcode for now until mctl add support for min_num_pp_bufs
     //TBD - To see if this hardcoding is needed. Check by printing if this is filled by mctl to 3
     gCamCapability[cameraId]->min_num_pp_bufs = 3;
-
     pthread_cond_init(&mRequestCond, NULL);
     mPendingLiveRequest = 0;
     mCurrentRequestId = -1;
@@ -370,12 +371,6 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
 
     for (size_t i = 0; i < CAMERA3_TEMPLATE_COUNT; i++)
         mDefaultMetadata[i] = NULL;
-
-#ifdef HAS_MULTIMEDIA_HINTS
-    if (hw_get_module(POWER_HARDWARE_MODULE_ID, (const hw_module_t **)&m_pPowerModule)) {
-        ALOGE("%s: %s module not found", __func__, POWER_HARDWARE_MODULE_ID);
-    }
-#endif
 
     // Getting system props of different kinds
     char prop[PROPERTY_VALUE_MAX];
@@ -389,11 +384,11 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
     memset(mLdafCalib, 0, sizeof(mLdafCalib));
 
     memset(prop, 0, sizeof(prop));
-    property_get("persist.camera.tnr.preview", prop, "0");
+    property_get("persist.camera.tnr.preview", prop, "1");
     m_bTnrPreview = (uint8_t)atoi(prop);
 
     memset(prop, 0, sizeof(prop));
-    property_get("persist.camera.tnr.video", prop, "0");
+    property_get("persist.camera.tnr.video", prop, "1");
     m_bTnrVideo = (uint8_t)atoi(prop);
 }
 
@@ -410,9 +405,9 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
 {
     CDBG("%s: E", __func__);
 
-    /* Turn off video hint prior to acquiring perfLock in case they
+    /* Turn off current power hint before acquiring perfLock in case they
      * conflict with each other */
-    updatePowerHint(m_bIsVideo, false);
+    disablePowerHint();
 
     m_perfLock.lock_acq();
 
@@ -995,33 +990,41 @@ int32_t QCamera3HardwareInterface::getSensorOutputSize(cam_dimension_t &sensor_d
 }
 
 /*==============================================================================
- * FUNCTION   : updatePowerHint
+ * FUNCTION   : enablePowerHint
  *
- * DESCRIPTION: update power hint based on whether it's video mode or not.
+ * DESCRIPTION: enable single powerhint for preview and different video modes.
  *
  * PARAMETERS :
- *   @bWasVideo : whether video mode before the switch
- *   @bIsVideo  : whether new mode is video or not.
  *
  * RETURN     : NULL
  *
  *==========================================================================*/
-void QCamera3HardwareInterface::updatePowerHint(bool bWasVideo, bool bIsVideo)
+void QCamera3HardwareInterface::enablePowerHint()
 {
-#ifdef HAS_MULTIMEDIA_HINTS
-    if (bWasVideo == bIsVideo)
-        return;
-
-    if (m_pPowerModule && m_pPowerModule->powerHint) {
-        if (bIsVideo)
-            m_pPowerModule->powerHint(m_pPowerModule,
-                    POWER_HINT_VIDEO_ENCODE, (void *)"state=1");
-        else
-            m_pPowerModule->powerHint(m_pPowerModule,
-                    POWER_HINT_VIDEO_ENCODE, (void *)"state=0");
-     }
-#endif
+    if (!mPowerHintEnabled) {
+        m_perfLock.powerHint(POWER_HINT_VIDEO_ENCODE, 1);
+        mPowerHintEnabled = true;
+    }
 }
+
+/*==============================================================================
+ * FUNCTION   : disablePowerHint
+ *
+ * DESCRIPTION: disable current powerhint.
+ *
+ * PARAMETERS :
+ *
+ * RETURN     : NULL
+ *
+ *==========================================================================*/
+void QCamera3HardwareInterface::disablePowerHint()
+{
+    if (mPowerHintEnabled) {
+        m_perfLock.powerHint(POWER_HINT_VIDEO_ENCODE, 0);
+        mPowerHintEnabled = false;
+    }
+}
+
 /*===========================================================================
  * FUNCTION   : configureStreams
  *
@@ -1039,16 +1042,11 @@ int QCamera3HardwareInterface::configureStreams(
 {
     ATRACE_CALL();
     int rc = 0;
-    bool bWasVideo = m_bIsVideo;
 
     // Acquire perfLock before configure streams
     m_perfLock.lock_acq();
     rc = configureStreamsPerfLocked(streamList);
     m_perfLock.lock_rel();
-
-    /* Update power hint after releasing perfLock in case they
-     * conflict with each other. */
-    updatePowerHint(bWasVideo, m_bIsVideo);
 
     return rc;
 }
@@ -2703,6 +2701,44 @@ done_metadata:
 }
 
 /*===========================================================================
+ * FUNCTION   : hdrPlusPerfLock
+ *
+ * DESCRIPTION: perf lock for HDR+ using custom intent
+ *
+ * PARAMETERS : @metadata_buf: Metadata super_buf pointer
+ *
+ * RETURN     : None
+ *
+ *==========================================================================*/
+void QCamera3HardwareInterface::hdrPlusPerfLock(
+        mm_camera_super_buf_t *metadata_buf)
+{
+    if (NULL == metadata_buf) {
+        ALOGE("%s: metadata_buf is NULL", __func__);
+        return;
+    }
+    metadata_buffer_t *metadata =
+            (metadata_buffer_t *)metadata_buf->bufs[0]->buffer;
+    int32_t *p_frame_number_valid =
+            POINTER_OF_META(CAM_INTF_META_FRAME_NUMBER_VALID, metadata);
+    uint32_t *p_frame_number =
+            POINTER_OF_META(CAM_INTF_META_FRAME_NUMBER, metadata);
+
+    //acquire perf lock for 5 sec after the last HDR frame is captured
+    if (*p_frame_number_valid) {
+        if (mLastCustIntentFrmNum == (int32_t)*p_frame_number) {
+            m_perfLock.lock_acq_timed(HDR_PLUS_PERF_TIME_OUT);
+        }
+    }
+
+    //release lock after perf lock timer is expired. If lock is already released,
+    //isTimerReset returns false
+    if (m_perfLock.isTimerReset()) {
+        mLastCustIntentFrmNum = -1;
+        m_perfLock.lock_rel_timed();
+    }
+}
+/*===========================================================================
  * FUNCTION   : handleBufferWithLock
  *
  * DESCRIPTION: Handles image buffer callback with mMutex lock held.
@@ -3217,6 +3253,7 @@ no_error:
         mWokenUpByDaemon = false;
         mPendingLiveRequest = 0;
         mFirstConfiguration = false;
+        enablePowerHint();
     }
 
     uint32_t frameNumber = request->frame_number;
@@ -3332,6 +3369,9 @@ no_error:
         }
     }
 
+    if (mCaptureIntent == ANDROID_CONTROL_CAPTURE_INTENT_CUSTOM) {
+        mLastCustIntentFrmNum = frameNumber;
+    }
     /* Update pending request list and pending buffers map */
     PendingRequestInfo pendingRequest;
     pendingRequestIterator latestRequest;
@@ -3713,6 +3753,7 @@ void QCamera3HardwareInterface::captureResultCb(mm_camera_super_buf_t *metadata_
             handleBatchMetadata(metadata_buf,
                     true /* free_and_bufdone_meta_buf */);
         } else { /* mBatchSize = 0 */
+            hdrPlusPerfLock(metadata_buf);
             pthread_mutex_lock(&mMutex);
             handleMetadataWithLock(metadata_buf,
                     true /* free_and_bufdone_meta_buf */);
