@@ -581,7 +581,7 @@ QCamera3ProcessingChannel::QCamera3ProcessingChannel(uint32_t cam_handle,
             m_pMetaChannel(metadataChannel),
             mMetaFrame(NULL),
             mOfflineMemory(0),
-            mOfflineMetaMemory(numBuffers)
+            mOfflineMetaMemory(numBuffers, false)
 {
     int32_t rc = m_postprocessor.init(&mMemory, mPostProcMask);
     if (rc != 0) {
@@ -797,7 +797,7 @@ int32_t QCamera3ProcessingChannel::request(buffer_handle_t *buffer,
 int32_t QCamera3ProcessingChannel::initialize(cam_is_type_t isType)
 {
     int32_t rc = NO_ERROR;
-    rc = mOfflineMetaMemory.allocate(mNumBuffers, sizeof(metadata_buffer_t), false);
+    rc = mOfflineMetaMemory.allocateAll(sizeof(metadata_buffer_t));
     if (rc == NO_ERROR) {
         Mutex::Autolock lock(mFreeOfflineMetaBuffersLock);
         mFreeOfflineMetaBuffersList.clear();
@@ -1139,9 +1139,7 @@ int32_t QCamera3ProcessingChannel::translateStreamTypeAndFormat(camera3_stream_t
                 streamFormat = VIDEO_FORMAT;
             } else if(stream->stream_type == CAMERA3_STREAM_INPUT ||
                     stream->stream_type == CAMERA3_STREAM_BIDIRECTIONAL ||
-                    (stream->usage & GRALLOC_USAGE_HW_CAMERA_ZSL) ==
-                    GRALLOC_USAGE_HW_CAMERA_ZSL){
-                //TODO: Fix HW_CAMERA_ZSL check logic in other places as well
+                    IS_USAGE_ZSL(stream->usage)){
                 streamType = CAM_STREAM_TYPE_SNAPSHOT;
                 streamFormat = SNAPSHOT_FORMAT;
             } else {
@@ -1752,7 +1750,7 @@ QCamera3StreamMem* QCamera3MetadataChannel::getStreamBufs(uint32_t len)
         ALOGE("%s: unable to create metadata memory", __func__);
         return NULL;
     }
-    rc = mMemory->allocate(MIN_STREAMING_BUFFER_NUM, len, true);
+    rc = mMemory->allocateAll(len);
     if (rc < 0) {
         ALOGE("%s: unable to allocate metadata memory", __func__);
         delete mMemory;
@@ -2127,7 +2125,7 @@ QCamera3StreamMem* QCamera3RawDumpChannel::getStreamBufs(uint32_t len)
         ALOGE("%s: unable to create heap memory", __func__);
         return NULL;
     }
-    rc = mMemory->allocate(mNumBuffers, (size_t)len, true);
+    rc = mMemory->allocateAll((size_t)len);
     if (rc < 0) {
         ALOGE("%s: unable to allocate heap memory", __func__);
         delete mMemory;
@@ -2244,6 +2242,7 @@ QCamera3YUVChannel::QCamera3YUVChannel(uint32_t cam_handle,
 {
 
     mBypass = (postprocess_mask == CAM_QCOM_FEATURE_NONE);
+    mFrameLen = 0;
     mEdgeMode.edge_mode = CAM_EDGE_MODE_OFF;
     mEdgeMode.sharpness = 0;
     mNoiseRedMode = CAM_NOISE_REDUCTION_MODE_OFF;
@@ -2317,37 +2316,23 @@ int32_t QCamera3YUVChannel::initialize(cam_is_type_t isType)
         return rc;
     }
 
-    if (mBypass) {
-         // Allocate heap buffers up front
-        cam_stream_buf_plane_info_t buf_planes;
-        cam_padding_info_t paddingInfo = *mPaddingInfo;
+    cam_stream_buf_plane_info_t buf_planes;
+    cam_padding_info_t paddingInfo = *mPaddingInfo;
 
-        memset(&buf_planes, 0, sizeof(buf_planes));
-        //to ensure a big enough buffer size set the height and width
-        //padding to max(height padding, width padding)
-        paddingInfo.width_padding = MAX(paddingInfo.width_padding, paddingInfo.height_padding);
-        paddingInfo.height_padding = paddingInfo.width_padding;
+    memset(&buf_planes, 0, sizeof(buf_planes));
+    //to ensure a big enough buffer size set the height and width
+    //padding to max(height padding, width padding)
+    paddingInfo.width_padding = MAX(paddingInfo.width_padding, paddingInfo.height_padding);
+    paddingInfo.height_padding = paddingInfo.width_padding;
 
-        rc = mm_stream_calc_offset_snapshot(mStreamFormat, &streamDim, &paddingInfo,
-                &buf_planes);
-        if (rc < 0) {
-            ALOGE("%s: mm_stream_calc_offset_preview failed", __func__);
-            return rc;
-        }
-
-        // TODO: Do not queue heap buffers up front because we don't know whether
-        // heap buffers will be used or not. It depends on the actual request
-        rc = mMemory.allocate(mNumBuffers, buf_planes.plane_info.frame_len, false);
-        if (rc == NO_ERROR) {
-
-            Mutex::Autolock lock(mOfflinePpLock);
-            mFreeHeapBufferList.clear();
-
-            for (uint32_t i = 0; i < mNumBuffers; i++) {
-                mFreeHeapBufferList.push_back(i);
-            }
-        }
+    rc = mm_stream_calc_offset_snapshot(mStreamFormat, &streamDim, &paddingInfo,
+            &buf_planes);
+    if (rc < 0) {
+        ALOGE("%s: mm_stream_calc_offset_preview failed", __func__);
+        return rc;
     }
+
+    mFrameLen = buf_planes.plane_info.frame_len;
 
     if (NO_ERROR != rc) {
         ALOGE("%s: Initialize failed, rc = %d", __func__, rc);
@@ -2432,13 +2417,23 @@ int32_t QCamera3YUVChannel::request(buffer_handle_t *buffer,
     needMetadata = ppInfo.offlinePpFlag;
     if (!ppInfo.offlinePpFlag) {
         // regular request
-        return QCamera3ProcessingChannel::request(buffer, frameNumber, pInputBuffer, metadata);
+        return QCamera3ProcessingChannel::request(buffer, frameNumber,
+                pInputBuffer, metadata);
     } else {
         //we need to send this frame through the CPP
         //Allocate heap memory, then buf done on the buffer
+        uint32_t bufIdx;
         if (mFreeHeapBufferList.empty()) {
-            ALOGE("%s: mFreeHeapBufferList is null. Fatal", __func__);
-            return BAD_VALUE;
+            rc = mMemory.allocateOne(mFrameLen);
+            if (rc < 0) {
+                ALOGE("%s: Failed allocating heap buffer. Fatal", __func__);
+                return BAD_VALUE;
+            } else {
+                bufIdx = (uint32_t)rc;
+            }
+        } else {
+            bufIdx = *(mFreeHeapBufferList.begin());
+            mFreeHeapBufferList.erase(mFreeHeapBufferList.begin());
         }
 
         /* Configure and start postproc if necessary */
@@ -2452,12 +2447,20 @@ int32_t QCamera3YUVChannel::request(buffer_handle_t *buffer,
         // Start postprocessor without input buffer
         startPostProc(reproc_cfg);
 
-        uint32_t bufIdx = *(mFreeHeapBufferList.begin());
-        mFreeHeapBufferList.erase(mFreeHeapBufferList.begin());
         CDBG("%s: erasing %d", __func__, bufIdx);
 
         mMemory.markFrameNumber(bufIdx, frameNumber);
         mStreams[0]->bufDone(bufIdx);
+
+        // Currently start() function needs at least one
+        // buffer queued before starting the stream.
+        if(!m_bIsActive) {
+            rc = start();
+            if (NO_ERROR != rc)
+                return rc;
+        } else {
+            CDBG("%s: Request on an existing stream",__func__);
+        }
     }
     return rc;
 }
@@ -2568,7 +2571,7 @@ void QCamera3YUVChannel::reprocessCbRoutine(buffer_handle_t *resultBuffer,
     Vector<mm_camera_super_buf_t *> pendingCbs;
 
     /* release the input buffer and input metadata buffer if used */
-    if ((!mBypass) || (0 < mMemory.getHeapBufferIndex(resultFrameNumber))) {
+    if (0 > mMemory.getHeapBufferIndex(resultFrameNumber)) {
         /* mOfflineMemory and mOfflineMetaMemory used only for input reprocessing */
         int32_t rc = releaseOfflineMemory(resultFrameNumber);
         if (NO_ERROR != rc) {
@@ -2583,13 +2586,14 @@ void QCamera3YUVChannel::reprocessCbRoutine(buffer_handle_t *resultBuffer,
         }
     }
 
+    issueChannelCb(resultBuffer, resultFrameNumber);
+
     // Call all pending callbacks to return buffers
     for (size_t i = 0; i < pendingCbs.size(); i++) {
         QCamera3ProcessingChannel::streamCbRoutine(
                 pendingCbs[i], mStreams[0]);
     }
 
-    issueChannelCb(resultBuffer, resultFrameNumber);
 }
 
 /*===========================================================================
@@ -2609,18 +2613,21 @@ bool QCamera3YUVChannel::needsFramePostprocessing(metadata_buffer_t *meta)
     bool ppNeeded = false;
 
     //sharpness
-    IF_META_AVAILABLE(cam_edge_application_t, edgeMode, CAM_INTF_META_EDGE_MODE, meta) {
+    IF_META_AVAILABLE(cam_edge_application_t, edgeMode,
+            CAM_INTF_META_EDGE_MODE, meta) {
         mEdgeMode = *edgeMode;
     }
 
     //wnr
-    IF_META_AVAILABLE(uint32_t, noiseRedMode, CAM_INTF_META_NOISE_REDUCTION_MODE, meta) {
+    IF_META_AVAILABLE(uint32_t, noiseRedMode,
+            CAM_INTF_META_NOISE_REDUCTION_MODE, meta) {
         mNoiseRedMode = *noiseRedMode;
     }
 
-    IF_META_AVAILABLE(cam_crop_region_t, scalerCropRegion, CAM_INTF_META_SCALER_CROP_REGION, meta) {
-        //check the crop against the max downscale factor and then set ppNeeded
-        //gCamCapability[cameraId]->max_downscale_factor
+    //crop region
+    IF_META_AVAILABLE(cam_crop_region_t, scalerCropRegion,
+            CAM_INTF_META_SCALER_CROP_REGION, meta) {
+        mCropRegion = *scalerCropRegion;
     }
 
     if ((CAM_EDGE_MODE_OFF != mEdgeMode.edge_mode) &&
@@ -2630,6 +2637,10 @@ bool QCamera3YUVChannel::needsFramePostprocessing(metadata_buffer_t *meta)
     if ((CAM_NOISE_REDUCTION_MODE_ZERO_SHUTTER_LAG != mNoiseRedMode) &&
             (CAM_NOISE_REDUCTION_MODE_OFF != mNoiseRedMode) &&
             (CAM_NOISE_REDUCTION_MODE_MINIMAL != mNoiseRedMode)) {
+        ppNeeded = true;
+    }
+    if ((mCropRegion.width < (int32_t)mCamera3Stream->width) ||
+            (mCropRegion.height < (int32_t)mCamera3Stream->height)) {
         ppNeeded = true;
     }
 
@@ -2667,21 +2678,10 @@ int32_t QCamera3YUVChannel::handleOfflinePpCallback(uint32_t resultFrameNumber,
         ALOGI("%s: Request of frame number %d is reprocessing",
                 __func__, resultFrameNumber);
         return NO_ERROR;
-    }
-
-    // Return pending buffer callbacks
-    while (ppInfo != mOfflinePpInfoList.begin()) {
-        List<PpInfo>::iterator pending = mOfflinePpInfoList.begin();
-
-        // Call streamCbRoutine for cached callbacks
-        if (!(pending->callback_buffer)) {
-            ALOGE("%s: Fatal: cached callback info  is NULL.", __func__);
-            return BAD_VALUE;
-        }
-
-        pendingCbs.push_back(pending->callback_buffer);
-
-        mOfflinePpInfoList.erase(pending);
+    } else if (ppInfo != mOfflinePpInfoList.begin()) {
+        ALOGE("%s: callback for frame number %d should be head of list",
+                __func__, resultFrameNumber);
+        return BAD_VALUE;
     }
 
     if (ppInfo->offlinePpFlag) {
@@ -2695,7 +2695,17 @@ int32_t QCamera3YUVChannel::handleOfflinePpCallback(uint32_t resultFrameNumber,
             return BAD_VALUE;
         }
         mFreeHeapBufferList.push_back(bufferIndex);
-        mOfflinePpInfoList.erase(ppInfo);
+        ppInfo = mOfflinePpInfoList.erase(ppInfo);
+
+        // Return pending buffer callbacks
+        while (ppInfo != mOfflinePpInfoList.end() &&
+                !ppInfo->offlinePpFlag && ppInfo->callback_buffer) {
+
+            // Call stream callbacks for cached buffers
+            pendingCbs.push_back(ppInfo->callback_buffer);
+
+            ppInfo = mOfflinePpInfoList.erase(ppInfo);
+        }
 
     } else {
         ALOGE("%s: Fatal: request of frame number %d doesn't need"
@@ -3205,14 +3215,14 @@ QCamera3StreamMem* QCamera3PicChannel::getStreamBufs(uint32_t len)
 {
     int rc = 0;
 
-    mYuvMemory = new QCamera3StreamMem(mCamera3Stream->max_buffers);
+    mYuvMemory = new QCamera3StreamMem(mCamera3Stream->max_buffers, false);
     if (!mYuvMemory) {
         ALOGE("%s: unable to create metadata memory", __func__);
         return NULL;
     }
 
     //Queue YUV buffers in the beginning mQueueAll = true
-    rc = mYuvMemory->allocate(mCamera3Stream->max_buffers, len, false);
+    rc = mYuvMemory->allocateAll(len);
     if (rc < 0) {
         ALOGE("%s: unable to allocate metadata memory", __func__);
         delete mYuvMemory;
@@ -3532,8 +3542,6 @@ void QCamera3ReprocessChannel::streamCbRoutine(mm_camera_super_buf_t *super_fram
         }
         obj->reprocessCbRoutine(resultBuffer, resultFrameNumber);
 
-        // TODO: Do we need to deallcoate mOfflineMetaMemory and
-        // mOfflineMemory for framework reprocessing?
         obj->m_postprocessor.releaseOfflineBuffers();
         qcamera_hal3_pp_data_t *pp_job = obj->m_postprocessor.dequeuePPJob(resultFrameNumber);
         if (pp_job != NULL) {
@@ -3579,7 +3587,7 @@ QCamera3StreamMem* QCamera3ReprocessChannel::getStreamBufs(uint32_t len)
             ALOGE("%s: unable to create reproc memory", __func__);
             return NULL;
         }
-        rc = mMemory->allocate(mNumBuffers, len, true);
+        rc = mMemory->allocateAll(len);
         if (rc < 0) {
             ALOGE("%s: unable to allocate reproc memory", __func__);
             delete mMemory;
@@ -4293,7 +4301,7 @@ QCamera3StreamMem* QCamera3SupportChannel::getStreamBufs(uint32_t len)
         ALOGE("%s: unable to create heap memory", __func__);
         return NULL;
     }
-    rc = mMemory->allocate(MIN_STREAMING_BUFFER_NUM, len, true);
+    rc = mMemory->allocateAll(len);
     if (rc < 0) {
         ALOGE("%s: unable to allocate heap memory", __func__);
         delete mMemory;
