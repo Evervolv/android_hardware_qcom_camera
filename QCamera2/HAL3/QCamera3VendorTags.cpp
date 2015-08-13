@@ -103,7 +103,7 @@ vendor_tag_info qcamera3_av_timer[QCAMERA3_AV_TIMER_END -
 
 vendor_tag_info qcamera3_sensor_meta_data[QCAMERA3_SENSOR_META_DATA_END -
                                   QCAMERA3_SENSOR_META_DATA_START] = {
-   {"dynamic_black_level_pattern", TYPE_INT32 }
+   {"dynamic_black_level_pattern", TYPE_FLOAT }
 };
 
 vendor_tag_info_t qcamera3_temporal_denoise[QCAMERA3_TEMPORAL_DENOISE_END -

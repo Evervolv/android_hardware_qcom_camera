@@ -1800,6 +1800,10 @@ void *QCamera3PostProcessor::dataProcessRoutine(void *data)
                                 pme->m_parent->metadataBufDone(meta_buffer);
                                 free(meta_buffer);
                             }
+                        } else {
+                            if (pp_buffer != NULL) {
+                                free(pp_buffer);
+                            }
                         }
                     } else {
                         pthread_mutex_unlock(&pme->mReprocJobLock);
