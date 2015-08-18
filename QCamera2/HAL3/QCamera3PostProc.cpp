@@ -216,7 +216,7 @@ int32_t QCamera3PostProcessor::start(const reprocess_config_t &config)
     int32_t rc = NO_ERROR;
     QCamera3HardwareInterface* hal_obj = (QCamera3HardwareInterface*)m_parent->mUserData;
 
-    if (hal_obj->needReprocess(mPostProcMask) || config.src_channel != m_parent) {
+    if (config.reprocess_type != REPROCESS_TYPE_NONE) {
         if (m_pReprocChannel != NULL) {
             m_pReprocChannel->stop();
             delete m_pReprocChannel;
@@ -569,8 +569,7 @@ int32_t QCamera3PostProcessor::processData(mm_camera_super_buf_t *input,
 int32_t QCamera3PostProcessor::processData(qcamera_fwk_input_pp_data_t *frame)
 {
     QCamera3HardwareInterface* hal_obj = (QCamera3HardwareInterface*)m_parent->mUserData;
-    if (hal_obj->needReprocess(mPostProcMask) ||
-            frame->reproc_config.src_channel != m_parent) {
+    if (frame->reproc_config.reprocess_type != REPROCESS_TYPE_NONE) {
         pthread_mutex_lock(&mReprocJobLock);
         // enqueu to post proc input queue
         m_inputFWKPPQ.enqueue((void *)frame);
@@ -1693,7 +1692,7 @@ void *QCamera3PostProcessor::dataProcessRoutine(void *data)
                                 memset(pp_job, 0, sizeof(qcamera_hal3_pp_data_t));
                                 pp_job->jpeg_settings = jpeg_settings;
                                 if (pme->m_pReprocChannel != NULL) {
-                                    if (NO_ERROR != pme->m_pReprocChannel->extractCrop(fwk_frame)) {
+                                    if (NO_ERROR != pme->m_pReprocChannel->overrideFwkMetadata(fwk_frame)) {
                                         ALOGE("%s: Failed to extract output crop", __func__);
                                     }
                                     // add into ongoing PP job Q
@@ -1762,7 +1761,7 @@ void *QCamera3PostProcessor::dataProcessRoutine(void *data)
                                 qcamera_fwk_input_pp_data_t fwk_frame;
                                 memset(&fwk_frame, 0, sizeof(qcamera_fwk_input_pp_data_t));
                                 fwk_frame.frameNumber = pp_buffer->frameNumber;
-                                ret = pme->m_pReprocChannel->extractFrameCropAndRotation(
+                                ret = pme->m_pReprocChannel->overrideMetadata(
                                         pp_buffer, meta_buffer_arg,
                                         pp_job->jpeg_settings,
                                         fwk_frame);

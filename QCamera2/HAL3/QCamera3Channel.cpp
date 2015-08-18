@@ -2912,12 +2912,14 @@ QCamera3PicChannel::QCamera3PicChannel(uint32_t cam_handle,
                     camera3_stream_t *stream,
                     uint32_t postprocess_mask,
                     bool is4KVideo,
+                    bool isInputStreamConfigured,
                     QCamera3Channel *metadataChannel,
                     uint32_t numBuffers) :
                         QCamera3ProcessingChannel(cam_handle, cam_ops, cb_routine,
                                 paddingInfo, userData, stream, CAM_STREAM_TYPE_SNAPSHOT,
                                 postprocess_mask, metadataChannel, numBuffers),
                         mNumSnapshotBufs(0),
+                        mInputBufferHint(isInputStreamConfigured),
                         mYuvMemory(NULL)
 {
     QCamera3HardwareInterface* hal_obj = (QCamera3HardwareInterface*)mUserData;
@@ -3342,7 +3344,16 @@ void QCamera3PicChannel::overrideYuvSize(uint32_t width, uint32_t height)
  *==========================================================================*/
 reprocess_type_t QCamera3PicChannel::getReprocessType()
 {
-    return REPROCESS_TYPE_JPEG;
+    /* a picture channel could either use the postprocessor for reprocess+jpeg
+       or only for reprocess */
+    reprocess_type_t expectedReprocess;
+    if (mPostProcMask == CAM_QCOM_FEATURE_NONE || mInputBufferHint) {
+        expectedReprocess = REPROCESS_TYPE_JPEG;
+    } else {
+        expectedReprocess = REPROCESS_TYPE_NONE;
+    }
+    CDBG_HIGH("%s: expectedReprocess from Pic Channel is %d", __func__, expectedReprocess);
+    return expectedReprocess;
 }
 
 /* Reprocess Channel methods */
@@ -3767,9 +3778,9 @@ int32_t QCamera3ReprocessChannel::unmapOfflineBuffers(bool all)
 }
 
 /*===========================================================================
- * FUNCTION   : extractFrameAndRotation
+ * FUNCTION   : overrideMetadata
  *
- * DESCRIPTION: Extract output rotation and frame data if present
+ * DESCRIPTION: Override metadata entry such as rotation, crop, and CDS info.
  *
  * PARAMETERS :
  *   @frame     : input frame from source stream
@@ -3781,7 +3792,7 @@ int32_t QCamera3ReprocessChannel::unmapOfflineBuffers(bool all)
  *              NO_ERROR  -- success
  *              none-zero failure code
  *==========================================================================*/
-int32_t QCamera3ReprocessChannel::extractFrameCropAndRotation(qcamera_hal3_pp_buffer_t *pp_buffer,
+int32_t QCamera3ReprocessChannel::overrideMetadata(qcamera_hal3_pp_buffer_t *pp_buffer,
         mm_camera_buf_def_t *meta_buffer, jpeg_settings_t *jpeg_settings,
         qcamera_fwk_input_pp_data_t &fwk_frame)
 {
@@ -3861,6 +3872,28 @@ int32_t QCamera3ReprocessChannel::extractFrameCropAndRotation(qcamera_hal3_pp_bu
                 }
             }
 
+            IF_META_AVAILABLE(cam_cds_data_t, cdsInfo, CAM_INTF_META_CDS_DATA, meta) {
+                uint8_t cnt = cdsInfo->num_of_streams;
+                if (cnt <= MAX_NUM_STREAMS) {
+                    cam_stream_cds_info_t repro_cds_info;
+                    memset(&repro_cds_info, 0, sizeof(repro_cds_info));
+                    repro_cds_info.stream_id = mStreams[0]->getMyServerID();
+                    for (size_t i = 0; i < cnt; i++) {
+                        if (cdsInfo->cds_info[i].stream_id ==
+                                pSrcStream->getMyServerID()) {
+                            repro_cds_info.cds_enable =
+                                    cdsInfo->cds_info[i].cds_enable;
+                            break;
+                        }
+                    }
+                    cdsInfo->num_of_streams = 1;
+                    cdsInfo->cds_info[0] = repro_cds_info;
+                } else {
+                    ALOGE("%s: No space to add reprocess stream cds information",
+                            __func__);
+                }
+            }
+
             fwk_frame.input_buffer = *frame->bufs[i];
             fwk_frame.metadata_buffer = *meta_buffer;
             fwk_frame.output_buffer = pp_buffer->output;
@@ -3875,9 +3908,9 @@ int32_t QCamera3ReprocessChannel::extractFrameCropAndRotation(qcamera_hal3_pp_bu
 }
 
 /*===========================================================================
-* FUNCTION : extractCrop
+* FUNCTION : overrideFwkMetadata
 *
-* DESCRIPTION: Extract framework output crop if present
+* DESCRIPTION: Override frameworks metadata such as crop, and CDS data.
 *
 * PARAMETERS :
 * @frame : input frame for reprocessing
@@ -3886,7 +3919,8 @@ int32_t QCamera3ReprocessChannel::extractFrameCropAndRotation(qcamera_hal3_pp_bu
 * NO_ERROR -- success
 * none-zero failure code
 *==========================================================================*/
-int32_t QCamera3ReprocessChannel::extractCrop(qcamera_fwk_input_pp_data_t *frame)
+int32_t QCamera3ReprocessChannel::overrideFwkMetadata(
+        qcamera_fwk_input_pp_data_t *frame)
 {
     if (NULL == frame) {
         ALOGE("%s: Incorrect input frame", __func__);
@@ -3933,6 +3967,16 @@ int32_t QCamera3ReprocessChannel::extractCrop(qcamera_fwk_input_pp_data_t *frame
         }
     } else {
         CDBG_HIGH("%s: Crop data not present", __func__);
+    }
+
+    IF_META_AVAILABLE(cam_cds_data_t, cdsInfo, CAM_INTF_META_CDS_DATA, meta) {
+        if (1 == cdsInfo->num_of_streams) {
+            cdsInfo->cds_info[0].stream_id = mStreams[0]->getMyServerID();
+        } else {
+            ALOGE("%s: Incorrect number of offline cds info entries %d",
+                    __func__, cdsInfo->num_of_streams);
+            return BAD_VALUE;
+        }
     }
 
     return NO_ERROR;

@@ -1158,6 +1158,17 @@ typedef struct {
     cam_stream_crop_info_t crop_info[MAX_NUM_STREAMS];
 } cam_crop_data_t;
 
+typedef struct {
+    uint32_t stream_id;
+    uint32_t cds_enable;
+} cam_stream_cds_info_t;
+
+typedef struct {
+    uint8_t session_cds_enable;
+    uint8_t num_of_streams;
+    cam_stream_cds_info_t cds_info[MAX_NUM_STREAMS];
+} cam_cds_data_t;
+
 typedef enum {
     DO_NOT_NEED_FUTURE_FRAME,
     NEED_FUTURE_FRAME,
@@ -1745,6 +1756,7 @@ typedef enum {
     CAM_INTF_META_LDAF_EXIF,
     CAM_INTF_META_BLACK_LEVEL_SOURCE_PATTERN,
     CAM_INTF_META_BLACK_LEVEL_APPLIED_PATTERN,
+    CAM_INTF_META_CDS_DATA,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
@@ -1961,7 +1973,8 @@ typedef struct {
 #define CAM_QCOM_FEATURE_LLVD           (1U<<20)
 #define CAM_QCOM_FEATURE_DIS20          (1U<<21)
 #define CAM_QCOM_FEATURE_STILLMORE      (1U<<22)
-#define CAM_QCOM_FEATURE_MAX            (1U<<23)
+#define CAM_QCOM_FEATURE_CDS            (1U<<23)
+#define CAM_QCOM_FEATURE_MAX            (1U<<24)
 #define CAM_QCOM_FEATURE_PP_SUPERSET    (CAM_QCOM_FEATURE_DENOISE2D|CAM_QCOM_FEATURE_CROP|\
                                          CAM_QCOM_FEATURE_ROTATION|CAM_QCOM_FEATURE_SHARPNESS|\
                                          CAM_QCOM_FEATURE_SCALE|CAM_QCOM_FEATURE_CAC)
