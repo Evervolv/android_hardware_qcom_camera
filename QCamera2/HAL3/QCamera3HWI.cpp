@@ -4482,7 +4482,7 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                 }
             }
         } else {
-            ALOGE("%s: Invalid stream count %d in CDS_DATA", __func__, cnt);
+            CDBG_HIGH("%s: Invalid stream count %d in CDS_DATA", __func__, cnt);
         }
         camMetadata.update(QCAMERA3_CDS_INFO,
                 (uint8_t *)&cdsDataOverride,
