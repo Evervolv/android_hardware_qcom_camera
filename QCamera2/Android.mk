@@ -8,6 +8,7 @@ LOCAL_SRC_FILES := \
         util/QCameraCmdThread.cpp \
         util/QCameraQueue.cpp \
         util/QCameraFlash.cpp \
+        util/QCameraPerf.cpp \
         QCamera2Hal.cpp \
         QCamera2Factory.cpp
 
