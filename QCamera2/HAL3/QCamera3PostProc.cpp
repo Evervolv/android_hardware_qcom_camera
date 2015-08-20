@@ -49,7 +49,7 @@ static const char ExifUndefinedPrefix[] =
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };   // "\0\0\0\0\0\0\0\0"
 
 #define EXIF_ASCII_PREFIX_SIZE           8   //(sizeof(ExifAsciiPrefix))
-#define FOCAL_LENGTH_DECIMAL_PRECISION   100
+#define FOCAL_LENGTH_DECIMAL_PRECISION   1000
 
 /*===========================================================================
  * FUNCTION   : QCamera3PostProcessor
@@ -1373,8 +1373,9 @@ int32_t QCamera3PostProcessor::encodeData(qcamera_hal3_jpeg_data_t *jpeg_job_dat
 
     cam_dimension_t dst_dim;
     memset(&dst_dim, 0, sizeof(cam_dimension_t));
-    if (srcChannel->getStreamByIndex(0)) {
-       srcChannel->getStreamByIndex(0)->getFrameDimension(dst_dim);
+    if (NO_ERROR != m_parent->getStreamSize(dst_dim)) {
+        ALOGE("%s: Failed to get size of the JPEG stream", __func__);
+        return UNKNOWN_ERROR;
     }
 
     needJpegRotation = hal_obj->needJpegRotation();
