@@ -2902,7 +2902,8 @@ int QCamera3HardwareInterface::processCaptureRequest(
         //Disable CDS for HFR mode and if mPprocBypass = true.
         //CDS is a session parameter in the backend/ISP, so need to be set/reset
         //after every configure_stream
-        if(CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE == mOpMode) {
+        if((CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE == mOpMode) ||
+                (DIS_ENABLE == vsMode)) {
             int32_t cds = CAM_CDS_MODE_OFF;
             if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
                     CAM_INTF_PARM_CDS_MODE, cds))
@@ -4482,7 +4483,7 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                 }
             }
         } else {
-            CDBG_HIGH("%s: Invalid stream count %d in CDS_DATA", __func__, cnt);
+            CDBG("%s: Invalid stream count %d in CDS_DATA", __func__, cnt);
         }
         camMetadata.update(QCAMERA3_CDS_INFO,
                 (uint8_t *)&cdsDataOverride,
@@ -7876,6 +7877,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
     // CDS for non-HFR mode
     if ((mOpMode != CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE) &&
+            !(m_bEisEnable && m_bEisSupportedSize) &&
             frame_settings.exists(QCAMERA3_CDS_MODE)) {
         int32_t *fwk_cds = frame_settings.find(QCAMERA3_CDS_MODE).data.i32;
         if ((CAM_CDS_MODE_MAX <= *fwk_cds) || (0 > *fwk_cds)) {
