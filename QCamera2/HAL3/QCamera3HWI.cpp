@@ -3962,6 +3962,18 @@ QCamera3HardwareInterface::translateFromHalMetadata(
           blackLevelAppliedPattern->cam_black_level[2],
           blackLevelAppliedPattern->cam_black_level[3]);
         camMetadata.update(QCAMERA3_SENSOR_DYNAMIC_BLACK_LEVEL_PATTERN, fwk_blackLevelInd, 4);
+        camMetadata.update(NEXUS_EXPERIMENTAL_2015_SENSOR_DYNAMIC_BLACK_LEVEL, fwk_blackLevelInd, 4);
+    }
+
+
+    if (gCamCapability[mCameraId]->optical_black_region_count != 0 &&
+        gCamCapability[mCameraId]->optical_black_region_count <= MAX_OPTICAL_BLACK_REGIONS) {
+        int32_t opticalBlackRegions[MAX_OPTICAL_BLACK_REGIONS * 4];
+        for (size_t i = 0; i < gCamCapability[mCameraId]->optical_black_region_count * 4; i++) {
+            opticalBlackRegions[i] = gCamCapability[mCameraId]->optical_black_regions[i];
+        }
+        camMetadata.update(NEXUS_EXPERIMENTAL_2015_SENSOR_INFO_OPTICALLY_SHIELDED_REGIONS,
+                opticalBlackRegions, gCamCapability[mCameraId]->optical_black_region_count * 4);
     }
 
     IF_META_AVAILABLE(cam_crop_region_t, hScalerCropRegion,
@@ -4379,11 +4391,7 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     // Reprocess crop data
     IF_META_AVAILABLE(cam_crop_data_t, crop_data, CAM_INTF_META_CROP_DATA, metadata) {
         uint8_t cnt = crop_data->num_of_streams;
-        if (pprocDone) {
-            // HAL already does internal reprocessing, either via reprocessing before
-            // JPEG encoding, or offline postprocessing for pproc bypass case.
-            CDBG("%s: Internal offline postprocessing was done, no need for further crop", __func__);
-        } else if ( (0 >= cnt) || (cnt > MAX_NUM_STREAMS)) {
+        if ( (0 >= cnt) || (cnt > MAX_NUM_STREAMS)) {
             // mm-qcamera-daemon only posts crop_data for streams
             // not linked to pproc. So no valid crop metadata is not
             // necessarily an error case.
@@ -4403,10 +4411,20 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                     int32_t streams_found = 0;
                     for (size_t i = 0; i < cnt; i++) {
                         if (crop_data->crop_info[i].stream_id == reproc_stream_id) {
-                            crop[0] = crop_data->crop_info[i].crop.left;
-                            crop[1] = crop_data->crop_info[i].crop.top;
-                            crop[2] = crop_data->crop_info[i].crop.width;
-                            crop[3] = crop_data->crop_info[i].crop.height;
+                            if (pprocDone) {
+                                // HAL already does internal reprocessing,
+                                // either via reprocessing before JPEG encoding,
+                                // or offline postprocessing for pproc bypass case.
+                                crop[0] = 0;
+                                crop[1] = 0;
+                                crop[2] = mInputStreamInfo.dim.width;
+                                crop[3] = mInputStreamInfo.dim.height;
+                            } else {
+                                crop[0] = crop_data->crop_info[i].crop.left;
+                                crop[1] = crop_data->crop_info[i].crop.top;
+                                crop[2] = crop_data->crop_info[i].crop.width;
+                                crop[3] = crop_data->crop_info[i].crop.height;
+                            }
                             roi_map.add(crop_data->crop_info[i].roi_map.left);
                             roi_map.add(crop_data->crop_info[i].roi_map.top);
                             roi_map.add(crop_data->crop_info[i].roi_map.width);
@@ -4414,10 +4432,7 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                             streams_found++;
                             CDBG("%s: Adding reprocess crop data for stream %dx%d, %dx%d",
                                     __func__,
-                                    crop_data->crop_info[i].crop.left,
-                                    crop_data->crop_info[i].crop.top,
-                                    crop_data->crop_info[i].crop.width,
-                                    crop_data->crop_info[i].crop.height);
+                                    crop[0], crop[1], crop[2], crop[3]);
                             CDBG("%s: Adding reprocess crop roi map for stream %dx%d, %dx%d",
                                     __func__,
                                     crop_data->crop_info[i].roi_map.left,
