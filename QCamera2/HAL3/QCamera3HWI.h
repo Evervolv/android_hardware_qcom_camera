@@ -246,8 +246,7 @@ private:
             const camera3_capture_request_t *request);
 
     bool isSupportChannelNeeded(camera3_stream_configuration_t *streamList,
-            cam_stream_size_info_t stream_config_info,
-            uint32_t fullFeatureMask);
+            cam_stream_size_info_t stream_config_info);
     int32_t setMobicat();
 
     int32_t setHalFpsRange(const CameraMetadata &settings,
@@ -311,6 +310,8 @@ private:
     uint8_t m_MobicatMask;
     uint8_t mSupportedFaceDetectMode;
     uint8_t m_bTnrEnabled;
+    uint8_t m_bTnrPreview;
+    uint8_t m_bTnrVideo;
 
     /* Data structure to store pending request */
     typedef struct {
