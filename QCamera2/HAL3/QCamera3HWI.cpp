@@ -388,11 +388,11 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
     memset(mLdafCalib, 0, sizeof(mLdafCalib));
 
     memset(prop, 0, sizeof(prop));
-    property_get("persist.camera.tnr.preview", prop, "1");
+    property_get("persist.camera.tnr.preview", prop, "0");
     m_bTnrPreview = (uint8_t)atoi(prop);
 
     memset(prop, 0, sizeof(prop));
-    property_get("persist.camera.tnr.video", prop, "1");
+    property_get("persist.camera.tnr.video", prop, "0");
     m_bTnrVideo = (uint8_t)atoi(prop);
 }
 
@@ -1196,10 +1196,10 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         if ((HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED == newStream->format) &&
                 (newStream->usage & private_handle_t::PRIV_FLAGS_VIDEO_ENCODER)) {
             m_bIsVideo = true;
+            videoWidth = newStream->width;
+            videoHeight = newStream->height;
             if ((VIDEO_4K_WIDTH <= newStream->width) &&
                     (VIDEO_4K_HEIGHT <= newStream->height)) {
-                videoWidth = newStream->width;
-                videoHeight = newStream->height;
                 m_bIs4KVideo = true;
             }
             m_bEisSupportedSize = (newStream->width <= maxEisWidth) &&
@@ -1238,7 +1238,15 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                 processedStreamCnt++;
                 if (isOnEncoder(maxViewfinderSize, newStream->width,
                         newStream->height)) {
-                    commonFeatureMask |= CAM_QCOM_FEATURE_NONE;
+                    // If Yuv888 size is not greater than 4K, set feature mask
+                    // to SUPERSET so that it support concurrent request on
+                    // YUV and JPEG.
+                    if (newStream->width <= VIDEO_4K_WIDTH &&
+                            newStream->height <= VIDEO_4K_HEIGHT) {
+                        commonFeatureMask |= CAM_QCOM_FEATURE_PP_SUPERSET_HAL3;
+                    } else {
+                        commonFeatureMask |= CAM_QCOM_FEATURE_NONE;
+                    }
                     numStreamsOnEncoder++;
                     numYuv888OnEncoder++;
                     largeYuv888Size.width = newStream->width;
@@ -1308,11 +1316,11 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     // If jpeg stream is available, and a YUV 888 stream is on Encoder path, and
     // the YUV stream's size is greater or equal to the JPEG size, set common
     // postprocess mask to NONE, so that we can take advantage of postproc bypass.
-    if (numYuv888OnEncoder && isJpeg &&
-            largeYuv888Size.width >= jpegSize.width &&
-            largeYuv888Size.height >= jpegSize.height) {
+    if (numYuv888OnEncoder && isOnEncoder(maxViewfinderSize,
+            jpegSize.width, jpegSize.height) &&
+            largeYuv888Size.width > jpegSize.width &&
+            largeYuv888Size.height > jpegSize.height) {
         bYuv888OverrideJpeg = true;
-        commonFeatureMask = CAM_QCOM_FEATURE_NONE;
     }
 
     rc = validateStreamDimensions(streamList);
@@ -4380,6 +4388,25 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                 hAeRegions->rect.height);
     }
 
+    IF_META_AVAILABLE(uint32_t, afState, CAM_INTF_META_AF_STATE, metadata) {
+        uint8_t fwk_afState = (uint8_t) *afState;
+        camMetadata.update(ANDROID_CONTROL_AF_STATE, &fwk_afState, 1);
+        CDBG("%s: urgent Metadata : ANDROID_CONTROL_AF_STATE %u", __func__, *afState);
+    }
+
+    IF_META_AVAILABLE(float, focusDistance, CAM_INTF_META_LENS_FOCUS_DISTANCE, metadata) {
+        camMetadata.update(ANDROID_LENS_FOCUS_DISTANCE , focusDistance, 1);
+    }
+
+    IF_META_AVAILABLE(float, focusRange, CAM_INTF_META_LENS_FOCUS_RANGE, metadata) {
+        camMetadata.update(ANDROID_LENS_FOCUS_RANGE , focusRange, 2);
+    }
+
+    IF_META_AVAILABLE(cam_af_lens_state_t, lensState, CAM_INTF_META_LENS_STATE, metadata) {
+        uint8_t fwk_lensState = *lensState;
+        camMetadata.update(ANDROID_LENS_STATE , &fwk_lensState, 1);
+    }
+
     IF_META_AVAILABLE(cam_area_t, hAfRegions, CAM_INTF_META_AF_ROI, metadata) {
         /*af regions*/
         int32_t afRegions[REGIONS_TUPLE_COUNT];
@@ -4648,19 +4675,6 @@ QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
     CameraMetadata camMetadata;
     camera_metadata_t *resultMetadata;
 
-    IF_META_AVAILABLE(uint32_t, afState, CAM_INTF_META_AF_STATE, metadata) {
-        uint8_t fwk_afState = (uint8_t) *afState;
-        camMetadata.update(ANDROID_CONTROL_AF_STATE, &fwk_afState, 1);
-        CDBG("%s: urgent Metadata : ANDROID_CONTROL_AF_STATE %u", __func__, *afState);
-    }
-
-    IF_META_AVAILABLE(float, focusDistance, CAM_INTF_META_LENS_FOCUS_DISTANCE, metadata) {
-        camMetadata.update(ANDROID_LENS_FOCUS_DISTANCE , focusDistance, 1);
-    }
-
-    IF_META_AVAILABLE(float, focusRange, CAM_INTF_META_LENS_FOCUS_RANGE, metadata) {
-        camMetadata.update(ANDROID_LENS_FOCUS_RANGE , focusRange, 2);
-    }
 
     IF_META_AVAILABLE(uint32_t, whiteBalanceState, CAM_INTF_META_AWB_STATE, metadata) {
         uint8_t fwk_whiteBalanceState = (uint8_t) *whiteBalanceState;
@@ -4755,11 +4769,6 @@ QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
         ALOGE("%s: Not enough info to deduce ANDROID_CONTROL_AE_MODE redeye:%d, "
               "flashMode:%d, aeMode:%u!!!",
                 __func__, redeye, flashMode, aeMode);
-    }
-
-    IF_META_AVAILABLE(cam_af_lens_state_t, lensState, CAM_INTF_META_LENS_STATE, metadata) {
-        uint8_t fwk_lensState = *lensState;
-        camMetadata.update(ANDROID_LENS_STATE , &fwk_lensState, 1);
     }
 
     resultMetadata = camMetadata.release();
