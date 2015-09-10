@@ -316,7 +316,7 @@ private:
     uint8_t m_bTnrEnabled;
     uint8_t m_bTnrPreview;
     uint8_t m_bTnrVideo;
-
+    cam_cds_mode_type_t m_CdsPreference;
     /* Data structure to store pending request */
     typedef struct {
         camera3_stream_t *stream;

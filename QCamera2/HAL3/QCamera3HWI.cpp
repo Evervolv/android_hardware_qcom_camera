@@ -7211,6 +7211,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     if (CAM_CDS_MODE_MAX == cds_mode) {
         cds_mode = CAM_CDS_MODE_AUTO;
     }
+    m_CdsPreference = cds_mode;
 
     /* Disabling CDS in templates which have TNR enabled*/
     if (tnr_enable)
@@ -8138,9 +8139,14 @@ int QCamera3HardwareInterface::translateToHalMetadata
         }
     }
 
-    // CDS for non-HFR non-video mode
-    if ((mOpMode != CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE) &&
-            !(m_bIsVideo) && frame_settings.exists(QCAMERA3_CDS_MODE)) {
+    if (m_bIs4KVideo) {
+        /* Override needed for Video template in case of 4K video */
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata,
+                CAM_INTF_PARM_CDS_MODE, m_CdsPreference)) {
+            rc = BAD_VALUE;
+        }
+    } else if ((mOpMode != CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE) &&
+            frame_settings.exists(QCAMERA3_CDS_MODE)) {
         int32_t *fwk_cds = frame_settings.find(QCAMERA3_CDS_MODE).data.i32;
         if ((CAM_CDS_MODE_MAX <= *fwk_cds) || (0 > *fwk_cds)) {
             ALOGE("%s: Invalid CDS mode %d!", __func__, *fwk_cds);
