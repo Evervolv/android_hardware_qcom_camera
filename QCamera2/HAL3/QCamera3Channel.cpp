@@ -3135,6 +3135,7 @@ void QCamera3PicChannel::putStreamBufs()
     mYuvMemory->deallocate();
     delete mYuvMemory;
     mYuvMemory = NULL;
+    mFreeBufferList.clear();
 }
 
 int32_t QCamera3PicChannel::queueJpegSetting(uint32_t index, metadata_buffer_t *metadata)
@@ -3509,6 +3510,7 @@ void QCamera3ReprocessChannel::putStreamBufs()
        mMemory->deallocate();
        delete mMemory;
        mMemory = NULL;
+       mFreeBufferList.clear();
    } else {
        mGrallocMemory.unregisterBuffers();
    }
