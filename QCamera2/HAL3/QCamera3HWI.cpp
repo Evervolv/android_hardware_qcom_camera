@@ -3687,6 +3687,12 @@ int QCamera3HardwareInterface::flush()
 
     CDBG("%s: Unblocking Process Capture Request", __func__);
     pthread_mutex_lock(&mMutex);
+
+    if (mFirstRequest) {
+        pthread_mutex_unlock(&mMutex);
+        return NO_ERROR;
+    }
+
     mFlush = true;
     pthread_mutex_unlock(&mMutex);
 
