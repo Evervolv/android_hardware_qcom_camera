@@ -2424,6 +2424,8 @@ QCamera3Exif *QCamera3PostProcessor::getExifData(metadata_buffer_t *metadata,
         ALOGE("%s: no metadata provided ", __func__);
     }
 
+    bool output_image_desc = true;
+
 #ifdef ENABLE_MODEL_INFO_EXIF
 
     char value[PROPERTY_VALUE_MAX];
@@ -2448,9 +2450,11 @@ QCamera3Exif *QCamera3PostProcessor::getExifData(metadata_buffer_t *metadata,
         ALOGE("%s: getExifSoftware failed", __func__);
     }
 
+    // Production sw should not enable image description field output
+    output_image_desc = false;
 #endif
 
-    if (jpeg_settings->image_desc_valid) {
+    if (jpeg_settings->image_desc_valid && output_image_desc) {
         if (exif->addEntry(EXIFTAGID_IMAGE_DESCRIPTION, EXIF_ASCII,
                 strlen(jpeg_settings->image_desc)+1,
                 (void *)jpeg_settings->image_desc)) {
