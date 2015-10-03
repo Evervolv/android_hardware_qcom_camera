@@ -1892,6 +1892,24 @@ void QCamera3RawChannel::convertMipiToRaw16(mm_camera_buf_def_t *frame)
         uint32_t raw16_stride = ((uint32_t)dim.width + 15U) & ~15U;
         uint16_t* raw16_buffer = (uint16_t *)frame->buffer;
 
+        // Some raw processing may be needed prior to conversion.
+        static bool raw_proc_lib_load_attempted = false;
+        static void *raw_proc_lib = NULL;
+        static void *raw_proc_fn = NULL;
+        if (! raw_proc_lib && ! raw_proc_lib_load_attempted) {
+            raw_proc_lib_load_attempted = true;
+            raw_proc_lib = dlopen("libgoog_rownr.so", RTLD_NOW);
+            if (raw_proc_lib) {
+                *(void **)&raw_proc_fn = dlsym(raw_proc_lib, "rownr_process_bayer10");
+            }
+        }
+        if (raw_proc_fn) {
+            int (*raw_proc)(unsigned char*,int,int,int,int) =
+                      (int (*)(unsigned char*,int,int,int,int))(raw_proc_fn);
+            raw_proc((unsigned char*)(frame->buffer), 0, dim.width, dim.height,
+                       offset.mp[0].stride_in_bytes);
+        }
+
         // In-place format conversion.
         // Raw16 format always occupy more memory than opaque raw10.
         // Convert to Raw16 by iterating through all pixels from bottom-right
