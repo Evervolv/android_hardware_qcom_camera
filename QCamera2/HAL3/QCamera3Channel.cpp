@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include <stdio.h>
 #include <string.h>
+#include <linux/videodev2.h>
 #include <hardware/camera3.h>
 #include <system/camera_metadata.h>
 #include <gralloc_priv.h>
@@ -55,6 +56,7 @@ namespace qcamera {
 #define DEFAULT_FORMAT  CAM_FORMAT_YUV_420_NV21
 #define CALLBACK_FORMAT CAM_FORMAT_YUV_420_NV21
 #define RAW_FORMAT      CAM_FORMAT_BAYER_MIPI_RAW_10BPP_GBRG
+#define IS_BUFFER_ERROR(x) (((x) & V4L2_QCOM_BUF_DATA_CORRUPT) == V4L2_QCOM_BUF_DATA_CORRUPT)
 
 /*===========================================================================
  * FUNCTION   : QCamera3Channel
@@ -609,7 +611,13 @@ void QCamera3ProcessingChannel::streamCbRoutine(mm_camera_super_buf_t *super_fra
 
     result.stream = mCamera3Stream;
     result.buffer = resultBuffer;
-    result.status = CAMERA3_BUFFER_STATUS_OK;
+    if (IS_BUFFER_ERROR(super_frame->bufs[0]->flags)) {
+        result.status = CAMERA3_BUFFER_STATUS_ERROR;
+        ALOGW("%s: %d CAMERA3_BUFFER_STATUS_ERROR for stream_type: %d",
+            __func__, __LINE__, mStreams[0]->getMyType());
+    } else {
+        result.status = CAMERA3_BUFFER_STATUS_OK;
+    }
     result.acquire_fence = -1;
     result.release_fence = -1;
     if(mPerFrameMapUnmapEnable) {
