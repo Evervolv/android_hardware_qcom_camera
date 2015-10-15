@@ -1099,7 +1099,9 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     for (List<stream_info_t*>::iterator it = mStreamInfo.begin();
             it != mStreamInfo.end(); it++) {
         QCamera3ProcessingChannel *channel = (QCamera3ProcessingChannel*)(*it)->stream->priv;
-        channel->stop();
+        if (channel) {
+          channel->stop();
+        }
         (*it)->status = INVALID;
     }
 
@@ -1145,6 +1147,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     cam_dimension_t largeYuv888Size = {0, 0};
     cam_dimension_t maxViewfinderSize = {0, 0};
     bool bJpegExceeds4K = false;
+    bool bJpegOnEncoder = false;
     bool bUseCommonFeatureMask = false;
     uint32_t commonFeatureMask = 0;
     maxViewfinderSize = gCamCapability[mCameraId]->max_viewfinder_size;
@@ -1242,6 +1245,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                         newStream->height)) {
                     commonFeatureMask |= CAM_QCOM_FEATURE_NONE;
                     numStreamsOnEncoder++;
+                    bJpegOnEncoder = true;
                 }
                 break;
             case HAL_PIXEL_FORMAT_RAW10:
@@ -1336,6 +1340,21 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     /* Check if BLOB size is greater than 4k in 4k recording case */
     if (m_bIs4KVideo && bJpegExceeds4K) {
         ALOGE("%s: HAL doesn't support Blob size greater than 4k in 4k recording",
+                __func__);
+        pthread_mutex_unlock(&mMutex);
+        return -EINVAL;
+    }
+
+    // When JPEG and preview streams share VFE output, CPP will not apply CAC2
+    // on JPEG stream. So disable such configurations to ensure CAC2 is applied.
+    // Don't fail for reprocess configurations. Also don't fail if bJpegExceeds4K
+    // is not true. Otherwise testMandatoryOutputCombinations will fail with following
+    // configurations:
+    //    {[PRIV, PREVIEW] [PRIV, RECORD] [JPEG, RECORD]}
+    //    {[PRIV, PREVIEW] [YUV, RECORD] [JPEG, RECORD]}
+    //    (These two configurations will not have CAC2 enabled even in HQ modes.)
+    if (!isZsl && bJpegOnEncoder && bJpegExceeds4K && bUseCommonFeatureMask) {
+        ALOGE("%s: Blob size greater than 4k and multiple streams are on encoder output",
                 __func__);
         pthread_mutex_unlock(&mMutex);
         return -EINVAL;
