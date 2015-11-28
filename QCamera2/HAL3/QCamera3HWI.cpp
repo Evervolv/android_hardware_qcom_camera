@@ -4169,6 +4169,15 @@ QCamera3HardwareInterface::translateFromHalMetadata(
           blackLevelAppliedPattern->cam_black_level[3]);
         camMetadata.update(QCAMERA3_SENSOR_DYNAMIC_BLACK_LEVEL_PATTERN, fwk_blackLevelInd, 4);
         camMetadata.update(NEXUS_EXPERIMENTAL_2015_SENSOR_DYNAMIC_BLACK_LEVEL, fwk_blackLevelInd, 4);
+
+        // Update the ANDROID_SENSOR_DYNAMIC_BLACK_LEVEL
+        // Need convert the internal 16 bit depth to sensor 10 bit sensor raw
+        // depth space.
+        fwk_blackLevelInd[0] /= 64.0;
+        fwk_blackLevelInd[1] /= 64.0;
+        fwk_blackLevelInd[2] /= 64.0;
+        fwk_blackLevelInd[3] /= 64.0;
+        camMetadata.update(ANDROID_SENSOR_DYNAMIC_BLACK_LEVEL, fwk_blackLevelInd, 4);
     }
 
 
@@ -5703,6 +5712,18 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     staticInfo.update(ANDROID_SENSOR_BLACK_LEVEL_PATTERN,
             gCamCapability[cameraId]->black_level_pattern, BLACK_LEVEL_PATTERN_CNT);
 
+    bool hasBlackRegions = false;
+    if (gCamCapability[cameraId]->optical_black_region_count != 0 &&
+            gCamCapability[cameraId]->optical_black_region_count <= MAX_OPTICAL_BLACK_REGIONS) {
+        int32_t opticalBlackRegions[MAX_OPTICAL_BLACK_REGIONS * 4];
+        for (size_t i = 0; i < gCamCapability[cameraId]->optical_black_region_count * 4; i++) {
+            opticalBlackRegions[i] = gCamCapability[cameraId]->optical_black_regions[i];
+        }
+        staticInfo.update(ANDROID_SENSOR_OPTICAL_BLACK_REGIONS,
+                opticalBlackRegions, gCamCapability[cameraId]->optical_black_region_count * 4);
+        hasBlackRegions = true;
+    }
+
     staticInfo.update(ANDROID_FLASH_INFO_CHARGE_DURATION,
                       &gCamCapability[cameraId]->flash_charge_duration, 1);
 
@@ -6455,7 +6476,9 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_SHARPNESS_MAP, ANDROID_STATISTICS_SHARPNESS_MAP_MODE,
        ANDROID_STATISTICS_PREDICTED_COLOR_GAINS, ANDROID_STATISTICS_PREDICTED_COLOR_TRANSFORM,
        ANDROID_STATISTICS_SCENE_FLICKER, ANDROID_STATISTICS_FACE_RECTANGLES,
-       ANDROID_STATISTICS_FACE_SCORES};
+       ANDROID_STATISTICS_FACE_SCORES,
+       ANDROID_SENSOR_DYNAMIC_BLACK_LEVEL,
+       ANDROID_SENSOR_DYNAMIC_WHITE_LEVEL};
     size_t result_keys_cnt =
             sizeof(result_keys_basic)/sizeof(result_keys_basic[0]);
 
@@ -6479,7 +6502,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_RESULT_KEYS,
             available_result_keys.array(), available_result_keys.size());
 
-    int32_t available_characteristics_keys[] = {ANDROID_CONTROL_AE_AVAILABLE_ANTIBANDING_MODES,
+    int32_t characteristics_keys_basic[] = {ANDROID_CONTROL_AE_AVAILABLE_ANTIBANDING_MODES,
        ANDROID_CONTROL_AE_AVAILABLE_MODES, ANDROID_CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES,
        ANDROID_CONTROL_AE_COMPENSATION_RANGE, ANDROID_CONTROL_AE_COMPENSATION_STEP,
        ANDROID_CONTROL_AF_AVAILABLE_MODES, ANDROID_CONTROL_AVAILABLE_EFFECTS,
@@ -6534,9 +6557,16 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_INFO_AVAILABLE_LENS_SHADING_MAP_MODES,
        ANDROID_SHADING_AVAILABLE_MODES,
        ANDROID_INFO_SUPPORTED_HARDWARE_LEVEL };
+
+    Vector<int32_t> available_characteristics_keys;
+    available_characteristics_keys.appendArray(characteristics_keys_basic,
+            sizeof(characteristics_keys_basic)/sizeof(int32_t));
+    if (hasBlackRegions) {
+        available_characteristics_keys.add(ANDROID_SENSOR_OPTICAL_BLACK_REGIONS);
+    }
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_CHARACTERISTICS_KEYS,
-                      available_characteristics_keys,
-                      sizeof(available_characteristics_keys)/sizeof(int32_t));
+                      available_characteristics_keys.array(),
+                      available_characteristics_keys.size());
 
     /*available stall durations depend on the hw + sw and will be different for different devices */
     /*have to add for raw after implementation*/
