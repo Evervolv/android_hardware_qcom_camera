@@ -4180,6 +4180,9 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         camMetadata.update(ANDROID_SENSOR_DYNAMIC_BLACK_LEVEL, fwk_blackLevelInd, 4);
     }
 
+    // Fixed whitelevel is used by ISP/Sensor
+    camMetadata.update(ANDROID_SENSOR_DYNAMIC_WHITE_LEVEL,
+            &gCamCapability[mCameraId]->white_level, 1);
 
     if (gCamCapability[mCameraId]->optical_black_region_count != 0 &&
         gCamCapability[mCameraId]->optical_black_region_count <= MAX_OPTICAL_BLACK_REGIONS) {
