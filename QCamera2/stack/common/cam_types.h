@@ -1774,6 +1774,8 @@ typedef enum {
 
     /* Whether EIS is enabled */
     CAM_INTF_META_VIDEO_STAB_MODE,
+    /* Whether HAL has run into DRAIN error */
+    CAM_INTF_META_DAEMON_RESTART,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
