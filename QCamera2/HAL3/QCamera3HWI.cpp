@@ -403,6 +403,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
 QCamera3HardwareInterface::~QCamera3HardwareInterface()
 {
     CDBG("%s: E", __func__);
+    bool hasPendingBuffers = (mPendingBuffersMap.num_buffers > 0);
 
     /* Turn off current power hint before acquiring perfLock in case they
      * conflict with each other */
@@ -473,6 +474,15 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
     /* Clean up all channels */
     if (mCameraInitialized) {
         if(!mFirstConfiguration){
+            clear_metadata_buffer(mParameters);
+
+            // Check if there is still pending buffer not yet returned.
+            if (hasPendingBuffers) {
+                uint8_t restart = TRUE;
+                ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_DAEMON_RESTART,
+                        restart);
+            }
+
             //send the last unconfigure
             cam_stream_size_info_t stream_config_info;
             memset(&stream_config_info, 0, sizeof(cam_stream_size_info_t));
@@ -481,6 +491,7 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
                     m_bIs4KVideo ? 0 : MAX_INFLIGHT_REQUESTS;
             ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STREAM_INFO,
                     stream_config_info);
+
             int rc = mCameraHandle->ops->set_parms(mCameraHandle->camera_handle, mParameters);
             if (rc < 0) {
                 ALOGE("%s: set_parms failed for unconfigure", __func__);
@@ -515,6 +526,12 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
     pthread_cond_destroy(&mRequestCond);
 
     pthread_mutex_destroy(&mMutex);
+
+    if (hasPendingBuffers) {
+        ALOGE("%s: Not all buffers were returned. Notified the camera daemon process to restart."
+                " Exiting here...", __func__);
+        exit(EXIT_FAILURE);
+    }
     CDBG("%s: X", __func__);
 }
 
