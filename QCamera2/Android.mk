@@ -92,7 +92,6 @@ LOCAL_C_INCLUDES += \
         $(TARGET_OUT_HEADERS)/qcom/display
 LOCAL_C_INCLUDES += \
         hardware/qcom/display/msm8996/libqservice
-
 LOCAL_SHARED_LIBRARIES := libcamera_client liblog libhardware libutils libcutils libdl libsync libgui
 LOCAL_SHARED_LIBRARIES += libmmcamera_interface libmmjpeg_interface libui libcamera_metadata
 LOCAL_SHARED_LIBRARIES += libqdMetaData libqservice libbinder
@@ -102,7 +101,6 @@ endif
 
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_MODULE := camera.$(TARGET_BOARD_PLATFORM)
-LOCAL_CLANG := false
 LOCAL_MODULE_TAGS := optional
 
 LOCAL_32_BIT_ONLY := $(BOARD_QTI_CAMERA_32BIT_ONLY)
