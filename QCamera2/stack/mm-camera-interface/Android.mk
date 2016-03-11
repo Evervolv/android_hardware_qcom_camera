@@ -36,7 +36,7 @@ LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/inc \
     $(LOCAL_PATH)/../common \
     hardware/libhardware/include/hardware \
-    hardware/qcom/media/msm8996/mm-core/inc \
+    $(TARGET_OUT_HEADERS)/mm-core/omxcore \
     system/media/camera/include \
 
 LOCAL_CFLAGS += -DCAMERA_ION_HEAP_ID=ION_IOMMU_HEAP_ID
