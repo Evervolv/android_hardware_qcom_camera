@@ -958,6 +958,7 @@ typedef struct {
     INCLUDE(CAM_INTF_PARM_INITIAL_EXPOSURE_INDEX,       uint32_t,                    1);
     INCLUDE(CAM_INTF_PARM_INSTANT_AEC,                  uint8_t,                     1);
     INCLUDE(CAM_INTF_META_HYBRID_AE,                    uint8_t,                     1);
+    INCLUDE(CAM_INTF_META_AF_SCENE_CHANGE,              uint8_t,                     1);
     /* DevCamDebug metadata CAM_INTF.H */
     INCLUDE(CAM_INTF_META_DEV_CAM_ENABLE,               uint8_t,                     1);
     /* DevCamDebug metadata CAM_INTF.H AF */
