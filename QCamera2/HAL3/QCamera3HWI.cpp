@@ -100,6 +100,8 @@ namespace qcamera {
                                               CAM_QCOM_FEATURE_SCALE |\
                                               CAM_QCOM_FEATURE_CAC |\
                                               CAM_QCOM_FEATURE_CDS )
+/* Per configuration size for static metadata length*/
+#define PER_CONFIGURATION_SIZE_3 (3)
 
 #define TIMEOUT_NEVER -1
 
@@ -7091,7 +7093,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_CONTROL_AWB_LOCK_AVAILABLE,
        ANDROID_STATISTICS_INFO_AVAILABLE_LENS_SHADING_MAP_MODES,
        ANDROID_SHADING_AVAILABLE_MODES,
-       ANDROID_INFO_SUPPORTED_HARDWARE_LEVEL };
+       ANDROID_INFO_SUPPORTED_HARDWARE_LEVEL,
+       ANDROID_SENSOR_OPAQUE_RAW_SIZE };
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_CHARACTERISTICS_KEYS,
                       available_characteristics_keys,
                       sizeof(available_characteristics_keys)/sizeof(int32_t));
@@ -7166,6 +7169,33 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     }
     staticInfo.update(QCAMERA3_OPAQUE_RAW_STRIDES, strides.array(),
             strides.size());
+
+    Vector<int32_t> opaque_size;
+    for (size_t j = 0; j < scalar_formats_count; j++) {
+        if (scalar_formats[j] == ANDROID_SCALER_AVAILABLE_FORMATS_RAW_OPAQUE) {
+            for (size_t i = 0; i < MIN(MAX_SIZES_CNT,
+                    gCamCapability[cameraId]->supported_raw_dim_cnt); i++) {
+                cam_stream_buf_plane_info_t buf_planes;
+
+                rc = mm_stream_calc_offset_raw(fmt, &gCamCapability[cameraId]->raw_dim[i],
+                         &gCamCapability[cameraId]->padding_info, &buf_planes);
+
+                if (rc == 0) {
+                    opaque_size.add(gCamCapability[cameraId]->raw_dim[i].width);
+                    opaque_size.add(gCamCapability[cameraId]->raw_dim[i].height);
+                    opaque_size.add(buf_planes.plane_info.frame_len);
+                }else {
+                    LOGE("raw frame calculation failed!");
+                }
+            }
+        }
+    }
+
+    if ((opaque_size.size() > 0) &&
+            (opaque_size.size() % PER_CONFIGURATION_SIZE_3 == 0))
+        staticInfo.update(ANDROID_SENSOR_OPAQUE_RAW_SIZE, opaque_size.array(), opaque_size.size());
+    else
+        LOGW("Warning: ANDROID_SENSOR_OPAQUE_RAW_SIZE is using rough estimation(2 bytes/pixel)");
 
     gStaticMetadata[cameraId] = staticInfo.release();
     return rc;
