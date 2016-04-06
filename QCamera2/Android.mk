@@ -62,7 +62,7 @@ LOCAL_C_INCLUDES := \
         $(LOCAL_PATH)/util \
         hardware/libhardware/include/hardware \
         hardware/qcom/media/msm8996/libstagefrighthw \
-        hardware/qcom/media/msm8996/mm-core/inc \
+        $(TARGET_OUT_HEADERS)/mm-core/omxcore \
         system/core/include/cutils \
         system/core/include/system \
         system/media/camera/include/system
