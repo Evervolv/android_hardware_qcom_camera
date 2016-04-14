@@ -82,7 +82,7 @@
 
 #define MAX_CAPTURE_BATCH_NUM 32
 
-#define TUNING_DATA_VERSION        3
+#define TUNING_DATA_VERSION        6
 #define TUNING_SENSOR_DATA_MAX     0x10000 /*(need value from sensor team)*/
 #define TUNING_VFE_DATA_MAX        0x10000 /*(need value from vfe team)*/
 #define TUNING_CPP_DATA_MAX        0x10000 /*(need value from pproc team)*/
@@ -323,7 +323,7 @@ typedef enum {
     CAM_FORMAT_YUV_444_NV24,
     CAM_FORMAT_YUV_444_NV42,
 
-    /* Y plane only, used for FD */
+    /* Y plane only, used for FD, 8BPP */
     CAM_FORMAT_Y_ONLY, //100
 
     /* UBWC format */
@@ -333,6 +333,27 @@ typedef enum {
 
     /* RGB formats */
     CAM_FORMAT_8888_ARGB,
+
+    /* Y plane only */
+    CAM_FORMAT_Y_ONLY_10_BPP,
+    CAM_FORMAT_Y_ONLY_12_BPP,
+    CAM_FORMAT_Y_ONLY_14_BPP,
+    CAM_FORMAT_BAYER_QCOM_RAW_8BPP_GREY,
+    CAM_FORMAT_BAYER_QCOM_RAW_10BPP_GREY,
+    CAM_FORMAT_BAYER_QCOM_RAW_12BPP_GREY,
+    CAM_FORMAT_BAYER_QCOM_RAW_14BPP_GREY,
+    CAM_FORMAT_BAYER_MIPI_RAW_8BPP_GREY,
+    CAM_FORMAT_BAYER_MIPI_RAW_10BPP_GREY,
+    CAM_FORMAT_BAYER_MIPI_RAW_12BPP_GREY,
+    CAM_FORMAT_BAYER_MIPI_RAW_14BPP_GREY,
+    CAM_FORMAT_BAYER_IDEAL_RAW_QCOM_8BPP_GREY,
+    CAM_FORMAT_BAYER_IDEAL_RAW_QCOM_10BPP_GREY,
+    CAM_FORMAT_BAYER_IDEAL_RAW_QCOM_12BPP_GREY,
+    CAM_FORMAT_BAYER_IDEAL_RAW_QCOM_14BPP_GREY,
+    CAM_FORMAT_BAYER_IDEAL_RAW_MIPI_8BPP_GREY,
+    CAM_FORMAT_BAYER_IDEAL_RAW_MIPI_10BPP_GREY,
+    CAM_FORMAT_BAYER_IDEAL_RAW_MIPI_12BPP_GREY,
+    CAM_FORMAT_BAYER_IDEAL_RAW_MIPI_14BPP_GREY,
 
     CAM_FORMAT_MAX
 } cam_format_t;
@@ -393,18 +414,6 @@ typedef enum {
     CAM_STREAM_BUF_TYPE_USERPTR, /* User specific structure pointer*/
     CAM_STREAM_BUF_TYPE_MAX
 } cam_stream_buf_type;
-
-/* values that persist.camera.global.debug can be set to */
-/* all camera modules need to map their internal debug levels to this range */
-typedef enum {
-    CAM_GLBL_DBG_NONE  = 0,
-    CAM_GLBL_DBG_ERR   = 1,
-    CAM_GLBL_DBG_WARN  = 2,
-    CAM_GLBL_DBG_HIGH  = 3,
-    CAM_GLBL_DBG_DEBUG = 4,
-    CAM_GLBL_DBG_LOW   = 5,
-    CAM_GLBL_DBG_INFO  = 6
-} cam_global_debug_level_t;
 
 typedef struct {
     cam_mapping_buf_type type;
@@ -601,6 +610,17 @@ typedef enum {
     CAM_AEC_MODE_CENTER_WEIGHTED_ADV,
     CAM_AEC_MODE_MAX
 } cam_auto_exposure_mode_type;
+
+/* enum to select AEC convergence type */
+typedef enum {
+    /* Normal AEC connvergence */
+    CAM_AEC_NORMAL_CONVERGENCE = 0,
+    /* Aggressive AEC connvergence */
+    CAM_AEC_AGGRESSIVE_CONVERGENCE,
+    /* Fast AEC convergence */
+    CAM_AEC_FAST_CONVERGENCE,
+    CAM_AEC_CONVERGENCE_MAX
+} cam_aec_convergence_type;
 
 typedef enum {
     CAM_AE_MODE_OFF,
@@ -1320,11 +1340,6 @@ typedef struct {
 } cam_auto_focus_data_t;
 
 typedef struct {
-  uint32_t is_hdr_scene;
-  float    hdr_confidence;
-} cam_asd_hdr_scene_data_t;
-
-typedef struct {
     uint32_t stream_id;
     cam_rect_t crop;
     cam_rect_t roi_map;
@@ -1377,8 +1392,38 @@ typedef enum {
   S_PORTRAIT_BACKLIGHT,
   S_SCENERY_BACKLIGHT,
   S_BACKLIGHT,
+  S_HDR,
+  S_MAX_DEFAULT,
+  S_CUSTOM0 = S_MAX_DEFAULT,
+  S_CUSTOM1,
+  S_CUSTOM2,
+  S_CUSTOM3,
+  S_CUSTOM4,
+  S_CUSTOM5,
+  S_CUSTOM6,
+  S_CUSTOM7,
+  S_CUSTOM8,
+  S_CUSTOM9,
   S_MAX,
 } cam_auto_scene_t;
+
+typedef struct {
+  uint32_t is_hdr_scene;
+  float    hdr_confidence;
+} cam_asd_hdr_scene_data_t;
+
+typedef struct {
+  uint32_t          detected;
+  float             confidence;
+  uint32_t          auto_compensation;
+} cam_asd_scene_info_t;
+
+typedef struct {
+  cam_auto_scene_t      detected_scene;
+  uint8_t               max_n_scenes;
+  cam_asd_scene_info_t  scene_info[S_MAX];
+} cam_asd_decision_t;
+
 
 typedef struct {
    uint32_t meta_frame_id;
@@ -1386,7 +1431,8 @@ typedef struct {
 
 typedef enum {
     CAM_SENSOR_RAW,
-    CAM_SENSOR_YUV
+    CAM_SENSOR_YUV,
+    CAM_SENSOR_MONO
 } cam_sensor_t;
 
 typedef struct {
@@ -1635,10 +1681,7 @@ typedef  struct {
      * 2. good_frame_idx_range.min_frame_idx - current_frame_idx < 100 */
     cam_frame_idx_range_t good_frame_idx_range;
 
-    uint32_t is_hdr_scene_data_valid;
-    cam_asd_hdr_scene_data_t hdr_scene_data;
-    uint8_t is_asd_decision_valid;
-    cam_auto_scene_t scene; //scene type as decided by ASD
+    cam_asd_decision_t cam_asd_info;
 
     char private_metadata[MAX_METADATA_PRIVATE_PAYLOAD_SIZE_IN_BYTES];
 
@@ -1779,15 +1822,14 @@ typedef enum {
     CAM_INTF_META_PREP_SNAPSHOT_DONE, /* 60 */
     CAM_INTF_META_GOOD_FRAME_IDX_RANGE,
     CAM_INTF_META_ASD_HDR_SCENE_DATA,
-    CAM_INTF_META_ASD_SCENE_TYPE,
+    CAM_INTF_META_ASD_SCENE_INFO,
     CAM_INTF_META_CURRENT_SCENE,
     CAM_INTF_META_AEC_INFO,
     CAM_INTF_META_SENSOR_INFO,
-    CAM_INTF_META_ASD_SCENE_CAPTURE_TYPE,
     CAM_INTF_META_CHROMATIX_LITE_ISP,
     CAM_INTF_META_CHROMATIX_LITE_PP,
-    CAM_INTF_META_CHROMATIX_LITE_AE, /* 70 */
-    CAM_INTF_META_CHROMATIX_LITE_AWB,
+    CAM_INTF_META_CHROMATIX_LITE_AE,
+    CAM_INTF_META_CHROMATIX_LITE_AWB, /* 70 */
     CAM_INTF_META_CHROMATIX_LITE_AF,
     CAM_INTF_META_CHROMATIX_LITE_ASD,
     CAM_INTF_META_EXIF_DEBUG_AE,
@@ -1796,8 +1838,8 @@ typedef enum {
     CAM_INTF_META_EXIF_DEBUG_ASD,
     CAM_INTF_META_EXIF_DEBUG_STATS,
     CAM_INTF_PARM_GET_CHROMATIX,
-    CAM_INTF_PARM_SET_RELOAD_CHROMATIX, /* 80 */
-    CAM_INTF_PARM_SET_AUTOFOCUSTUNING,
+    CAM_INTF_PARM_SET_RELOAD_CHROMATIX,
+    CAM_INTF_PARM_SET_AUTOFOCUSTUNING, /* 80 */
     CAM_INTF_PARM_GET_AFTUNE,
     CAM_INTF_PARM_SET_RELOAD_AFTUNE,
     CAM_INTF_PARM_SET_VFE_COMMAND,
@@ -1806,9 +1848,10 @@ typedef enum {
     CAM_INTF_PARM_LONGSHOT_ENABLE,
     CAM_INTF_PARM_RDI_MODE,
     CAM_INTF_PARM_CDS_MODE,
-    CAM_INTF_PARM_TONE_MAP_MODE, /* 90 */
-    CAM_INTF_PARM_CAPTURE_FRAME_CONFIG,
+    CAM_INTF_PARM_TONE_MAP_MODE,
+    CAM_INTF_PARM_CAPTURE_FRAME_CONFIG, /* 90 */
     CAM_INTF_PARM_DUAL_LED_CALIBRATION,
+    CAM_INTF_PARM_ADV_CAPTURE_MODE,
 
     /* stream based parameters */
     CAM_INTF_PARM_DO_REPROCESS,
@@ -2075,7 +2118,8 @@ typedef enum {
     /* Gain applied post raw captrue.
        ISP digital gain */
     CAM_INTF_META_ISP_SENSITIVITY,
-
+    /* Param for enabling instant aec*/
+    CAM_INTF_PARM_INSTANT_AEC,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
@@ -2518,6 +2562,7 @@ typedef enum {
      * output is interleaved UYVY */
     CAM_FILTER_ARRANGEMENT_UYVY,
     CAM_FILTER_ARRANGEMENT_YUYV,
+    CAM_FILTER_ARRANGEMENT_Y
 } cam_color_filter_arrangement_t;
 
 typedef enum {
