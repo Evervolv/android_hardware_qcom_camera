@@ -117,6 +117,10 @@ public:
     uint32_t getJpegExifRotation();
     bool useJpegExifRotation();
     int32_t getEffectValue();
+    bool isInstantAECEnabled();
+    bool isInstantCaptureEnabled();
+    uint8_t getAecFrameBoundValue();
+    uint8_t getAecSkipDisplayFrameBound();
 
     int32_t getExifDateTime(String8 &dateTime, String8 &subsecTime);
     int32_t getExifFocalLength(rat_t *focalLenght);
@@ -273,7 +277,7 @@ public:
     int32_t getRelatedCamCalibration(
             cam_related_system_calibration_data_t* calib);
     int32_t bundleRelatedCameras(bool sync, uint32_t sessionid);
-    bool isFDInVideoEnabled();
+    uint8_t fdModeInVideo();
     bool isOEMFeatEnabled();
 
     int32_t setZslMode(bool value);
@@ -284,6 +288,7 @@ public:
     int32_t getPicSizeFromAPK(int &width, int &height);
 
     int32_t checkFeatureConcurrency();
+    int32_t setInstantAEC(uint8_t enable, bool initCommit);
 private:
     QCameraParameters *mImpl;
     mutable Mutex mLock;
