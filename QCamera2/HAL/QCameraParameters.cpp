@@ -207,6 +207,10 @@ const char QCameraParameters::KEY_QC_CACHE_VIDEO_BUFFERS[] = "cache-video-buffer
 
 const char QCameraParameters::KEY_QC_LONG_SHOT[] = "long-shot";
 const char QCameraParameters::KEY_QC_INITIAL_EXPOSURE_INDEX[] = "initial-exp-index";
+const char QCameraParameters::KEY_QC_INSTANT_AEC[] = "instant-aec";
+const char QCameraParameters::KEY_QC_INSTANT_CAPTURE[] = "instant-capture";
+const char QCameraParameters::KEY_QC_INSTANT_AEC_SUPPORTED_MODES[] = "instant-aec-values";
+const char QCameraParameters::KEY_QC_INSTANT_CAPTURE_SUPPORTED_MODES[] = "instant-capture-values";
 
 // Values for effect settings.
 const char QCameraParameters::EFFECT_EMBOSS[] = "emboss";
@@ -341,6 +345,16 @@ const char QCameraParameters::AUTO_EXPOSURE_SMART_METERING[] = "smart-metering";
 const char QCameraParameters::AUTO_EXPOSURE_USER_METERING[] = "user-metering";
 const char QCameraParameters::AUTO_EXPOSURE_SPOT_METERING_ADV[] = "spot-metering-adv";
 const char QCameraParameters::AUTO_EXPOSURE_CENTER_WEIGHTED_ADV[] = "center-weighted-adv";
+
+// Values for instant AEC modes
+const char QCameraParameters::KEY_QC_INSTANT_AEC_DISABLE[] = "0";
+const char QCameraParameters::KEY_QC_INSTANT_AEC_AGGRESSIVE_AEC[] = "1";
+const char QCameraParameters::KEY_QC_INSTANT_AEC_FAST_AEC[] = "2";
+
+// Values for instant capture modes
+const char QCameraParameters::KEY_QC_INSTANT_CAPTURE_DISABLE[] = "0";
+const char QCameraParameters::KEY_QC_INSTANT_CAPTURE_AGGRESSIVE_AEC[] = "1";
+const char QCameraParameters::KEY_QC_INSTANT_CAPTURE_FAST_AEC[] = "2";
 
 const char QCameraParameters::KEY_QC_GPS_LATITUDE_REF[] = "gps-latitude-ref";
 const char QCameraParameters::KEY_QC_GPS_LONGITUDE_REF[] = "gps-longitude-ref";
@@ -501,6 +515,20 @@ const QCameraParameters::QCameraMap<cam_auto_exposure_mode_type>
     { AUTO_EXPOSURE_USER_METERING,       CAM_AEC_MODE_USER_METERING },
     { AUTO_EXPOSURE_SPOT_METERING_ADV,   CAM_AEC_MODE_SPOT_METERING_ADV },
     { AUTO_EXPOSURE_CENTER_WEIGHTED_ADV, CAM_AEC_MODE_CENTER_WEIGHTED_ADV },
+};
+
+const QCameraParameters::QCameraMap<cam_aec_convergence_type>
+        QCameraParameters::INSTANT_AEC_MODES_MAP[] = {
+    { KEY_QC_INSTANT_AEC_DISABLE,        CAM_AEC_NORMAL_CONVERGENCE },
+    { KEY_QC_INSTANT_AEC_AGGRESSIVE_AEC, CAM_AEC_AGGRESSIVE_CONVERGENCE },
+    { KEY_QC_INSTANT_AEC_FAST_AEC,       CAM_AEC_FAST_CONVERGENCE },
+};
+
+const QCameraParameters::QCameraMap<cam_aec_convergence_type>
+        QCameraParameters::INSTANT_CAPTURE_MODES_MAP[] = {
+    { KEY_QC_INSTANT_CAPTURE_DISABLE,        CAM_AEC_NORMAL_CONVERGENCE },
+    { KEY_QC_INSTANT_CAPTURE_AGGRESSIVE_AEC, CAM_AEC_AGGRESSIVE_CONVERGENCE },
+    { KEY_QC_INSTANT_CAPTURE_FAST_AEC,       CAM_AEC_FAST_CONVERGENCE },
 };
 
 const QCameraParameters::QCameraMap<cam_format_t>
@@ -893,7 +921,6 @@ QCameraParameters::QCameraParameters()
       m_bTNRVideoOn(false),
       m_bTNRSnapshotOn(false),
       m_bInited(false),
-      m_nBurstNum(1),
       m_nRetroBurstNum(0),
       m_nBurstLEDOnPeriod(100),
       m_bUpdateEffects(false),
@@ -941,7 +968,11 @@ QCameraParameters::QCameraParameters()
       m_expTime(0),
       m_isoValue(0),
       m_ManualCaptureMode(CAM_MANUAL_CAPTURE_TYPE_OFF),
-      m_dualLedCalibration(0)
+      m_dualLedCalibration(0),
+      m_bInstantAEC(false),
+      m_bInstantCapture(false),
+      mAecFrameBound(0),
+      mAecSkipDisplayFrameBound(0)
 {
     char value[PROPERTY_VALUE_MAX];
     // TODO: may move to parameter instead of sysprop
@@ -1022,7 +1053,6 @@ QCameraParameters::QCameraParameters(const String8 &params)
     m_bTNRVideoOn(false),
     m_bTNRSnapshotOn(false),
     m_bInited(false),
-    m_nBurstNum(1),
     m_nRetroBurstNum(0),
     m_nBurstLEDOnPeriod(100),
     m_bPreviewFlipChanged(false),
@@ -1067,7 +1097,11 @@ QCameraParameters::QCameraParameters(const String8 &params)
     m_expTime(0),
     m_isoValue(0),
     m_ManualCaptureMode(CAM_MANUAL_CAPTURE_TYPE_OFF),
-    m_dualLedCalibration(0)
+    m_dualLedCalibration(0),
+    m_bInstantAEC(false),
+    m_bInstantCapture(false),
+    mAecFrameBound(0),
+    mAecSkipDisplayFrameBound(0)
 {
     memset(&m_LiveSnapshotSize, 0, sizeof(m_LiveSnapshotSize));
     memset(&m_default_fps_range, 0, sizeof(m_default_fps_range));
@@ -4082,7 +4116,7 @@ int32_t QCameraParameters::setGpsLocation(const QCameraParameters& params)
  *==========================================================================*/
 int32_t QCameraParameters::setNumOfSnapshot()
 {
-    int nBurstNum = getBurstNum();
+    int nBurstNum = 1;
     int nExpnum = 0;
 
     const char *bracket_str = get(KEY_QC_AE_BRACKET_HDR);
@@ -4149,7 +4183,7 @@ int32_t QCameraParameters::setRecordingHint(const QCameraParameters& params)
                 updateParamEntry(KEY_RECORDING_HINT, str);
                 setRecordingHintValue(value);
                 if (getFaceDetectionOption() == true) {
-                    if (!isFDInVideoEnabled()) {
+                    if (!fdModeInVideo()) {
                         setFaceDetection(value > 0 ? false : true, false);
                     } else {
                         setFaceDetection(true, false);
@@ -4792,45 +4826,6 @@ int32_t QCameraParameters::setFlip(const QCameraParameters& params)
 }
 
 /*===========================================================================
- * FUNCTION   : setBurstNum
- *
- * DESCRIPTION: set burst number of snapshot
- *
- * PARAMETERS :
- *   @params  : user setting parameters
- *
- * RETURN     : int32_t type of status
- *              NO_ERROR  -- success
- *              none-zero failure code
- *==========================================================================*/
-int32_t QCameraParameters::setBurstNum(const QCameraParameters& params)
-{
-    int nBurstNum = params.getInt(KEY_QC_SNAPSHOT_BURST_NUM);
-    if (isAdvCamFeaturesEnabled()) {
-        nBurstNum = 1;
-    }
-    if (nBurstNum <= 0) {
-        // if burst number is not set in parameters,
-        // read from sys prop
-        char prop[PROPERTY_VALUE_MAX];
-        memset(prop, 0, sizeof(prop));
-        property_get("persist.camera.snapshot.number", prop, "0");
-        nBurstNum = atoi(prop);
-        if (nBurstNum <= 0) {
-            nBurstNum = 1;
-        }
-    }
-    set(KEY_QC_SNAPSHOT_BURST_NUM, nBurstNum);
-    m_nBurstNum = (uint8_t)nBurstNum;
-    LOGH("m_nBurstNum = %d", m_nBurstNum);
-    if (ADD_SET_PARAM_ENTRY_TO_BATCH(m_pParamBuf, CAM_INTF_PARM_BURST_NUM, (uint32_t)nBurstNum)) {
-        return BAD_VALUE;
-    }
-
-    return NO_ERROR;
-}
-
-/*===========================================================================
  * FUNCTION   : setSnapshotFDReq
  *
  * DESCRIPTION: set requirement of Face Detection Metadata in Snapshot mode.
@@ -5089,7 +5084,6 @@ int32_t QCameraParameters::updateParameters(const String8& p,
     if ((rc = setChromaFlash(params)))                  final_rc = rc;
     if ((rc = setTruePortrait(params)))                 final_rc = rc;
     if ((rc = setOptiZoom(params)))                     final_rc = rc;
-    if ((rc = setBurstNum(params)))                     final_rc = rc;
     if ((rc = setBurstLEDOnPeriod(params)))             final_rc = rc;
     if ((rc = setRetroActiveBurstNum(params)))          final_rc = rc;
     if ((rc = setSnapshotFDReq(params)))                final_rc = rc;
@@ -5098,6 +5092,8 @@ int32_t QCameraParameters::updateParameters(const String8& p,
     if ((rc = setTemporalDenoise(params)))              final_rc = rc;
     if ((rc = setCacheVideoBuffers(params)))            final_rc = rc;
     if ((rc = setInitialExposureIndex(params)))         final_rc = rc;
+    if ((rc = setInstantCapture(params)))               final_rc = rc;
+    if ((rc = setInstantAEC(params)))                   final_rc = rc;
 
     // update live snapshot size after all other parameters are set
     if ((rc = setLiveSnapshotSize(params)))             final_rc = rc;
@@ -5132,6 +5128,8 @@ int32_t QCameraParameters::updateParameters(const String8& p,
         final_rc = rc;
     }
 #endif
+
+    if ((rc = setAdvancedCaptureMode()))                final_rc = rc;
 UPDATE_PARAM_DONE:
     needRestart = m_bNeedRestart;
     return final_rc;
@@ -5485,6 +5483,23 @@ int32_t QCameraParameters::initDefaultParameters()
     set(KEY_MIN_EXPOSURE_COMPENSATION, m_pCapability->exposure_compensation_min); // -12
     setFloat(KEY_EXPOSURE_COMPENSATION_STEP, m_pCapability->exposure_compensation_step); // 1/6
     setExposureCompensation(m_pCapability->exposure_compensation_default); // 0
+
+    // Set Instant AEC modes
+    String8 instantAECModes = createValuesString(
+            m_pCapability->supported_instant_aec_modes,
+            m_pCapability->supported_instant_aec_modes_cnt,
+            INSTANT_AEC_MODES_MAP,
+            PARAM_MAP_SIZE(INSTANT_AEC_MODES_MAP));
+    set(KEY_QC_INSTANT_AEC_SUPPORTED_MODES, instantAECModes.string());
+
+    // Set Instant Capture modes
+    String8 instantCaptureModes = createValuesString(
+            m_pCapability->supported_instant_aec_modes,
+            m_pCapability->supported_instant_aec_modes_cnt,
+            INSTANT_CAPTURE_MODES_MAP,
+            PARAM_MAP_SIZE(INSTANT_CAPTURE_MODES_MAP));
+    set(KEY_QC_INSTANT_CAPTURE_SUPPORTED_MODES, instantCaptureModes.string());
+
 
     // Set Antibanding
     String8 antibandingValues = createValuesString(
@@ -6868,7 +6883,7 @@ int32_t QCameraParameters::setVideoHDR(const char *videoHDR)
                     value = CAM_SENSOR_HDR_OFF;
                 LOGH("%s: Overriding to sensor HDR Mode to:%d", __func__, value);
                 if (ADD_SET_PARAM_ENTRY_TO_BATCH(m_pParamBuf, CAM_INTF_PARM_SENSOR_HDR, (cam_sensor_hdr_type_t) value)) {
-                    ALOGE("%s: Override to sensor HDR mode for video HDR failed", __func__);
+                    LOGE("%s: Override to sensor HDR mode for video HDR failed", __func__);
                     return BAD_VALUE;
                 }
                 updateParamEntry(KEY_QC_VIDEO_HDR, videoHDR);
@@ -7972,6 +7987,154 @@ int32_t QCameraParameters::setInitialExposureIndex(const QCameraParameters& para
         LOGD("Invalid value for initial exposure index value %d", value);
     }
 
+    return rc;
+}
+
+/*===========================================================================
+ * FUNCTION   : setInstantCapture
+ *
+ * DESCRIPTION: Set Instant Capture related params
+ *
+ * PARAMETERS :
+ *   @params  : user setting parameters
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCameraParameters::setInstantCapture(const QCameraParameters& params)
+{
+    int32_t rc = NO_ERROR;
+    int value = -1;
+    // Check for instant capture, this will enable instant AEC as well.
+    // This param will trigger the instant AEC param to backend
+    // And also will be useful for instant capture.
+    const char *str = params.get(KEY_QC_INSTANT_CAPTURE);
+    const char *prev_str = get(KEY_QC_INSTANT_CAPTURE);
+    if (str) {
+        if ((prev_str == NULL) || (strcmp(str, prev_str) != 0)) {
+            value = lookupAttr(INSTANT_CAPTURE_MODES_MAP,
+                    PARAM_MAP_SIZE(INSTANT_CAPTURE_MODES_MAP), str);
+            LOGD("Set instant Capture from param = %d", value);
+            if(value != NAME_NOT_FOUND) {
+                updateParamEntry(KEY_QC_INSTANT_CAPTURE, str);
+            }
+        }
+    } else {
+        char prop[PROPERTY_VALUE_MAX];
+        memset(prop, 0, sizeof(prop));
+        property_get("persist.camera.instant.capture", prop, KEY_QC_INSTANT_CAPTURE_DISABLE);
+        if ((prev_str == NULL) || (strcmp(prop, prev_str) != 0)) {
+            value = lookupAttr(INSTANT_CAPTURE_MODES_MAP,
+                    PARAM_MAP_SIZE(INSTANT_CAPTURE_MODES_MAP), prop);
+            LOGD("Set instant capture from setprop = %d", value);
+            if (value != NAME_NOT_FOUND) {
+                updateParamEntry(KEY_QC_INSTANT_CAPTURE, prop);
+            }
+        }
+    }
+
+    // Set instant AEC param to the backend for either instant capture or instant AEC
+    // 0 - disbale (normal AEC)
+    // 1 - Aggressive AEC (algo used in backend)
+    // 2 - Fast AEC (algo used in backend)
+    if (value != NAME_NOT_FOUND && value != -1) {
+        m_bInstantCapture = (value > 0)? true : false;
+        setInstantAEC((uint8_t)value, false);
+    }
+
+
+    // get frame aec bound value from setprop.
+    // This value indicates the number of frames, camera interface
+    // will wait for getting the instant capture frame.
+    // Default value set to 7.
+    // This value also indicates the number of frames, that HAL
+    // will not display and will not send preview frames to app
+    // This will be applicable only if instant capture is set.
+    if (m_bInstantCapture) {
+        char prop[PROPERTY_VALUE_MAX];
+        memset(prop, 0, sizeof(prop));
+        property_get("persist.camera.ae.capture.bound", prop, "7");
+        int32_t frame_bound = atoi(prop);
+        if (frame_bound >= 0) {
+            mAecFrameBound = (uint8_t)frame_bound;
+        } else {
+            LOGE("Invalid prop for aec frame bound %d", frame_bound);
+            rc = BAD_VALUE;
+        }
+    }
+    return rc;
+}
+
+/*===========================================================================
+ * FUNCTION   : setInstantAEC
+ *
+ * DESCRIPTION: Set Instant AEC related params
+ *
+ * PARAMETERS :
+ *   @params  : user setting parameters
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCameraParameters::setInstantAEC(const QCameraParameters& params)
+{
+    int32_t rc = NO_ERROR;
+    int value = -1;
+
+    // Check for instant AEC only when instant capture is not enabled.
+    // Instant capture already takes care of the instant AEC as well.
+    if (!m_bInstantCapture) {
+        // Check for instant AEC. Instant AEC will only enable fast AEC.
+        // It will not enable instant capture.
+        // This param will trigger the instant AEC param to backend
+        const char *str = params.get(KEY_QC_INSTANT_AEC);
+        const char *prev_str = get(KEY_QC_INSTANT_AEC);
+        if (str) {
+            if ((prev_str == NULL) || (strcmp(str, prev_str) != 0)) {
+                value = lookupAttr(INSTANT_AEC_MODES_MAP,
+                        PARAM_MAP_SIZE(INSTANT_AEC_MODES_MAP), str);
+                LOGD("Set instant AEC from param = %d", value);
+            }
+        } else {
+            char prop[PROPERTY_VALUE_MAX];
+            memset(prop, 0, sizeof(prop));
+            property_get("persist.camera.instant.aec", prop, KEY_QC_INSTANT_AEC_DISABLE);
+            if ((prev_str == NULL) || (strcmp(prop, prev_str) != 0)) {
+                value = lookupAttr(INSTANT_AEC_MODES_MAP,
+                        PARAM_MAP_SIZE(INSTANT_AEC_MODES_MAP), prop);
+                LOGD("Set instant AEC from setprop = %d", value);
+            }
+        }
+
+        // Set instant AEC param to the backend for either instant capture or instant AEC
+        // 0 - disbale (normal AEC)
+        // 1 - Aggressive AEC (algo used in backend)
+        // 2 - Fast AEC (algo used in backend)
+        if (value != NAME_NOT_FOUND && value != -1) {
+            setInstantAEC((uint8_t)value, false);
+        }
+
+    }
+
+    // get frame aec preview skip count from setprop.
+    // This value indicates the number of frames, that HAL
+    // will not display and will not send preview frames to app
+    // Default value set to 7.
+    // This will be applicable only if instant aec is set.
+    if (m_bInstantAEC) {
+        char prop[PROPERTY_VALUE_MAX];
+        memset(prop, 0, sizeof(prop));
+        property_get("persist.camera.ae.instant.bound", prop, "7");
+        int32_t aec_frame_skip_cnt = atoi(prop);
+        if (aec_frame_skip_cnt >= 0) {
+            mAecSkipDisplayFrameBound = (uint8_t)aec_frame_skip_cnt;
+        } else {
+            LOGE("Invalid prop for aec frame bound %d", aec_frame_skip_cnt);
+            rc = BAD_VALUE;
+        }
+    }
     return rc;
 }
 
@@ -9978,6 +10141,13 @@ int32_t QCameraParameters::getStreamDimension(cam_stream_type_t streamType,
         max_dim.width = m_pCapability->analysis_max_res.width;
         max_dim.height = m_pCapability->analysis_max_res.height;
 
+        if ((getRecordingHintValue() == true)
+                && fdModeInVideo()
+                && m_pCapability->hw_analysis_supported) {
+            max_dim.width /= 2;
+            max_dim.height /= 2;
+        }
+
         if (prv_dim.width > max_dim.width || prv_dim.height > max_dim.height) {
             double max_ratio, requested_ratio;
 
@@ -10242,7 +10412,7 @@ bool QCameraParameters::isVideoBuffersCached()
  *==========================================================================*/
 uint8_t QCameraParameters::getMaxUnmatchedFramesInQueue()
 {
-    return (uint8_t)(m_pCapability->min_num_pp_bufs + (m_nBurstNum / 10));
+    return (uint8_t)(m_pCapability->min_num_pp_bufs);
 }
 
 /*===========================================================================
@@ -10398,7 +10568,7 @@ uint8_t QCameraParameters::getNumOfExtraHDRInBufsIfNeeded()
         numOfBufs--; // Only additional buffers need to be returned
     }
 
-    return (uint8_t)(numOfBufs * getBurstNum());
+    return (uint8_t)(numOfBufs);
 }
 
 /*===========================================================================
@@ -10418,22 +10588,7 @@ uint8_t QCameraParameters::getNumOfExtraHDROutBufsIfNeeded()
         numOfBufs++;
     }
 
-    return (uint8_t)(numOfBufs * getBurstNum());
-}
-
-/*===========================================================================
- * FUNCTION   : getBurstNum
- *
- * DESCRIPTION: get burst number of snapshot
- *
- * PARAMETERS : none
- *
- * RETURN     : number of burst
- *==========================================================================*/
-uint8_t QCameraParameters::getBurstNum()
-{
-    LOGH("m_nBurstNum = %d", m_nBurstNum);
-    return m_nBurstNum;
+    return (uint8_t)(numOfBufs);
 }
 
 /*===========================================================================
@@ -10546,9 +10701,15 @@ bool QCameraParameters::useJpegExifRotation() {
     char exifRotation[PROPERTY_VALUE_MAX];
 
     property_get("persist.camera.exif.rotation", exifRotation, "off");
+
     if (!strcmp(exifRotation, "on")) {
         return true;
     }
+
+    if (!(m_pCapability->qcom_supported_feature_mask & CAM_QCOM_FEATURE_ROTATION)) {
+        return true;
+    }
+
     return false;
 }
 
@@ -11127,6 +11288,9 @@ int32_t QCameraParameters::setFaceDetection(bool enabled, bool initCommit)
         if (getRecordingHintValue() > 0) {
             faceProcMask = 0;
             faceProcMask |= CAM_FACE_PROCESS_MASK_FOCUS;
+            if (fdModeInVideo() == CAM_FACE_PROCESS_MASK_DETECTION) {
+                faceProcMask |= CAM_FACE_PROCESS_MASK_DETECTION;
+            }
         } else {
             faceProcMask |= CAM_FACE_PROCESS_MASK_FOCUS;
             faceProcMask |= CAM_FACE_PROCESS_MASK_DETECTION;
@@ -12350,7 +12514,7 @@ int32_t QCameraParameters::setEztune()
  *==========================================================================*/
 bool QCameraParameters::isHDREnabled()
 {
-    return ((m_nBurstNum == 1) && (m_bHDREnabled || m_HDRSceneEnabled));
+    return ((m_bHDREnabled || m_HDRSceneEnabled));
 }
 
 /*===========================================================================
@@ -12589,7 +12753,7 @@ bool QCameraParameters::setStreamConfigure(bool isCapture,
         /* Analysis stream is needed by DCRF regardless of recording hint */
         if ((getDcrf() == true) ||
                 (getRecordingHintValue() != true) ||
-                (isFDInVideoEnabled())) {
+                (fdModeInVideo())) {
             stream_config_info.type[stream_config_info.num_streams] =
                     CAM_STREAM_TYPE_ANALYSIS;
             getStreamDimension(CAM_STREAM_TYPE_ANALYSIS,
@@ -12863,7 +13027,7 @@ uint8_t QCameraParameters::getNumOfExtraBuffersForImageProc()
         numOfBufs += 1;
     }
 
-    return (uint8_t)(numOfBufs * getBurstNum());
+    return (uint8_t)(numOfBufs);
 }
 
 /*===========================================================================
@@ -13125,7 +13289,8 @@ int32_t QCameraParameters::updatePpFeatureMask(cam_stream_type_t stream_type) {
 
     if (isHighQualityNoiseReductionMode() &&
             ((stream_type == CAM_STREAM_TYPE_VIDEO) ||
-            (stream_type == CAM_STREAM_TYPE_PREVIEW && getRecordingHintValue()))) {
+            (stream_type == CAM_STREAM_TYPE_PREVIEW && getRecordingHintValue() &&
+            isPreviewSeeMoreRequired()))) {
         feature_mask |= CAM_QTI_FEATURE_SW_TNR;
     }
 
@@ -13587,9 +13752,6 @@ String8 QCameraParameters::dump()
         getNumOfExtraHDROutBufsIfNeeded());
     str += s;
 
-    snprintf(s, 128, "getBurstNum: %d\n", getBurstNum());
-    str += s;
-
     snprintf(s, 128, "getRecordingHintValue: %d\n", getRecordingHintValue());
     str += s;
 
@@ -13848,28 +14010,30 @@ void QCameraParameters::setLowLightCapture()
 }
 
 /*===========================================================================
- * FUNCTION   : isFDInVideoEnabled
+ * FUNCTION   : fdModeInVideo
  *
  * DESCRIPTION: FD in Video change
  *
  * PARAMETERS : none
  *
- * RETURN     : TRUE  : If FD in Video enabled
- *              FALSE : If FD in Video disabled
+ * RETURN     : FD Mode in Video
+ *              0 : If FD in Video disabled
+ *              1 : If FD in Video enabled for Detection, focus
+ *              2 : If FD in Video enabled only for focus
  *==========================================================================*/
-bool QCameraParameters::isFDInVideoEnabled()
+uint8_t QCameraParameters::fdModeInVideo()
 {
     char value[PROPERTY_VALUE_MAX];
-    bool fdvideo = FALSE;
+    uint8_t fdvideo = 0;
 
     if (!m_pCapability->hw_analysis_supported) {
-        return FALSE;
+        return 0;
     }
 
     property_get("persist.camera.fdvideo", value, "0");
-    fdvideo = (atoi(value) > 0) ? TRUE : FALSE;
+    fdvideo = (atoi(value) > 0) ? atoi(value) : 0;
 
-    LOGD("FD in Video enabled : %d", fdvideo);
+    LOGD("FD mode in Video : %d", fdvideo);
     return fdvideo;
 }
 
@@ -13998,6 +14162,77 @@ int32_t QCameraParameters::setDualLedCalibration(
           LOGE("%s:Failed to update dual led calibration param", __func__);
           return BAD_VALUE;
       }
+    }
+    return NO_ERROR;
+}
+
+/*===========================================================================
+ * FUNCTION   : setinstantAEC
+ *
+ * DESCRIPTION: set instant AEC value to backend
+ *
+ * PARAMETERS :
+ *   @value : instant aec enabled or not.
+ *            0 - disable
+ *            1 - Enable and set agressive AEC algo to the backend
+ *            2 - Enable and set fast AEC algo to the backend
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCameraParameters::setInstantAEC(uint8_t value, bool initCommit)
+{
+    if (initCommit) {
+        if (initBatchUpdate(m_pParamBuf) < 0) {
+            LOGE("Failed to initialize group update table");
+            return FAILED_TRANSACTION;
+        }
+    }
+
+    int32_t rc = NO_ERROR;
+    if (ADD_SET_PARAM_ENTRY_TO_BATCH(m_pParamBuf, CAM_INTF_PARM_INSTANT_AEC, value)) {
+        LOGE("Failed to instant aec value");
+        return BAD_VALUE;
+    }
+
+    // set the new value
+    char val[8];
+    snprintf(val, sizeof(val), "%d", value);
+    updateParamEntry(KEY_QC_INSTANT_AEC, val);
+
+    if (initCommit) {
+        rc = commitSetBatch();
+        if (NO_ERROR != rc) {
+            LOGE("Failed to instant aec value");
+            return rc;
+        }
+    }
+
+    LOGD(" Instant AEC value set to backend %d", value);
+    m_bInstantAEC = value;
+    return rc;
+}
+
+/*===========================================================================
+ * FUNCTION   : setAdvancedCaptureMode
+ *
+ * DESCRIPTION: set advanced capture mode
+ *
+ * PARAMETERS : none
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCameraParameters::setAdvancedCaptureMode()
+{
+    uint8_t value = isAdvCamFeaturesEnabled();
+    LOGD("updating advanced capture mode value to %d",value);
+    if (ADD_SET_PARAM_ENTRY_TO_BATCH(m_pParamBuf,
+            CAM_INTF_PARM_ADV_CAPTURE_MODE, value)) {
+        LOGE("Failed to set advanced capture mode param");
+        return BAD_VALUE;
     }
     return NO_ERROR;
 }
