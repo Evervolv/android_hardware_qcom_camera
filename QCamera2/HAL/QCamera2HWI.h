@@ -386,7 +386,7 @@ private:
     int32_t processAutoFocusEvent(cam_auto_focus_data_t &focus_data);
     int32_t processZoomEvent(cam_crop_data_t &crop_info);
     int32_t processPrepSnapshotDoneEvent(cam_prep_snapshot_state_t prep_snapshot_state);
-    int32_t processASDUpdate(cam_auto_scene_t scene);
+    int32_t processASDUpdate(cam_asd_decision_t asd_decision);
     int32_t processJpegNotify(qcamera_jpeg_evt_payload_t *jpeg_job);
     int32_t processHDRData(cam_asd_hdr_scene_data_t hdr_scene);
     int32_t processRetroAECUnlock();
@@ -444,7 +444,7 @@ private:
     int32_t setHistogram(bool histogram_en);
     int32_t setFaceDetection(bool enabled);
     int32_t prepareHardwareForSnapshot(int32_t afNeeded);
-    bool needProcessPreviewFrame();
+    bool needProcessPreviewFrame(uint32_t frameID);
     bool needSendPreviewCallback();
     bool isNoDisplayMode() {return mParameters.isNoDisplayMode();};
     bool isZSLMode() {return mParameters.isZSLMode();};
@@ -554,6 +554,15 @@ private:
     inline bool getNeedRestart() {return m_bNeedRestart;}
     inline void setNeedRestart(bool needRestart) {m_bNeedRestart = needRestart;}
 
+    /*Start display skip. Skip starts after
+    skipCnt number of frames from current frame*/
+    void setDisplaySkip(bool enabled, uint8_t skipCnt = 0);
+    /*Caller can specify range frameID to skip.
+    if end is 0, all the frames after start will be skipped*/
+    void setDisplayFrameSkip(uint32_t start = 0, uint32_t end = 0);
+    /*Verifies if frameId is valid to skip*/
+    bool isDisplayFrameToSkip(uint32_t frameId);
+
 private:
     camera_device_t   mCameraDevice;
     uint32_t          mCameraId;
@@ -633,6 +642,7 @@ private:
     int mPLastFrameCount;
     nsecs_t mPLastFpsTime;
     double mPFps;
+    uint8_t mInstantAecFrameCount;
 
     //eztune variables for communication with eztune server at backend
     bool m_bIntJpegEvtPending;
@@ -764,8 +774,14 @@ private:
     bool m_bNeedRestart;
     Mutex mMapLock;
     Condition mMapCond;
-    // Count to determine the number of preview frames ignored for displaying.
-    uint8_t mIgnoredPreviewCount;
+
+    //Used to decide the next frameID to be skipped
+    uint32_t mLastPreviewFrameID;
+    //FrameID to start frame skip.
+    uint32_t mFrameSkipStart;
+    /*FrameID to stop frameskip. If this is not set,
+    all frames are skipped till we set this*/
+    uint32_t mFrameSkipEnd;
 };
 
 }; // namespace qcamera
