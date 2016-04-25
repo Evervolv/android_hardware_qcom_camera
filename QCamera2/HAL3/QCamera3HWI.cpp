@@ -379,7 +379,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
     getLogLevel();
     m_perfLock.lock_init();
     mCameraDevice.common.tag = HARDWARE_DEVICE_TAG;
-    mCameraDevice.common.version = CAMERA_DEVICE_API_VERSION_3_3;
+    mCameraDevice.common.version = CAMERA_DEVICE_API_VERSION_3_4;
     mCameraDevice.common.close = close_camera_device;
     mCameraDevice.ops = &mCameraOps;
     mCameraDevice.priv = this;
@@ -6236,7 +6236,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
 
     uint8_t supportedHwLvl = limitedDevice ?
             ANDROID_INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED :
-            ANDROID_INFO_SUPPORTED_HARDWARE_LEVEL_FULL;
+            // LEVEL_3 - This device will support level 3.
+            ANDROID_INFO_SUPPORTED_HARDWARE_LEVEL_3;
 
     staticInfo.update(ANDROID_INFO_SUPPORTED_HARDWARE_LEVEL,
             &supportedHwLvl, 1);
@@ -7534,7 +7535,7 @@ int QCamera3HardwareInterface::getCamInfo(uint32_t cameraId,
 
 
     info->orientation = (int)gCamCapability[cameraId]->sensor_mount_angle;
-    info->device_version = CAMERA_DEVICE_API_VERSION_3_3;
+    info->device_version = CAMERA_DEVICE_API_VERSION_3_4;
     info->static_camera_characteristics = gStaticMetadata[cameraId];
 
     //For now assume both cameras can operate independently.
@@ -7826,6 +7827,9 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     /* sensitivity */
     static const int32_t default_sensitivity = 100;
     settings.update(ANDROID_SENSOR_SENSITIVITY, &default_sensitivity, 1);
+    static const int32_t default_isp_sensitivity =
+            gCamCapability[mCameraId]->isp_sensitivity_range.min_sensitivity;
+    settings.update(ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST, &default_isp_sensitivity, 1);
 
     /*edge mode*/
     settings.update(ANDROID_EDGE_MODE, &edge_mode, 1);
