@@ -895,7 +895,8 @@ void QCamera3YUVChannel::putStreamBufs()
 int32_t QCamera3ProcessingChannel::request(buffer_handle_t *buffer,
         uint32_t frameNumber,
         camera3_stream_buffer_t* pInputBuffer,
-        metadata_buffer_t* metadata)
+        metadata_buffer_t* metadata,
+        int &indexUsed)
 {
     int32_t rc = NO_ERROR;
     int index;
@@ -968,6 +969,7 @@ int32_t QCamera3ProcessingChannel::request(buffer_handle_t *buffer,
             return rc;
         }
         rc = mMemory.markFrameNumber(index, frameNumber);
+        indexUsed = index;
     }
     return rc;
 }
@@ -1836,7 +1838,7 @@ int32_t QCamera3RegularChannel::queueBatchBuf()
  *              -EINVAL on invalid input
  *              -ENODEV on serious error
  *==========================================================================*/
-int32_t QCamera3RegularChannel::request(buffer_handle_t *buffer, uint32_t frameNumber)
+int32_t QCamera3RegularChannel::request(buffer_handle_t *buffer, uint32_t frameNumber, int &indexUsed)
 {
     ATRACE_CALL();
     //FIX ME: Return buffer back in case of failures below.
@@ -1887,6 +1889,7 @@ int32_t QCamera3RegularChannel::request(buffer_handle_t *buffer, uint32_t frameN
         return rc;
     }
 
+    indexUsed = index;
     rc = mMemory.markFrameNumber((uint32_t)index, frameNumber);
     return rc;
 }
@@ -1955,7 +1958,8 @@ int32_t QCamera3MetadataChannel::initialize(cam_is_type_t isType)
 }
 
 int32_t QCamera3MetadataChannel::request(buffer_handle_t * /*buffer*/,
-                                                uint32_t /*frameNumber*/)
+                                                uint32_t /*frameNumber*/,
+                                                int&  /*indexUsed*/)
 {
     if (!m_bIsActive) {
         return start();
@@ -2417,7 +2421,8 @@ void QCamera3RawDumpChannel::putStreamBufs()
  *              none-zero failure code
  *==========================================================================*/
 int32_t QCamera3RawDumpChannel::request(buffer_handle_t * /*buffer*/,
-                                                uint32_t /*frameNumber*/)
+                                                uint32_t /*frameNumber*/,
+                                                int & /*indexUsed*/)
 {
     if (!m_bIsActive) {
         return QCamera3Channel::start();
@@ -2607,7 +2612,8 @@ int32_t QCamera3YUVChannel::initialize(cam_is_type_t isType)
 int32_t QCamera3YUVChannel::request(buffer_handle_t *buffer,
         uint32_t frameNumber,
         camera3_stream_buffer_t* pInputBuffer,
-        metadata_buffer_t* metadata, bool &needMetadata)
+        metadata_buffer_t* metadata, bool &needMetadata,
+        int &indexUsed)
 {
     int32_t rc = NO_ERROR;
     Mutex::Autolock lock(mOfflinePpLock);
@@ -2633,7 +2639,7 @@ int32_t QCamera3YUVChannel::request(buffer_handle_t *buffer,
     if (!ppInfo.offlinePpFlag) {
         // regular request
         return QCamera3ProcessingChannel::request(buffer, frameNumber,
-                pInputBuffer, metadata);
+                pInputBuffer, metadata, indexUsed);
     } else {
         if(!m_bIsActive) {
             rc = start();
@@ -2673,6 +2679,7 @@ int32_t QCamera3YUVChannel::request(buffer_handle_t *buffer,
         LOGD("erasing %d", bufIdx);
 
         mMemory.markFrameNumber(bufIdx, frameNumber);
+        indexUsed = bufIdx;
         mStreams[0]->bufDone(bufIdx);
 
     }
@@ -3258,7 +3265,7 @@ int32_t QCamera3PicChannel::initialize(cam_is_type_t isType)
 int32_t QCamera3PicChannel::request(buffer_handle_t *buffer,
         uint32_t frameNumber,
         camera3_stream_buffer_t *pInputBuffer,
-        metadata_buffer_t *metadata)
+        metadata_buffer_t *metadata, int &indexUsed)
 {
     ATRACE_CALL();
     //FIX ME: Return buffer back in case of failures below.
@@ -3324,6 +3331,7 @@ int32_t QCamera3PicChannel::request(buffer_handle_t *buffer,
         }
         mYuvMemory->markFrameNumber(bufIdx, frameNumber);
         mStreams[0]->bufDone(bufIdx);
+        indexUsed = bufIdx;
     } else {
         qcamera_fwk_input_pp_data_t *src_frame = NULL;
         src_frame = (qcamera_fwk_input_pp_data_t *)calloc(1,
@@ -4712,7 +4720,8 @@ int32_t QCamera3SupportChannel::initialize(cam_is_type_t isType)
 }
 
 int32_t QCamera3SupportChannel::request(buffer_handle_t * /*buffer*/,
-                                                uint32_t /*frameNumber*/)
+                                                uint32_t /*frameNumber*/,
+                                                int & /*indexUsed*/)
 {
     return NO_ERROR;
 }
