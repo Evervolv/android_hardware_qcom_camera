@@ -60,6 +60,7 @@ LOCAL_C_INCLUDES := \
         $(LOCAL_PATH)/stack/common \
         $(LOCAL_PATH)/stack/mm-camera-interface/inc \
         $(LOCAL_PATH)/util \
+        $(LOCAL_PATH)/HAL3 \
         hardware/libhardware/include/hardware \
         hardware/qcom/media/msm8996/libstagefrighthw \
         $(TARGET_OUT_HEADERS)/mm-core/omxcore \
