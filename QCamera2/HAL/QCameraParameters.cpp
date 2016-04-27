@@ -493,12 +493,12 @@ static const char* portrait = "portrait";
 static const char* landscape = "landscape";
 
 const cam_dimension_t QCameraParameters::THUMBNAIL_SIZES_MAP[] = {
-    { 512, 288 }, //1.777778
-    { 480, 288 }, //1.666667
     { 256, 154 }, //1.66233
-    { 432, 288 }, //1.5
+    { 240, 160 }, //1.5
     { 320, 320 }, //1.0
     { 320, 240 }, //1.33333
+    { 256, 144 }, //1.777778
+    { 240, 144 }, //1.666667
     { 176, 144 }, //1.222222
     /*Thumbnail sizes to match portrait picture size aspect ratio*/
     { 240, 320 }, //to match 480X640 & 240X320 picture size
@@ -899,6 +899,7 @@ QCameraParameters::QCameraParameters()
       m_pParamBuf(NULL),
       m_pRelCamSyncHeap(NULL),
       m_pRelCamSyncBuf(NULL),
+      m_bFrameSyncEnabled(false),
       mIsType(IS_TYPE_NONE),
       m_bZslMode(false),
       m_bZslMode_new(false),
@@ -930,6 +931,7 @@ QCameraParameters::QCameraParameters()
       m_bSnapshotFlipChanged(false),
       m_bFixedFrameRateSet(false),
       m_bHDREnabled(false),
+      m_bLocalHDREnabled(false),
       m_bAVTimerEnabled(false),
       m_bDISEnabled(false),
       m_MobiMask(0),
@@ -1033,6 +1035,7 @@ QCameraParameters::QCameraParameters(const String8 &params)
     m_pParamBuf(NULL),
     m_pRelCamSyncHeap(NULL),
     m_pRelCamSyncBuf(NULL),
+    m_bFrameSyncEnabled(false),
     m_bZslMode(false),
     m_bZslMode_new(false),
     m_bForceZslMode(false),
@@ -1060,6 +1063,7 @@ QCameraParameters::QCameraParameters(const String8 &params)
     m_bSnapshotFlipChanged(false),
     m_bFixedFrameRateSet(false),
     m_bHDREnabled(false),
+    m_bLocalHDREnabled(false),
     m_bAVTimerEnabled(false),
     m_AdjustFPS(NULL),
     m_bHDR1xFrameEnabled(false),
@@ -3566,6 +3570,17 @@ int32_t QCameraParameters::setSceneMode(const QCameraParameters& params)
     const char *prev_str = get(KEY_SCENE_MODE);
     LOGH("str - %s, prev_str - %s", str, prev_str);
 
+    // HDR & Recording are mutually exclusive and so disable HDR if recording hint is set
+    if (m_bRecordingHint_new && m_bHDREnabled) {
+        LOGH("Disable the HDR and set it to Auto");
+        str = SCENE_MODE_AUTO;
+        m_bLocalHDREnabled = true;
+    } else if (!m_bRecordingHint_new && m_bLocalHDREnabled) {
+        LOGH("Restore the HDR from Auto scene mode");
+        str = SCENE_MODE_HDR;
+        m_bLocalHDREnabled = false;
+    }
+
     if (str != NULL) {
         if (prev_str == NULL ||
             strcmp(str, prev_str) != 0) {
@@ -4740,7 +4755,7 @@ int32_t QCameraParameters::setZslAttributes(const QCameraParameters& params)
         memset(prop, 0, sizeof(prop));
         property_get("persist.camera.zsl.backlookcnt", prop, "2");
         uint32_t look_back_cnt = atoi(prop);
-        if (m_relCamSyncInfo.is_frame_sync_enabled) {
+        if (m_bFrameSyncEnabled) {
             look_back_cnt += EXTRA_FRAME_SYNC_BUFFERS;
         }
         set(KEY_QC_ZSL_BURST_LOOKBACK, look_back_cnt);
@@ -4754,7 +4769,7 @@ int32_t QCameraParameters::setZslAttributes(const QCameraParameters& params)
         memset(prop, 0, sizeof(prop));
         property_get("persist.camera.zsl.queuedepth", prop, "2");
         uint32_t queue_depth = atoi(prop);
-        if (m_relCamSyncInfo.is_frame_sync_enabled) {
+        if (m_bFrameSyncEnabled) {
             queue_depth += EXTRA_FRAME_SYNC_BUFFERS;
         }
         set(KEY_QC_ZSL_QUEUE_DEPTH, queue_depth);
@@ -11786,6 +11801,38 @@ const cam_sync_related_sensors_event_info_t*
         QCameraParameters::getRelatedCamSyncInfo(void)
 {
     return &m_relCamSyncInfo;
+}
+
+/*===========================================================================
+ * FUNCTION   : setFrameSyncEnabled
+ *
+ * DESCRIPTION: sets whether frame sync is enabled
+ *
+ * PARAMETERS :
+ *   @enable  : flag whether to enable or disable frame sync
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCameraParameters::setFrameSyncEnabled(bool enable)
+{
+    m_bFrameSyncEnabled = enable;
+    return NO_ERROR;
+}
+
+/*===========================================================================
+ * FUNCTION   : isFrameSyncEnabled
+ *
+ * DESCRIPTION: returns whether frame sync is enabled
+ *
+ * PARAMETERS :none
+ *
+ * RETURN     : bool indicating whether frame sync is enabled
+ *==========================================================================*/
+bool QCameraParameters::isFrameSyncEnabled(void)
+{
+    return m_bFrameSyncEnabled;
 }
 
 /*===========================================================================

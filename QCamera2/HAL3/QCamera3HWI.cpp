@@ -244,11 +244,12 @@ const QCamera3HardwareInterface::QCameraMap<
 
 const int32_t available_thumbnail_sizes[] = {0, 0,
                                              176, 144,
-                                             320, 240,
-                                             432, 288,
-                                             480, 288,
-                                             512, 288,
-                                             512, 384};
+                                             240, 144,
+                                             256, 144,
+                                             240, 160,
+                                             256, 154,
+                                             240, 240,
+                                             320, 240};
 
 const cam_dimension_t default_hfr_video_sizes[] = {
     { 3840, 2160 },
