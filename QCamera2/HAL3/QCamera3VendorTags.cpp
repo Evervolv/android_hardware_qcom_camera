@@ -71,7 +71,7 @@ const char *qcamera3_ext_section_names[QCAMERA3_SECTIONS_END -
     "org.codeaurora.qcamera3.temporal_denoise",
     "org.codeaurora.qcamera3.av_timer",
     "org.codeaurora.qcamera3.sensor_meta_data",
-    "com.google.nexus.experimental2016"
+    "com.google.nexus.experimental2016",
     "org.codeaurora.qcamera3.dualcam_link_meta_data",
     "org.codeaurora.qcamera3.dualcam_calib_meta_data"
 };
