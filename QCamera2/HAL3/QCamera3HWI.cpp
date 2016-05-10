@@ -7078,8 +7078,6 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_PREDICTED_COLOR_GAINS, ANDROID_STATISTICS_PREDICTED_COLOR_TRANSFORM,
        ANDROID_STATISTICS_SCENE_FLICKER, ANDROID_STATISTICS_FACE_RECTANGLES,
        ANDROID_STATISTICS_FACE_SCORES,
-       ANDROID_SENSOR_DYNAMIC_BLACK_LEVEL,
-       ANDROID_SENSOR_DYNAMIC_WHITE_LEVEL, NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
        ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST };
     size_t result_keys_cnt =
             sizeof(result_keys_basic)/sizeof(result_keys_basic[0]);
@@ -7100,6 +7098,10 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
             (supportedFaceDetectMode == 3)) {
         available_result_keys.add(ANDROID_STATISTICS_FACE_IDS);
         available_result_keys.add(ANDROID_STATISTICS_FACE_LANDMARKS);
+    }
+    if (hasBlackRegions) {
+        available_result_keys.add(ANDROID_SENSOR_DYNAMIC_BLACK_LEVEL);
+        available_result_keys.add(ANDROID_SENSOR_DYNAMIC_WHITE_LEVEL);
     }
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_RESULT_KEYS,
             available_result_keys.array(), available_result_keys.size());
