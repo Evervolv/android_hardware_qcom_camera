@@ -74,8 +74,8 @@ namespace qcamera {
 #define VIDEO_4K_WIDTH  3840
 #define VIDEO_4K_HEIGHT 2160
 
-#define MAX_EIS_WIDTH 1920
-#define MAX_EIS_HEIGHT 1080
+#define MAX_EIS_WIDTH 3840
+#define MAX_EIS_HEIGHT 2160
 
 #define MAX_RAW_STREAMS        1
 #define MAX_STALLING_STREAMS   1
