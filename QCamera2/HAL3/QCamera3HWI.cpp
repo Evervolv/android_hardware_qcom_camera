@@ -252,15 +252,6 @@ const int32_t available_thumbnail_sizes[] = {0, 0,
                                              240, 240,
                                              320, 240};
 
-const cam_dimension_t default_hfr_video_sizes[] = {
-    { 3840, 2160 },
-    { 1920, 1080 },
-    { 1280,  720 },
-    {  640,  480 },
-    {  480,  320 }
-};
-
-
 const QCamera3HardwareInterface::QCameraMap<
         camera_metadata_enum_android_sensor_test_pattern_mode_t,
         cam_test_pattern_mode_t> QCamera3HardwareInterface::TEST_PATTERN_MAP[] = {
@@ -6596,28 +6587,24 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
              * set. This way sensor configuration does not change when recording
              * is started */
 
-            size_t len = sizeof(default_hfr_video_sizes) / sizeof(default_hfr_video_sizes[0]);
-            for (size_t j = 0; j < len; j++) {
-                if ((default_hfr_video_sizes[j].width <= gCamCapability[cameraId]->hfr_tbl[i].dim.width) &&
-                    (default_hfr_video_sizes[j].height <= gCamCapability[cameraId]->hfr_tbl[i].dim.height)) {
-                    //TODO: Might need additional filtering based on VFE/CPP/CPU capabilities
+            /* (width, height, fps_min, fps_max, batch_size_max) */
+            available_hfr_configs.add(
+                    gCamCapability[cameraId]->hfr_tbl[i].dim.width);
+            available_hfr_configs.add(
+                    gCamCapability[cameraId]->hfr_tbl[i].dim.height);
+            available_hfr_configs.add(PREVIEW_FPS_FOR_HFR);
+            available_hfr_configs.add(fps);
+            available_hfr_configs.add(fps / PREVIEW_FPS_FOR_HFR);
 
-                    /* (width, height, fps_min, fps_max, batch_size_max) */
-                    available_hfr_configs.add(default_hfr_video_sizes[j].width);
-                    available_hfr_configs.add(default_hfr_video_sizes[j].height);
-                    available_hfr_configs.add(PREVIEW_FPS_FOR_HFR);
-                    available_hfr_configs.add(fps);
-                    available_hfr_configs.add(fps / PREVIEW_FPS_FOR_HFR);
-
-                    /* (width, height, fps_min, fps_max, batch_size_max) */
-                    available_hfr_configs.add(default_hfr_video_sizes[j].width);
-                    available_hfr_configs.add(default_hfr_video_sizes[j].height);
-                    available_hfr_configs.add(fps);
-                    available_hfr_configs.add(fps);
-                    available_hfr_configs.add(fps / PREVIEW_FPS_FOR_HFR);
-                }// if
-            }// for (...; j < len;...)
-       } //if (fps >= MIN_FPS_FOR_BATCH_MODE)
+            /* (width, height, fps_min, fps_max, batch_size_max) */
+            available_hfr_configs.add(
+                    gCamCapability[cameraId]->hfr_tbl[i].dim.width);
+            available_hfr_configs.add(
+                    gCamCapability[cameraId]->hfr_tbl[i].dim.height);
+            available_hfr_configs.add(fps);
+            available_hfr_configs.add(fps);
+            available_hfr_configs.add(fps / PREVIEW_FPS_FOR_HFR);
+       }
     }
     //Advertise HFR capability only if the property is set
     memset(prop, 0, sizeof(prop));
