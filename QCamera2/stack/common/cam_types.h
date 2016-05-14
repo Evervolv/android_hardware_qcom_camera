@@ -2122,6 +2122,10 @@ typedef enum {
     CAM_INTF_PARM_INSTANT_AEC,
     /* Whether to enable hybrid ae mode */
     CAM_INTF_META_HYBRID_AE,
+    /* DevCamDebug metadata CAM_TYPES.h */
+    CAM_INTF_META_DEV_CAM_ENABLE,
+    CAM_INTF_META_DEV_CAM_AF_LENS_POSITION,
+    /* DevCamDebug metadata end */
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
