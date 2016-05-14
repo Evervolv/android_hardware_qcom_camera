@@ -121,7 +121,9 @@ vendor_tag_info qcamera3_sensor_meta_data[QCAMERA3_SENSOR_META_DATA_END -
 
 vendor_tag_info_t nexus_experimental_2016[NEXUS_EXPERIMENTAL_2016_END -
         NEXUS_EXPERIMENTAL_2016_START] = {
-   {"3a.hybrid_ae_enable", TYPE_BYTE }
+   {"3a.hybrid_ae_enable", TYPE_BYTE },
+   { "devcamdebug_meta_enable", TYPE_BYTE },
+   { "devcamdebug_af_lens_position", TYPE_INT32 }
 };
 
 vendor_tag_info_t
@@ -185,6 +187,8 @@ uint32_t qcamera3_all_tags[] = {
 
     //NEXUS_EXPERIMENTAL_2016
     (uint32_t)NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
+    (uint32_t)DEVCAMDEBUG_META_ENABLE,
+    (uint32_t)DEVCAMDEBUG_AF_LENS_POSITION,
 
     // QCAMERA3_DUALCAM_LINK_META_DATA
     (uint32_t)QCAMERA3_DUALCAM_LINK_ENABLE,

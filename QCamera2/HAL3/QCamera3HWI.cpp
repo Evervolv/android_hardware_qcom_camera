@@ -366,6 +366,9 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mCaptureIntent(0),
       mCacMode(0),
       mHybridAeEnable(0),
+      /* DevCamDebug metadata internal m control*/
+      mDevCamDebugMetaEnable(0),
+      /* DevCamDebug metadata end */
       mBatchSize(0),
       mToBeQueuedVidBufs(0),
       mHFRVideoFps(DEFAULT_VIDEO_FPS),
@@ -2873,7 +2876,11 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
 
             result.result = translateFromHalMetadata(metadata,
                     i->timestamp, i->request_id, i->jpegMetadata, i->pipeline_depth,
-                    i->capture_intent, i->hybrid_ae_enable, internalPproc, i->fwkCacMode);
+                    i->capture_intent, i->hybrid_ae_enable,
+                     /* DevCamDebug metadata translateFromHalMetadata function call*/
+                    i->DevCamDebug_meta_enable,
+                    /* DevCamDebug metadata end */
+                    internalPproc, i->fwkCacMode);
 
             saveExifParams(metadata);
 
@@ -3790,6 +3797,12 @@ no_error:
     }
     pendingRequest.capture_intent = mCaptureIntent;
     pendingRequest.hybrid_ae_enable = mHybridAeEnable;
+    /* DevCamDebug metadata processCaptureRequest */
+    if (meta.exists(DEVCAMDEBUG_META_ENABLE)) {
+        mDevCamDebugMetaEnable =
+                meta.find(DEVCAMDEBUG_META_ENABLE).data.u8[0];
+    }
+    /* DevCamDebug metadata end */
 
     //extract CAC info
     if (meta.exists(ANDROID_COLOR_CORRECTION_ABERRATION_MODE)) {
@@ -4510,6 +4523,9 @@ template <class mapType> cam_cds_mode_type_t lookupProp(const mapType *arr,
  *   @request_id: request id
  *   @jpegMetadata: additional jpeg metadata
  *   @hybrid_ae_enable: whether hybrid ae is enabled
+ *   // DevCamDebug metadata
+ *   @DevCamDebug_meta_enable: enable DevCamDebug meta
+ *   // DevCamDebug metadata end
  *   @pprocDone: whether internal offline postprocsesing is done
  *
  * RETURN     : camera_metadata_t*
@@ -4524,6 +4540,9 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                                  uint8_t pipeline_depth,
                                  uint8_t capture_intent,
                                  uint8_t hybrid_ae_enable,
+                                 /* DevCamDebug metadata translateFromHalMetadata argument */
+                                 uint8_t DevCamDebug_meta_enable,
+                                 /* DevCamDebug metadata end */
                                  bool pprocDone,
                                  uint8_t fwk_cacMode)
 {
@@ -4538,6 +4557,15 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     camMetadata.update(ANDROID_REQUEST_PIPELINE_DEPTH, &pipeline_depth, 1);
     camMetadata.update(ANDROID_CONTROL_CAPTURE_INTENT, &capture_intent, 1);
     camMetadata.update(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE, &hybrid_ae_enable, 1);
+    /* DevCamDebug metadata translateFromHalMetadata */
+    camMetadata.update(DEVCAMDEBUG_META_ENABLE, &DevCamDebug_meta_enable, 1);
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_lens_position,
+            CAM_INTF_META_DEV_CAM_AF_LENS_POSITION, metadata) {
+        int32_t fwk_DevCamDebug_af_lens_position = *DevCamDebug_af_lens_position;
+        camMetadata.update(DEVCAMDEBUG_AF_LENS_POSITION, &fwk_DevCamDebug_af_lens_position, 1);
+    }
+    /* DevCamDebug metadata end */
+
 
     IF_META_AVAILABLE(uint32_t, frame_number, CAM_INTF_META_FRAME_NUMBER, metadata) {
         int64_t fwk_frame_number = *frame_number;
@@ -7043,7 +7071,11 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_HISTOGRAM_MODE, ANDROID_STATISTICS_SHARPNESS_MAP_MODE,
        ANDROID_STATISTICS_LENS_SHADING_MAP_MODE, ANDROID_TONEMAP_CURVE_BLUE,
        ANDROID_TONEMAP_CURVE_GREEN, ANDROID_TONEMAP_CURVE_RED, ANDROID_TONEMAP_MODE,
-       ANDROID_BLACK_LEVEL_LOCK, NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE};
+       ANDROID_BLACK_LEVEL_LOCK, NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
+       /* DevCamDebug metadata request_keys_basic */
+       DEVCAMDEBUG_META_ENABLE,
+       /* DevCamDebug metadata end */
+       };
 
     size_t request_keys_cnt =
             sizeof(request_keys_basic)/sizeof(request_keys_basic[0]);
@@ -7079,7 +7111,12 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_PREDICTED_COLOR_GAINS, ANDROID_STATISTICS_PREDICTED_COLOR_TRANSFORM,
        ANDROID_STATISTICS_SCENE_FLICKER, ANDROID_STATISTICS_FACE_RECTANGLES,
        ANDROID_STATISTICS_FACE_SCORES,
-       NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE};
+       NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
+       /* DevCamDebug metadata result_keys_basic */
+       DEVCAMDEBUG_META_ENABLE,
+       DEVCAMDEBUG_AF_LENS_POSITION,
+       /* DevCamDebug metadata end */
+       };
     size_t result_keys_cnt =
             sizeof(result_keys_basic)/sizeof(result_keys_basic[0]);
 
