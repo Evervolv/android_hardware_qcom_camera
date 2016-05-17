@@ -43,6 +43,7 @@
 #include "QCamera3HALHeader.h"
 #include "QCamera3Mem.h"
 #include "QCameraPerf.h"
+#include "QCameraCommon.h"
 
 extern "C" {
 #include "mm_camera_interface.h"
@@ -121,6 +122,8 @@ class QCamera3HardwareInterface {
 public:
     /* static variable and functions accessed by camera service */
     static camera3_device_ops_t mCameraOps;
+    //Id of each session in bundle/link
+    static uint32_t sessionId[MM_CAMERA_MAX_NUM_SENSORS];
     static int initialize(const struct camera3_device *,
                 const camera3_callback_ops_t *callback_ops);
     static int configure_streams(const struct camera3_device *,
@@ -200,8 +203,9 @@ public:
     QCamera3ReprocessChannel *addOfflineReprocChannel(const reprocess_config_t &config,
             QCamera3ProcessingChannel *inputChHandle);
     bool needRotationReprocess();
-    bool needReprocess(uint32_t postprocess_mask);
     bool needJpegExifRotation();
+    bool needReprocess(cam_feature_mask_t postprocess_mask);
+    bool needJpegRotation();
     cam_denoise_process_type_t getWaveletDenoiseProcessPlate();
     cam_denoise_process_type_t getTemporalDenoiseProcessPlate();
 
@@ -328,6 +332,10 @@ private:
     static bool supportBurstCapture(uint32_t cameraId);
     int32_t setBundleInfo();
 
+    static void setPAAFSupport(cam_feature_mask_t& feature_mask,
+            cam_stream_type_t stream_type,
+            cam_color_filter_arrangement_t filter_arrangement);
+
     camera3_device_t   mCameraDevice;
     uint32_t           mCameraId;
     mm_camera_vtbl_t  *mCameraHandle;
@@ -343,6 +351,7 @@ private:
     QCamera3RawDumpChannel *mRawDumpChannel;
     QCamera3RegularChannel *mDummyBatchChannel;
     QCameraPerfLock m_perfLock;
+    QCameraCommon   mCommon;
 
     uint32_t mChannelHandle;
 
@@ -517,6 +526,14 @@ private:
     uint32_t mSurfaceStridePadding;
 
     State mState;
+    //Dual camera related params
+    bool mIsDeviceLinked;
+    bool mIsMainCamera;
+    uint8_t mLinkedCameraId;
+    QCamera3HeapMemory *m_pRelCamSyncHeap;
+    cam_sync_related_sensors_event_info_t *m_pRelCamSyncBuf;
+    cam_sync_related_sensors_event_info_t m_relCamSyncInfo;
+
 };
 
 }; // namespace qcamera
