@@ -121,9 +121,28 @@ vendor_tag_info qcamera3_sensor_meta_data[QCAMERA3_SENSOR_META_DATA_END -
 
 vendor_tag_info_t nexus_experimental_2016[NEXUS_EXPERIMENTAL_2016_END -
         NEXUS_EXPERIMENTAL_2016_START] = {
-   {"3a.hybrid_ae_enable", TYPE_BYTE },
-   { "devcamdebug_meta_enable", TYPE_BYTE },
-   { "devcamdebug_af_lens_position", TYPE_INT32 }
+   {"3a.hybrid_ae_enable",           TYPE_BYTE  },
+   // DevCamDebug vendor tag
+   { "devcamdebug_meta_enable",      TYPE_BYTE  },
+   // DevCamDebug vendor tag AF
+   { "devcamdebug_af_lens_position", TYPE_INT32 },
+   { "devcamdebug_af_tof_confidence",TYPE_INT32 },
+   { "devcamdebug_af_tof_distance",  TYPE_INT32 },
+   // DevCamDebug vendor tag AEC
+   { "devcamdebug_aec_target_luma",  TYPE_INT32 },
+   { "devcamdebug_aec_comp_luma",    TYPE_INT32 },
+   { "devcamdebug_aec_avg_luma",     TYPE_INT32 },
+   { "devcamdebug_aec_cur_luma",     TYPE_INT32 },
+   { "devcamdebug_aec_linecount",    TYPE_INT32 },
+   { "devcamdebug_aec_real_gain",    TYPE_FLOAT },
+   { "devcamdebug_aec_exp_index",    TYPE_INT32 },
+   { "devcamdebug_aec_lux_idx",      TYPE_FLOAT },
+   // DevCamDebug vendor tag AWB
+   { "devcamdebug_awb_r_gain",       TYPE_FLOAT },
+   { "devcamdebug_awb_g_gain",       TYPE_FLOAT },
+   { "devcamdebug_awb_b_gain",       TYPE_FLOAT },
+   { "devcamdebug_awb_cct",          TYPE_INT32 },
+   { "devcamdebug_awb_decision",     TYPE_INT32 },
 };
 
 vendor_tag_info_t
@@ -187,8 +206,28 @@ uint32_t qcamera3_all_tags[] = {
 
     //NEXUS_EXPERIMENTAL_2016
     (uint32_t)NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
+    // DEVCAMDEBUG
     (uint32_t)DEVCAMDEBUG_META_ENABLE,
+    // DEVCAMDEBUG AF
     (uint32_t)DEVCAMDEBUG_AF_LENS_POSITION,
+    (uint32_t)DEVCAMDEBUG_AF_TOF_CONFIDENCE,
+    (uint32_t)DEVCAMDEBUG_AF_TOF_DISTANCE,
+    // DEVCAMDEBUG AEC
+    (uint32_t)DEVCAMDEBUG_AEC_TARGET_LUMA,
+    (uint32_t)DEVCAMDEBUG_AEC_COMP_LUMA,
+    (uint32_t)DEVCAMDEBUG_AEC_AVG_LUMA,
+    (uint32_t)DEVCAMDEBUG_AEC_CUR_LUMA,
+    (uint32_t)DEVCAMDEBUG_AEC_LINECOUNT,
+    (uint32_t)DEVCAMDEBUG_AEC_REAL_GAIN,
+    (uint32_t)DEVCAMDEBUG_AEC_EXP_INDEX,
+    (uint32_t)DEVCAMDEBUG_AEC_LUX_IDX,
+    // DEVCAMDEBUG AWB
+    (uint32_t)DEVCAMDEBUG_AWB_R_GAIN,
+    (uint32_t)DEVCAMDEBUG_AWB_G_GAIN,
+    (uint32_t)DEVCAMDEBUG_AWB_B_GAIN,
+    (uint32_t)DEVCAMDEBUG_AWB_CCT,
+    (uint32_t)DEVCAMDEBUG_AWB_DECISION,
+    // DEVCAMDEBUG END
 
     // QCAMERA3_DUALCAM_LINK_META_DATA
     (uint32_t)QCAMERA3_DUALCAM_LINK_ENABLE,

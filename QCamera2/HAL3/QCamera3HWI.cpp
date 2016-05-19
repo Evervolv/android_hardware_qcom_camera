@@ -4735,14 +4735,92 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     camMetadata.update(ANDROID_REQUEST_PIPELINE_DEPTH, &pipeline_depth, 1);
     camMetadata.update(ANDROID_CONTROL_CAPTURE_INTENT, &capture_intent, 1);
     camMetadata.update(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE, &hybrid_ae_enable, 1);
-    /* DevCamDebug metadata translateFromHalMetadata */
+    // DevCamDebug metadata translateFromHalMetadata
     camMetadata.update(DEVCAMDEBUG_META_ENABLE, &DevCamDebug_meta_enable, 1);
+    // DevCamDebug metadata translateFromHalMetadata AF
     IF_META_AVAILABLE(int32_t, DevCamDebug_af_lens_position,
             CAM_INTF_META_DEV_CAM_AF_LENS_POSITION, metadata) {
         int32_t fwk_DevCamDebug_af_lens_position = *DevCamDebug_af_lens_position;
         camMetadata.update(DEVCAMDEBUG_AF_LENS_POSITION, &fwk_DevCamDebug_af_lens_position, 1);
     }
-    /* DevCamDebug metadata end */
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_tof_confidence,
+            CAM_INTF_META_DEV_CAM_AF_TOF_CONFIDENCE, metadata) {
+        int32_t fwk_DevCamDebug_af_tof_confidence = *DevCamDebug_af_tof_confidence;
+        camMetadata.update(DEVCAMDEBUG_AF_TOF_CONFIDENCE, &fwk_DevCamDebug_af_tof_confidence, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_tof_distance,
+            CAM_INTF_META_DEV_CAM_AF_TOF_DISTANCE, metadata) {
+        int32_t fwk_DevCamDebug_af_tof_distance = *DevCamDebug_af_tof_distance;
+        camMetadata.update(DEVCAMDEBUG_AF_TOF_DISTANCE, &fwk_DevCamDebug_af_tof_distance, 1);
+    }
+    // DevCamDebug metadata translateFromHalMetadata AEC
+    IF_META_AVAILABLE(int32_t, DevCamDebug_aec_target_luma,
+            CAM_INTF_META_DEV_CAM_AEC_TARGET_LUMA, metadata) {
+        int32_t fwk_DevCamDebug_aec_target_luma = *DevCamDebug_aec_target_luma;
+        camMetadata.update(DEVCAMDEBUG_AEC_TARGET_LUMA, &fwk_DevCamDebug_aec_target_luma, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_aec_comp_luma,
+            CAM_INTF_META_DEV_CAM_AEC_COMP_LUMA, metadata) {
+        int32_t fwk_DevCamDebug_aec_comp_luma = *DevCamDebug_aec_comp_luma;
+        camMetadata.update(DEVCAMDEBUG_AEC_COMP_LUMA, &fwk_DevCamDebug_aec_comp_luma, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_aec_avg_luma,
+            CAM_INTF_META_DEV_CAM_AEC_AVG_LUMA, metadata) {
+        int32_t fwk_DevCamDebug_aec_avg_luma = *DevCamDebug_aec_avg_luma;
+        camMetadata.update(DEVCAMDEBUG_AEC_AVG_LUMA, &fwk_DevCamDebug_aec_avg_luma, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_aec_cur_luma,
+            CAM_INTF_META_DEV_CAM_AEC_CUR_LUMA, metadata) {
+        int32_t fwk_DevCamDebug_aec_cur_luma = *DevCamDebug_aec_cur_luma;
+        camMetadata.update(DEVCAMDEBUG_AEC_CUR_LUMA, &fwk_DevCamDebug_aec_cur_luma, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_aec_linecount,
+            CAM_INTF_META_DEV_CAM_AEC_LINECOUNT, metadata) {
+        int32_t fwk_DevCamDebug_aec_linecount = *DevCamDebug_aec_linecount;
+        camMetadata.update(DEVCAMDEBUG_AEC_LINECOUNT, &fwk_DevCamDebug_aec_linecount, 1);
+    }
+    IF_META_AVAILABLE(float, DevCamDebug_aec_real_gain,
+            CAM_INTF_META_DEV_CAM_AEC_REAL_GAIN, metadata) {
+        float fwk_DevCamDebug_aec_real_gain = *DevCamDebug_aec_real_gain;
+        camMetadata.update(DEVCAMDEBUG_AEC_REAL_GAIN, &fwk_DevCamDebug_aec_real_gain, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_aec_exp_index,
+            CAM_INTF_META_DEV_CAM_AEC_EXP_INDEX, metadata) {
+        int32_t fwk_DevCamDebug_aec_exp_index = *DevCamDebug_aec_exp_index;
+        camMetadata.update(DEVCAMDEBUG_AEC_EXP_INDEX, &fwk_DevCamDebug_aec_exp_index, 1);
+    }
+    IF_META_AVAILABLE(float, DevCamDebug_aec_lux_idx,
+            CAM_INTF_META_DEV_CAM_AEC_LUX_IDX, metadata) {
+        float fwk_DevCamDebug_aec_lux_idx = *DevCamDebug_aec_lux_idx;
+        camMetadata.update(DEVCAMDEBUG_AEC_LUX_IDX, &fwk_DevCamDebug_aec_lux_idx, 1);
+    }
+    // DevCamDebug metadata translateFromHalMetadata AWB
+    IF_META_AVAILABLE(float, DevCamDebug_awb_r_gain,
+            CAM_INTF_META_DEV_CAM_AWB_R_GAIN, metadata) {
+        float fwk_DevCamDebug_awb_r_gain = *DevCamDebug_awb_r_gain;
+        camMetadata.update(DEVCAMDEBUG_AWB_R_GAIN, &fwk_DevCamDebug_awb_r_gain, 1);
+    }
+    IF_META_AVAILABLE(float, DevCamDebug_awb_g_gain,
+            CAM_INTF_META_DEV_CAM_AWB_G_GAIN, metadata) {
+        float fwk_DevCamDebug_awb_g_gain = *DevCamDebug_awb_g_gain;
+        camMetadata.update(DEVCAMDEBUG_AWB_G_GAIN, &fwk_DevCamDebug_awb_g_gain, 1);
+    }
+    IF_META_AVAILABLE(float, DevCamDebug_awb_b_gain,
+            CAM_INTF_META_DEV_CAM_AWB_B_GAIN, metadata) {
+        float fwk_DevCamDebug_awb_b_gain = *DevCamDebug_awb_b_gain;
+        camMetadata.update(DEVCAMDEBUG_AWB_B_GAIN, &fwk_DevCamDebug_awb_b_gain, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_awb_cct,
+            CAM_INTF_META_DEV_CAM_AWB_CCT, metadata) {
+        int32_t fwk_DevCamDebug_awb_cct = *DevCamDebug_awb_cct;
+        camMetadata.update(DEVCAMDEBUG_AWB_CCT, &fwk_DevCamDebug_awb_cct, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_awb_decision,
+            CAM_INTF_META_DEV_CAM_AWB_DECISION, metadata) {
+        int32_t fwk_DevCamDebug_awb_decision = *DevCamDebug_awb_decision;
+        camMetadata.update(DEVCAMDEBUG_AWB_DECISION, &fwk_DevCamDebug_awb_decision, 1);
+    }
+    // DevCamDebug metadata end
 
 
     IF_META_AVAILABLE(uint32_t, frame_number, CAM_INTF_META_FRAME_NUMBER, metadata) {
@@ -7316,9 +7394,27 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_SCENE_FLICKER, ANDROID_STATISTICS_FACE_RECTANGLES,
        ANDROID_STATISTICS_FACE_SCORES,
        NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
-       /* DevCamDebug metadata result_keys_basic */
+       // DevCamDebug metadata result_keys_basic
        DEVCAMDEBUG_META_ENABLE,
+       // DevCamDebug metadata result_keys AF
        DEVCAMDEBUG_AF_LENS_POSITION,
+       DEVCAMDEBUG_AF_TOF_CONFIDENCE,
+       DEVCAMDEBUG_AF_TOF_DISTANCE,
+       // DevCamDebug metadata result_keys AEC
+       DEVCAMDEBUG_AEC_TARGET_LUMA,
+       DEVCAMDEBUG_AEC_COMP_LUMA,
+       DEVCAMDEBUG_AEC_AVG_LUMA,
+       DEVCAMDEBUG_AEC_CUR_LUMA,
+       DEVCAMDEBUG_AEC_LINECOUNT,
+       DEVCAMDEBUG_AEC_REAL_GAIN,
+       DEVCAMDEBUG_AEC_EXP_INDEX,
+       DEVCAMDEBUG_AEC_LUX_IDX,
+       // DevCamDebug metadata result_keys AWB
+       DEVCAMDEBUG_AWB_R_GAIN,
+       DEVCAMDEBUG_AWB_G_GAIN,
+       DEVCAMDEBUG_AWB_B_GAIN,
+       DEVCAMDEBUG_AWB_CCT,
+       DEVCAMDEBUG_AWB_DECISION,
        /* DevCamDebug metadata end */
        };
     size_t result_keys_cnt =
