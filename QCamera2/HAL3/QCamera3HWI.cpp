@@ -5619,6 +5619,11 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         }
     }
 
+    // AF scene change
+    IF_META_AVAILABLE(uint8_t, afSceneChange, CAM_INTF_META_AF_SCENE_CHANGE, metadata) {
+        camMetadata.update(NEXUS_EXPERIMENTAL_2016_AF_SCENE_CHANGE, afSceneChange, 1);
+    }
+
     resultMetadata = camMetadata.release();
     return resultMetadata;
 }
@@ -7394,6 +7399,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_SCENE_FLICKER, ANDROID_STATISTICS_FACE_RECTANGLES,
        ANDROID_STATISTICS_FACE_SCORES,
        NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
+       NEXUS_EXPERIMENTAL_2016_AF_SCENE_CHANGE,
        // DevCamDebug metadata result_keys_basic
        DEVCAMDEBUG_META_ENABLE,
        // DevCamDebug metadata result_keys AF
