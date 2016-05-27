@@ -5921,16 +5921,20 @@ void QCamera3HardwareInterface::dumpMetadataToFile(tuning_params_t &meta,
         time (&current_time);
         timeinfo = localtime (&current_time);
         if (timeinfo != NULL) {
+            /* Consistent naming for Jpeg+meta+raw: meta name */
             strftime (timeBuf, sizeof(timeBuf),
-                    QCAMERA_DUMP_FRM_LOCATION"%Y%m%d%H%M%S", timeinfo);
+                    QCAMERA_DUMP_FRM_LOCATION"IMG_%Y%m%d_%H%M%S", timeinfo);
+            /* Consistent naming for Jpeg+meta+raw: meta name end*/
         }
         String8 filePath(timeBuf);
+         /* Consistent naming for Jpeg+meta+raw */
         snprintf(buf,
                 sizeof(buf),
                 "%dm_%s_%d.bin",
                 dumpFrameCount,
                 type,
                 frameNumber);
+         /* Consistent naming for Jpeg+meta+raw end */
         filePath.append(buf);
         int file_fd = open(filePath.string(), O_RDWR | O_CREAT, 0777);
         if (file_fd >= 0) {
