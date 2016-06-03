@@ -6077,10 +6077,14 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     }
 
 #ifndef USE_HAL_3_3
+    int32_t fwk_ispSensitivity = 100;
     IF_META_AVAILABLE(int32_t, ispSensitivity, CAM_INTF_META_ISP_SENSITIVITY, metadata) {
-        int32_t fwk_ispSensitivity = (int32_t) *ispSensitivity;
-        camMetadata.update(ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST, &fwk_ispSensitivity, 1);
+        fwk_ispSensitivity = (int32_t) *ispSensitivity;
     }
+    IF_META_AVAILABLE(float, postStatsSensitivity, CAM_INTF_META_ISP_POST_STATS_SENSITIVITY, metadata) {
+        fwk_ispSensitivity = (int32_t) (*postStatsSensitivity * fwk_ispSensitivity);
+    }
+    camMetadata.update(ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST, &fwk_ispSensitivity, 1);
 #endif
 
     IF_META_AVAILABLE(uint32_t, shadingMode, CAM_INTF_META_SHADING_MODE, metadata) {
