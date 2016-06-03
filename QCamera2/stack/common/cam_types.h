@@ -2154,7 +2154,7 @@ typedef enum {
     CAM_INTF_META_TOUCH_AE_RESULT,
     /* Param for updating initial exposure index value*/
     CAM_INTF_PARM_INITIAL_EXPOSURE_INDEX,
-    /* Gain applied post raw captrue.
+    /* Gain applied post raw captrue prior to stats collection.
        ISP digital gain */
     CAM_INTF_META_ISP_SENSITIVITY,
     /* Param for enabling instant aec*/
@@ -2185,6 +2185,8 @@ typedef enum {
     /* DevCamDebug metadata end */
     /* AF scene change */
     CAM_INTF_META_AF_SCENE_CHANGE,
+    /* Gain applied post stats collection in ISP */
+    CAM_INTF_META_ISP_POST_STATS_SENSITIVITY,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 

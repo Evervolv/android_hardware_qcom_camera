@@ -981,6 +981,7 @@ typedef struct {
     INCLUDE(CAM_INTF_META_DEV_CAM_AWB_CCT,              int32_t,                     1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AWB_DECISION,         int32_t,                     1);
     /* DevCamDebug metadata end */
+    INCLUDE(CAM_INTF_META_ISP_POST_STATS_SENSITIVITY,   float,                       1);
 } metadata_data_t;
 
 /* Update clear_metadata_buffer() function when a new is_xxx_valid is added to
