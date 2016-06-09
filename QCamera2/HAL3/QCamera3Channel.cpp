@@ -2299,14 +2299,15 @@ void QCamera3RawDumpChannel::dumpRawSnapshot(mm_camera_buf_def_t *frame)
 
         if (NULL != timeinfo) {
             memset(buf, 0, sizeof(buf));
+            /* Consistent naming for Jpeg+meta+raw: Raw name */
             snprintf(buf, sizeof(buf),
                     QCAMERA_DUMP_FRM_LOCATION
-                    "%04d-%02d-%02d-%02d-%02d-%02d-%06ld_%d_%dx%d.raw",
+                    "IMG_%04d%02d%02d_%02d%02d%02d_%dx%d.raw",
                     timeinfo->tm_year + 1900, timeinfo->tm_mon + 1,
                     timeinfo->tm_mday, timeinfo->tm_hour,
-                    timeinfo->tm_min, timeinfo->tm_sec,tv.tv_usec,
-                    frame->frame_idx, dim.width, dim.height);
-
+                    timeinfo->tm_min, timeinfo->tm_sec,
+                    dim.width, dim.height);
+            /* Consistent naming for Jpeg+meta+raw: Raw name end*/
             int file_fd = open(buf, O_RDWR| O_CREAT, 0777);
             if (file_fd >= 0) {
                 ssize_t written_len =
