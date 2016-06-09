@@ -4780,6 +4780,126 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         int32_t fwk_DevCamDebug_af_tof_distance = *DevCamDebug_af_tof_distance;
         camMetadata.update(DEVCAMDEBUG_AF_TOF_DISTANCE, &fwk_DevCamDebug_af_tof_distance, 1);
     }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_luma,
+            CAM_INTF_META_DEV_CAM_AF_LUMA, metadata) {
+        int32_t fwk_DevCamDebug_af_luma = *DevCamDebug_af_luma;
+        camMetadata.update(DEVCAMDEBUG_AF_LUMA, &fwk_DevCamDebug_af_luma, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_haf_state,
+            CAM_INTF_META_DEV_CAM_AF_HAF_STATE, metadata) {
+        int32_t fwk_DevCamDebug_af_haf_state = *DevCamDebug_af_haf_state;
+        camMetadata.update(DEVCAMDEBUG_AF_HAF_STATE, &fwk_DevCamDebug_af_haf_state, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_monitor_pdaf_target_pos,
+            CAM_INTF_META_DEV_CAM_AF_MONITOR_PDAF_TARGET_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_monitor_pdaf_target_pos = *DevCamDebug_af_monitor_pdaf_target_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_MONITOR_PDAF_TARGET_POS, &fwk_DevCamDebug_af_monitor_pdaf_target_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_monitor_pdaf_confidence,
+            CAM_INTF_META_DEV_CAM_AF_MONITOR_PDAF_CONFIDENCE, metadata) {
+        int32_t fwk_DevCamDebug_af_monitor_pdaf_confidence = *DevCamDebug_af_monitor_pdaf_confidence;
+        camMetadata.update(DEVCAMDEBUG_AF_MONITOR_PDAF_CONFIDENCE, &fwk_DevCamDebug_af_monitor_pdaf_confidence, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_monitor_pdaf_refocus,
+            CAM_INTF_META_DEV_CAM_AF_MONITOR_PDAF_REFOCUS, metadata) {
+        int32_t fwk_DevCamDebug_af_monitor_pdaf_refocus = *DevCamDebug_af_monitor_pdaf_refocus;
+        camMetadata.update(DEVCAMDEBUG_AF_MONITOR_PDAF_REFOCUS, &fwk_DevCamDebug_af_monitor_pdaf_refocus, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_monitor_tof_target_pos,
+            CAM_INTF_META_DEV_CAM_AF_MONITOR_TOF_TARGET_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_monitor_tof_target_pos = *DevCamDebug_af_monitor_tof_target_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_MONITOR_TOF_TARGET_POS, &fwk_DevCamDebug_af_monitor_tof_target_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_monitor_tof_confidence,
+            CAM_INTF_META_DEV_CAM_AF_MONITOR_TOF_CONFIDENCE, metadata) {
+        int32_t fwk_DevCamDebug_af_monitor_tof_confidence = *DevCamDebug_af_monitor_tof_confidence;
+        camMetadata.update(DEVCAMDEBUG_AF_MONITOR_TOF_CONFIDENCE, &fwk_DevCamDebug_af_monitor_tof_confidence, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_monitor_tof_refocus,
+            CAM_INTF_META_DEV_CAM_AF_MONITOR_TOF_REFOCUS, metadata) {
+        int32_t fwk_DevCamDebug_af_monitor_tof_refocus = *DevCamDebug_af_monitor_tof_refocus;
+        camMetadata.update(DEVCAMDEBUG_AF_MONITOR_TOF_REFOCUS, &fwk_DevCamDebug_af_monitor_tof_refocus, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_monitor_type_select,
+            CAM_INTF_META_DEV_CAM_AF_MONITOR_TYPE_SELECT, metadata) {
+        int32_t fwk_DevCamDebug_af_monitor_type_select = *DevCamDebug_af_monitor_type_select;
+        camMetadata.update(DEVCAMDEBUG_AF_MONITOR_TYPE_SELECT, &fwk_DevCamDebug_af_monitor_type_select, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_monitor_refocus,
+            CAM_INTF_META_DEV_CAM_AF_MONITOR_REFOCUS, metadata) {
+        int32_t fwk_DevCamDebug_af_monitor_refocus = *DevCamDebug_af_monitor_refocus;
+        camMetadata.update(DEVCAMDEBUG_AF_MONITOR_REFOCUS, &fwk_DevCamDebug_af_monitor_refocus, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_monitor_target_pos,
+            CAM_INTF_META_DEV_CAM_AF_MONITOR_TARGET_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_monitor_target_pos = *DevCamDebug_af_monitor_target_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_MONITOR_TARGET_POS, &fwk_DevCamDebug_af_monitor_target_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_pdaf_target_pos,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_PDAF_TARGET_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_search_pdaf_target_pos = *DevCamDebug_af_search_pdaf_target_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_PDAF_TARGET_POS, &fwk_DevCamDebug_af_search_pdaf_target_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_pdaf_next_pos,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_PDAF_NEXT_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_search_pdaf_next_pos = *DevCamDebug_af_search_pdaf_next_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_PDAF_NEXT_POS, &fwk_DevCamDebug_af_search_pdaf_next_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_pdaf_near_pos,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_PDAF_NEAR_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_search_pdaf_near_pos = *DevCamDebug_af_search_pdaf_near_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_PDAF_NEAR_POS, &fwk_DevCamDebug_af_search_pdaf_near_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_pdaf_far_pos,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_PDAF_FAR_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_search_pdaf_far_pos = *DevCamDebug_af_search_pdaf_far_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_PDAF_FAR_POS, &fwk_DevCamDebug_af_search_pdaf_far_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_pdaf_confidence,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_PDAF_CONFIDENCE, metadata) {
+        int32_t fwk_DevCamDebug_af_search_pdaf_confidence = *DevCamDebug_af_search_pdaf_confidence;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_PDAF_CONFIDENCE, &fwk_DevCamDebug_af_search_pdaf_confidence, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_tof_target_pos,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_TOF_TARGET_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_search_tof_target_pos = *DevCamDebug_af_search_tof_target_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_TOF_TARGET_POS, &fwk_DevCamDebug_af_search_tof_target_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_tof_next_pos,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_TOF_NEXT_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_search_tof_next_pos = *DevCamDebug_af_search_tof_next_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_TOF_NEXT_POS, &fwk_DevCamDebug_af_search_tof_next_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_tof_near_pos,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_TOF_NEAR_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_search_tof_near_pos = *DevCamDebug_af_search_tof_near_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_TOF_NEAR_POS, &fwk_DevCamDebug_af_search_tof_near_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_tof_far_pos,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_TOF_FAR_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_search_tof_far_pos = *DevCamDebug_af_search_tof_far_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_TOF_FAR_POS, &fwk_DevCamDebug_af_search_tof_far_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_tof_confidence,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_TOF_CONFIDENCE, metadata) {
+        int32_t fwk_DevCamDebug_af_search_tof_confidence = *DevCamDebug_af_search_tof_confidence;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_TOF_CONFIDENCE, &fwk_DevCamDebug_af_search_tof_confidence, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_type_select,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_TYPE_SELECT, metadata) {
+        int32_t fwk_DevCamDebug_af_search_type_select = *DevCamDebug_af_search_type_select;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_TYPE_SELECT, &fwk_DevCamDebug_af_search_type_select, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_next_pos,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_NEXT_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_search_next_pos = *DevCamDebug_af_search_next_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_NEXT_POS, &fwk_DevCamDebug_af_search_next_pos, 1);
+    }
+    IF_META_AVAILABLE(int32_t, DevCamDebug_af_search_target_pos,
+            CAM_INTF_META_DEV_CAM_AF_SEARCH_TARGET_POS, metadata) {
+        int32_t fwk_DevCamDebug_af_search_target_pos = *DevCamDebug_af_search_target_pos;
+        camMetadata.update(DEVCAMDEBUG_AF_SEARCH_TARGET_POS, &fwk_DevCamDebug_af_search_target_pos, 1);
+    }
     // DevCamDebug metadata translateFromHalMetadata AEC
     IF_META_AVAILABLE(int32_t, DevCamDebug_aec_target_luma,
             CAM_INTF_META_DEV_CAM_AEC_TARGET_LUMA, metadata) {
@@ -7443,6 +7563,30 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        DEVCAMDEBUG_AF_LENS_POSITION,
        DEVCAMDEBUG_AF_TOF_CONFIDENCE,
        DEVCAMDEBUG_AF_TOF_DISTANCE,
+       DEVCAMDEBUG_AF_LUMA,
+       DEVCAMDEBUG_AF_HAF_STATE,
+       DEVCAMDEBUG_AF_MONITOR_PDAF_TARGET_POS,
+       DEVCAMDEBUG_AF_MONITOR_PDAF_CONFIDENCE,
+       DEVCAMDEBUG_AF_MONITOR_PDAF_REFOCUS,
+       DEVCAMDEBUG_AF_MONITOR_TOF_TARGET_POS,
+       DEVCAMDEBUG_AF_MONITOR_TOF_CONFIDENCE,
+       DEVCAMDEBUG_AF_MONITOR_TOF_REFOCUS,
+       DEVCAMDEBUG_AF_MONITOR_TYPE_SELECT,
+       DEVCAMDEBUG_AF_MONITOR_REFOCUS,
+       DEVCAMDEBUG_AF_MONITOR_TARGET_POS,
+       DEVCAMDEBUG_AF_SEARCH_PDAF_TARGET_POS,
+       DEVCAMDEBUG_AF_SEARCH_PDAF_NEXT_POS,
+       DEVCAMDEBUG_AF_SEARCH_PDAF_NEAR_POS,
+       DEVCAMDEBUG_AF_SEARCH_PDAF_FAR_POS,
+       DEVCAMDEBUG_AF_SEARCH_PDAF_CONFIDENCE,
+       DEVCAMDEBUG_AF_SEARCH_TOF_TARGET_POS,
+       DEVCAMDEBUG_AF_SEARCH_TOF_NEXT_POS,
+       DEVCAMDEBUG_AF_SEARCH_TOF_NEAR_POS,
+       DEVCAMDEBUG_AF_SEARCH_TOF_FAR_POS,
+       DEVCAMDEBUG_AF_SEARCH_TOF_CONFIDENCE,
+       DEVCAMDEBUG_AF_SEARCH_TYPE_SELECT,
+       DEVCAMDEBUG_AF_SEARCH_NEXT_POS,
+       DEVCAMDEBUG_AF_SEARCH_TARGET_POS,
        // DevCamDebug metadata result_keys AEC
        DEVCAMDEBUG_AEC_TARGET_LUMA,
        DEVCAMDEBUG_AEC_COMP_LUMA,
