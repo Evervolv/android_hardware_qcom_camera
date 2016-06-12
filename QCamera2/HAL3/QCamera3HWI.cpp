@@ -371,6 +371,8 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mOpMode(CAMERA3_STREAM_CONFIGURATION_NORMAL_MODE),
       mFirstFrameNumberInBatch(0),
       mNeedSensorRestart(false),
+      mMinInFlightRequests(MIN_INFLIGHT_REQUESTS),
+      mMaxInFlightRequests(MAX_INFLIGHT_REQUESTS),
       mLdafCalibExist(false),
       mPowerHintEnabled(false),
       mLastCustIntentFrmNum(-1),
@@ -3404,8 +3406,6 @@ int QCamera3HardwareInterface::processCaptureRequest(
     int rc = NO_ERROR;
     int32_t request_id;
     CameraMetadata meta;
-    uint32_t minInFlightRequests = MIN_INFLIGHT_REQUESTS;
-    uint32_t maxInFlightRequests = MAX_INFLIGHT_REQUESTS;
     bool isVidBufRequested = false;
     camera3_stream_buffer_t *pInputBuffer = NULL;
 
@@ -3523,9 +3523,23 @@ int QCamera3HardwareInterface::processCaptureRequest(
         /* Set fps and hfr mode while sending meta stream info so that sensor
          * can configure appropriate streaming mode */
         mHFRVideoFps = DEFAULT_VIDEO_FPS;
+        mMinInFlightRequests = MIN_INFLIGHT_REQUESTS;
+        mMaxInFlightRequests = MAX_INFLIGHT_REQUESTS;
         if (meta.exists(ANDROID_CONTROL_AE_TARGET_FPS_RANGE)) {
             rc = setHalFpsRange(meta, mParameters);
-            if (rc != NO_ERROR) {
+            if (rc == NO_ERROR) {
+                int32_t max_fps =
+                    (int32_t) meta.find(ANDROID_CONTROL_AE_TARGET_FPS_RANGE).data.i32[1];
+                if (max_fps == 60) {
+                    mMinInFlightRequests = MIN_INFLIGHT_60FPS_REQUESTS;
+                }
+                /* For HFR, more buffers are dequeued upfront to improve the performance */
+                if (mBatchSize) {
+                    mMinInFlightRequests = MIN_INFLIGHT_HFR_REQUESTS;
+                    mMaxInFlightRequests = MAX_INFLIGHT_HFR_REQUESTS;
+                }
+            }
+            else {
                 LOGE("setHalFpsRange failed");
             }
         }
@@ -4188,16 +4202,12 @@ no_error:
       // Make timeout as 5 sec for request to be honored
       ts.tv_sec += 5;
     }
-    //Block on conditional variable
-    if (mBatchSize) {
-        /* For HFR, more buffers are dequeued upfront to improve the performance */
-        minInFlightRequests = MIN_INFLIGHT_HFR_REQUESTS;
-        maxInFlightRequests = MAX_INFLIGHT_HFR_REQUESTS;
-    }
+
     if (m_perfLock.isPerfLockTimedAcquired() && m_perfLock.isTimerReset())
         m_perfLock.lock_rel_timed();
 
-    while ((mPendingLiveRequest >= minInFlightRequests) && !pInputBuffer &&
+    //Block on conditional variable
+    while ((mPendingLiveRequest >= mMinInFlightRequests) && !pInputBuffer &&
             (mState != ERROR) && (mState != DEINIT)) {
         if (!isValidTimeout) {
             LOGD("Blocking on conditional wait");
@@ -4215,7 +4225,7 @@ no_error:
         LOGD("Unblocked");
         if (mWokenUpByDaemon) {
             mWokenUpByDaemon = false;
-            if (mPendingLiveRequest < maxInFlightRequests)
+            if (mPendingLiveRequest < mMaxInFlightRequests)
                 break;
         }
     }
