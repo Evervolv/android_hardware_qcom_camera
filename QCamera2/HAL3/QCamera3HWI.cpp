@@ -5099,6 +5099,12 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         camMetadata.update(QCAMERA3_SENSOR_DYNAMIC_BLACK_LEVEL_PATTERN, fwk_blackLevelInd, 4);
 
         // Update the ANDROID_SENSOR_DYNAMIC_BLACK_LEVEL
+        // Need convert the internal 12 bit depth to sensor 10 bit sensor raw
+        // depth space.
+        fwk_blackLevelInd[0] /= 4.0;
+        fwk_blackLevelInd[1] /= 4.0;
+        fwk_blackLevelInd[2] /= 4.0;
+        fwk_blackLevelInd[3] /= 4.0;
         camMetadata.update(ANDROID_SENSOR_DYNAMIC_BLACK_LEVEL, fwk_blackLevelInd, 4);
     }
 
