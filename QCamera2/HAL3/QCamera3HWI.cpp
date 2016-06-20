@@ -2848,10 +2848,17 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
         if ( (currentSysTime - req.timestamp) >
             s2ns(MISSING_REQUEST_BUF_TIMEOUT) ) {
             for (auto &missed : req.mPendingBufferList) {
-                LOGE("Current frame: %d. Missing: frame = %d, buffer = %p,"
-                    "stream type = %d, stream format = %d",
-                    frame_number, req.frame_number, missed.buffer,
-                    missed.stream->stream_type, missed.stream->format);
+                assert(missed.stream->priv);
+                if (missed.stream->priv) {
+                    QCamera3Channel *ch = (QCamera3Channel *)(missed.stream->priv);
+                    assert(ch->mStreams[0]);
+                    if (ch->mStreams[0]) {
+                        LOGW("Missing: frame = %d, buffer = %p,"
+                            "stream type = %d, stream format = %d",
+                            req.frame_number, missed.buffer,
+                            ch->mStreams[0]->getMyType(), missed.stream->format);
+                    }
+                }
             }
         }
     }
@@ -3824,7 +3831,7 @@ no_error:
     }
 
     uint32_t frameNumber = request->frame_number;
-    cam_stream_ID_t streamID;
+    cam_stream_ID_t streamsArray;
 
     if (mFlushPerf) {
         //we cannot accept any requests during flush
@@ -3852,7 +3859,7 @@ no_error:
                                     request->input_buffer,
                                     frameNumber);
     // Acquire all request buffers first
-    streamID.num_streams = 0;
+    streamsArray.num_streams = 0;
     int blob_request = 0;
     uint32_t snapshotStreamId = 0;
     for (size_t i = 0; i < request->num_output_buffers; i++) {
@@ -3875,7 +3882,7 @@ no_error:
            }
         }
 
-        streamID.stream_request[streamID.num_streams++].streamID =
+        streamsArray.stream_request[streamsArray.num_streams++].streamID =
             channel->getStreamID(channel->getStreamTypeMask());
 
         if ((1U << CAM_STREAM_TYPE_VIDEO) == channel->getStreamTypeMask()) {
@@ -3888,7 +3895,7 @@ no_error:
     }
     if (blob_request && mRawDumpChannel) {
         LOGD("Trigger Raw based on blob request if Raw dump is enabled");
-        streamID.stream_request[streamID.num_streams++].streamID =
+        streamsArray.stream_request[streamsArray.num_streams++].streamID =
             mRawDumpChannel->getStreamID(mRawDumpChannel->getStreamTypeMask());
     }
 
@@ -3903,7 +3910,7 @@ no_error:
         if (!mBatchSize ||
            (mBatchSize && !isVidBufRequested) ||
            (mBatchSize && isVidBufRequested && !mToBeQueuedVidBufs)) {
-            rc = setFrameParameters(request, streamID, blob_request, snapshotStreamId);
+            rc = setFrameParameters(request, streamsArray, blob_request, snapshotStreamId);
             if (rc < 0) {
                 LOGE("fail to set frame parameters");
                 pthread_mutex_unlock(&mMutex);
@@ -4096,13 +4103,13 @@ no_error:
 
                 uint32_t streamId = channel->getStreamID(channel->getStreamTypeMask());
                 uint32_t j = 0;
-                for (j = 0; j < streamID.num_streams; j++) {
-                    if (streamID.stream_request[j].streamID == streamId) {
-                        streamID.stream_request[j].buf_index = indexUsed;
+                for (j = 0; j < streamsArray.num_streams; j++) {
+                    if (streamsArray.stream_request[j].streamID == streamId) {
+                        streamsArray.stream_request[j].buf_index = indexUsed;
                         break;
                     }
                 }
-                if (j == streamID.num_streams) {
+                if (j == streamsArray.num_streams) {
                     LOGE("Did not find matching stream to update index");
                     assert(0);
                 }
@@ -4124,13 +4131,13 @@ no_error:
 
             uint32_t streamId = channel->getStreamID(channel->getStreamTypeMask());
             uint32_t j = 0;
-            for (j = 0; j < streamID.num_streams; j++) {
-                if (streamID.stream_request[j].streamID == streamId) {
-                    streamID.stream_request[j].buf_index = indexUsed;
+            for (j = 0; j < streamsArray.num_streams; j++) {
+                if (streamsArray.stream_request[j].streamID == streamId) {
+                    streamsArray.stream_request[j].buf_index = indexUsed;
                     break;
                 }
             }
-            if (j == streamID.num_streams) {
+            if (j == streamsArray.num_streams) {
                 LOGE("Did not find matching stream to update index");
                 assert(0);
             }
@@ -4148,13 +4155,13 @@ no_error:
 
             uint32_t streamId = channel->getStreamID(channel->getStreamTypeMask());
             uint32_t j = 0;
-            for (j = 0; j < streamID.num_streams; j++) {
-                if (streamID.stream_request[j].streamID == streamId) {
-                    streamID.stream_request[j].buf_index = indexUsed;
+            for (j = 0; j < streamsArray.num_streams; j++) {
+                if (streamsArray.stream_request[j].streamID == streamId) {
+                    streamsArray.stream_request[j].buf_index = indexUsed;
                     break;
                 }
             }
-            if (j == streamID.num_streams) {
+            if (j == streamsArray.num_streams) {
                 LOGE("Did not find matching stream to update index");
                 assert(0);
             }
@@ -4198,7 +4205,7 @@ no_error:
                     mToBeQueuedVidBufs);
 
            /* Update stream id of all the requested buffers */
-           if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STREAM_ID, streamID)) {
+           if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STREAM_ID, streamsArray)) {
                 LOGE("Failed to set stream type mask in the parameters");
                 return BAD_VALUE;
             }
@@ -8583,7 +8590,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
  *
  * PARAMETERS :
  *   @request   : request that needs to be serviced
- *   @streamID : Stream ID of all the requested streams
+ *   @streamsArray : Stream ID of all the requested streams
  *   @blob_request: Whether this request is a blob request or not
  *
  * RETURN     : success: NO_ERROR
@@ -8591,7 +8598,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
  *==========================================================================*/
 int QCamera3HardwareInterface::setFrameParameters(
                     camera3_capture_request_t *request,
-                    cam_stream_ID_t streamID,
+                    cam_stream_ID_t streamsArray,
                     int blob_request,
                     uint32_t snapshotStreamId)
 {
@@ -8613,7 +8620,7 @@ int QCamera3HardwareInterface::setFrameParameters(
     }
 
     /* Update stream id of all the requested buffers */
-    if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STREAM_ID, streamID)) {
+    if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STREAM_ID, streamsArray)) {
         LOGE("Failed to set stream type mask in the parameters");
         return BAD_VALUE;
     }
