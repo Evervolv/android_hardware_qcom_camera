@@ -3560,6 +3560,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
                 LOGE("extractSceneMode failed");
             }
         }
+        memset(&mBatchedStreamsArray, 0, sizeof(cam_stream_ID_t));
 
         //TODO: validate the arguments, HSV scenemode should have only the
         //advertised fps ranges
@@ -4105,7 +4106,10 @@ no_error:
                 uint32_t j = 0;
                 for (j = 0; j < streamsArray.num_streams; j++) {
                     if (streamsArray.stream_request[j].streamID == streamId) {
-                        streamsArray.stream_request[j].buf_index = indexUsed;
+                      if (mOpMode == CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE)
+                          streamsArray.stream_request[j].buf_index = 0xFFFFFFFF;
+                      else
+                          streamsArray.stream_request[j].buf_index = indexUsed;
                         break;
                     }
                 }
@@ -4133,7 +4137,10 @@ no_error:
             uint32_t j = 0;
             for (j = 0; j < streamsArray.num_streams; j++) {
                 if (streamsArray.stream_request[j].streamID == streamId) {
-                    streamsArray.stream_request[j].buf_index = indexUsed;
+                    if (mOpMode == CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE)
+                        streamsArray.stream_request[j].buf_index = 0xFFFFFFFF;
+                    else
+                        streamsArray.stream_request[j].buf_index = indexUsed;
                     break;
                 }
             }
@@ -4157,7 +4164,10 @@ no_error:
             uint32_t j = 0;
             for (j = 0; j < streamsArray.num_streams; j++) {
                 if (streamsArray.stream_request[j].streamID == streamId) {
-                    streamsArray.stream_request[j].buf_index = indexUsed;
+                    if (mOpMode == CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE)
+                        streamsArray.stream_request[j].buf_index = 0xFFFFFFFF;
+                    else
+                        streamsArray.stream_request[j].buf_index = indexUsed;
                     break;
                 }
             }
@@ -4191,7 +4201,7 @@ no_error:
         return -EINVAL;
     }
 
-    if(request->input_buffer == NULL) {
+    if (request->input_buffer == NULL) {
         /* Set the parameters to backend:
          * - For every request in NORMAL MODE
          * - For every request in HFR mode during preview only case
@@ -4204,8 +4214,26 @@ no_error:
                      mBatchSize, isVidBufRequested,
                     mToBeQueuedVidBufs);
 
-           /* Update stream id of all the requested buffers */
-           if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STREAM_ID, streamsArray)) {
+            if(mBatchSize && isVidBufRequested && (mToBeQueuedVidBufs == mBatchSize)) {
+                for (uint32_t k = 0; k < streamsArray.num_streams; k++) {
+                    uint32_t m = 0;
+                    for (m = 0; m < mBatchedStreamsArray.num_streams; m++) {
+                        if (streamsArray.stream_request[k].streamID ==
+                                mBatchedStreamsArray.stream_request[m].streamID)
+                            break;
+                        }
+                        if (m == mBatchedStreamsArray.num_streams) {
+                            mBatchedStreamsArray.stream_request[mBatchedStreamsArray.num_streams].streamID =
+                                streamsArray.stream_request[k].streamID;
+                            mBatchedStreamsArray.stream_request[mBatchedStreamsArray.num_streams].buf_index =
+                                streamsArray.stream_request[k].buf_index;
+                            mBatchedStreamsArray.num_streams = mBatchedStreamsArray.num_streams + 1;
+                        }
+                }
+                streamsArray = mBatchedStreamsArray;
+            }
+            /* Update stream id of all the requested buffers */
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STREAM_ID, streamsArray)) {
                 LOGE("Failed to set stream type mask in the parameters");
                 return BAD_VALUE;
             }
@@ -4218,6 +4246,23 @@ no_error:
             /* reset to zero coz, the batch is queued */
             mToBeQueuedVidBufs = 0;
             mPendingBatchMap.add(frameNumber, mFirstFrameNumberInBatch);
+            memset(&mBatchedStreamsArray, 0, sizeof(cam_stream_ID_t));
+        } else if (mBatchSize && isVidBufRequested && (mToBeQueuedVidBufs != mBatchSize)) {
+            for (uint32_t k = 0; k < streamsArray.num_streams; k++) {
+                uint32_t m = 0;
+                for (m = 0; m < mBatchedStreamsArray.num_streams; m++) {
+                    if (streamsArray.stream_request[k].streamID ==
+                            mBatchedStreamsArray.stream_request[m].streamID)
+                        break;
+                }
+                if (m == mBatchedStreamsArray.num_streams) {
+                    mBatchedStreamsArray.stream_request[mBatchedStreamsArray.num_streams].streamID =
+                        streamsArray.stream_request[k].streamID;
+                    mBatchedStreamsArray.stream_request[mBatchedStreamsArray.num_streams].buf_index =
+                        streamsArray.stream_request[k].buf_index;
+                    mBatchedStreamsArray.num_streams = mBatchedStreamsArray.num_streams + 1;
+                }
+            }
         }
         mPendingLiveRequest++;
     }
