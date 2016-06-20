@@ -94,11 +94,13 @@ public:
     void destroy();
     virtual int32_t initialize(cam_is_type_t isType) = 0;
     virtual int32_t request(buffer_handle_t * /*buffer*/,
-                uint32_t /*frameNumber*/){ return 0;};
+                uint32_t /*frameNumber*/,
+                int &/*indexUsed*/){ return 0;};
     virtual int32_t request(buffer_handle_t * /*buffer*/,
                 uint32_t /*frameNumber*/,
                 camera3_stream_buffer_t* /*pInputBuffer*/,
-                metadata_buffer_t* /*metadata*/){ return 0;};
+                metadata_buffer_t* /*metadata*/,
+                int & /*indexUsed*/){ return 0;};
     virtual void streamCbRoutine(mm_camera_super_buf_t *super_frame,
                             QCamera3Stream *stream) = 0;
 
@@ -189,7 +191,7 @@ public:
     virtual int32_t request(buffer_handle_t *buffer,
             uint32_t frameNumber,
             camera3_stream_buffer_t* pInputBuffer,
-            metadata_buffer_t* metadata);
+            metadata_buffer_t* metadata, int &indexUsed);
     virtual void streamCbRoutine(mm_camera_super_buf_t *super_frame,
             QCamera3Stream *stream);
     virtual QCamera3StreamMem *getStreamBufs(uint32_t len);
@@ -284,7 +286,8 @@ public:
     virtual int32_t queueBatchBuf();
     virtual int32_t initialize(cam_is_type_t isType);
     using QCamera3ProcessingChannel::request;
-    virtual int32_t request(buffer_handle_t *buffer, uint32_t frameNumber);
+    virtual int32_t request(buffer_handle_t *buffer, uint32_t frameNumber,
+                    int &indexUsed);
     virtual reprocess_type_t getReprocessType();
 
 private:
@@ -310,7 +313,8 @@ public:
 
     virtual int32_t initialize(cam_is_type_t isType);
 
-    virtual int32_t request(buffer_handle_t *buffer, uint32_t frameNumber);
+    virtual int32_t request(buffer_handle_t *buffer, uint32_t frameNumber,
+                    int &indexUsed);
     virtual void streamCbRoutine(mm_camera_super_buf_t *super_frame,
                             QCamera3Stream *stream);
 
@@ -380,7 +384,8 @@ public:
     virtual void putStreamBufs();
     virtual int32_t registerBuffer(buffer_handle_t * /*buffer*/, cam_is_type_t /*isType*/)
             { return NO_ERROR; };
-    virtual int32_t request(buffer_handle_t *buffer, uint32_t frameNumber);
+    virtual int32_t request(buffer_handle_t *buffer, uint32_t frameNumber,
+            int &indexUsed);
     void dumpRawSnapshot(mm_camera_buf_def_t *frame);
 
 public:
@@ -413,7 +418,8 @@ public:
     virtual int32_t request(buffer_handle_t *buffer,
             uint32_t frameNumber,
             camera3_stream_buffer_t* pInputBuffer,
-            metadata_buffer_t* metadata, bool &needMetadata);
+            metadata_buffer_t* metadata, bool &needMetadata,
+            int &indexUsed);
     virtual reprocess_type_t getReprocessType();
     virtual void streamCbRoutine(mm_camera_super_buf_t *super_frame,
             QCamera3Stream *stream);
@@ -476,7 +482,8 @@ public:
     virtual int32_t request(buffer_handle_t *buffer,
             uint32_t frameNumber,
             camera3_stream_buffer_t* pInputBuffer,
-            metadata_buffer_t* metadata);
+            metadata_buffer_t* metadata,
+            int &indexUsed);
     virtual void streamCbRoutine(mm_camera_super_buf_t *super_frame,
             QCamera3Stream *stream);
 
@@ -605,7 +612,8 @@ public:
 
     virtual int32_t initialize(cam_is_type_t isType);
 
-    virtual int32_t request(buffer_handle_t *buffer, uint32_t frameNumber);
+    virtual int32_t request(buffer_handle_t *buffer, uint32_t frameNumber,
+                    int &indexUsed);
     virtual void streamCbRoutine(mm_camera_super_buf_t *super_frame,
                             QCamera3Stream *stream);
 
