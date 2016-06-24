@@ -3074,13 +3074,13 @@ void QCamera3PicChannel::jpegEvtHandle(jpeg_job_status_t status,
                     char *jpeg_eof = &jpeg_buf[jpeg_eof_offset];
                     memcpy(jpeg_eof, &jpegHeader, sizeof(jpegHeader));
                     obj->mMemory.cleanInvalidateCache(bufIdx);
-                    bool jpegDump = false;    
+                    bool jpegDump = false;
                     char prop[PROPERTY_VALUE_MAX];
                     property_get("persist.camera.jpeg.dump", prop, "0");
                     jpegDump = atoi(prop);
                     if (jpegDump) {
                         char buf[FILENAME_MAX];
-                        snprintf(buf, sizeof(buf), QCAMERA_DUMP_FRM_LOCATION"halDump_%d.jpeg",
+                        snprintf(buf, sizeof(buf), QCAMERA_DUMP_FRM_LOCATION"halDump_%d.jpg",
                                 obj->mMemory.getFrameNumber(bufIdx));
                         int file_fd = open(buf, O_RDWR | O_CREAT, 0777);
                         ssize_t written_len = 0;
