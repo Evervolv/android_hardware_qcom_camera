@@ -3540,7 +3540,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
             if (rc == NO_ERROR) {
                 int32_t max_fps =
                     (int32_t) meta.find(ANDROID_CONTROL_AE_TARGET_FPS_RANGE).data.i32[1];
-                if (max_fps == 60) {
+                if (max_fps == 60 || mCaptureIntent == ANDROID_CONTROL_CAPTURE_INTENT_VIDEO_RECORD) {
                     mMinInFlightRequests = MIN_INFLIGHT_60FPS_REQUESTS;
                 }
                 /* For HFR, more buffers are dequeued upfront to improve the performance */
