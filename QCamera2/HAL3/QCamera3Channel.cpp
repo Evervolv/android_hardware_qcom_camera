@@ -3080,9 +3080,24 @@ void QCamera3PicChannel::jpegEvtHandle(jpeg_job_status_t status,
                     jpegDump = atoi(prop);
                     if (jpegDump) {
                         char buf[FILENAME_MAX];
-                        snprintf(buf, sizeof(buf), QCAMERA_DUMP_FRM_LOCATION"halDump_%d.jpg",
+                        char timeBuf[FILENAME_MAX];
+                        memset(buf, 0, sizeof(buf));
+                        memset(timeBuf, 0, sizeof(timeBuf));
+                        time_t current_time;
+                        struct tm * timeinfo;
+                        time (&current_time);
+                        timeinfo = localtime (&current_time);
+                        if (timeinfo != NULL) {
+                            /* Consistent naming for Jpeg+meta+raw: meta name */
+                            strftime (timeBuf, sizeof(timeBuf),
+                                    QCAMERA_DUMP_FRM_LOCATION"IMG_%Y%m%d_%H%M%S", timeinfo);
+                            /* Consistent naming for Jpeg+meta+raw: meta name end*/
+                        }
+                        String8 filePath(timeBuf);
+                        snprintf(buf, sizeof(buf), "_%d.jpg",
                                 obj->mMemory.getFrameNumber(bufIdx));
-                        int file_fd = open(buf, O_RDWR | O_CREAT, 0777);
+                        filePath.append(buf);
+                        int file_fd = open(filePath.string(), O_RDWR | O_CREAT, 0777);
                         ssize_t written_len = 0;
                         if (file_fd >= 0) {
                             fchmod(file_fd, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
