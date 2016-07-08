@@ -2769,7 +2769,8 @@ void QCamera3HardwareInterface::handleBatchMetadata(
         }
         pthread_mutex_lock(&mMutex);
         handleMetadataWithLock(metadata_buf,
-                false /* free_and_bufdone_meta_buf */);
+                false /* free_and_bufdone_meta_buf */,
+                (i == 0) /* first metadata in the batch metadata */);
         pthread_mutex_unlock(&mMutex);
     }
 
@@ -2788,12 +2789,15 @@ void QCamera3HardwareInterface::handleBatchMetadata(
  * PARAMETERS : @metadata_buf: metadata buffer
  *              @free_and_bufdone_meta_buf: Buf done on the meta buf and free
  *                 the meta buf in this method
+ *              @firstMetadataInBatch: Boolean to indicate whether this is the
+ *                  first metadata in a batch. Valid only for batch mode
  *
  * RETURN     :
  *
  *==========================================================================*/
 void QCamera3HardwareInterface::handleMetadataWithLock(
-    mm_camera_super_buf_t *metadata_buf, bool free_and_bufdone_meta_buf)
+    mm_camera_super_buf_t *metadata_buf, bool free_and_bufdone_meta_buf,
+    bool firstMetadataInBatch)
 {
     ATRACE_CALL();
     if ((mFlushPerf) || (ERROR == mState) || (DEINIT == mState)) {
@@ -3016,7 +3020,8 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                      /* DevCamDebug metadata translateFromHalMetadata function call*/
                     i->DevCamDebug_meta_enable,
                     /* DevCamDebug metadata end */
-                    internalPproc, i->fwkCacMode);
+                    internalPproc, i->fwkCacMode,
+                    firstMetadataInBatch);
 
             saveExifParams(metadata);
 
@@ -4658,7 +4663,8 @@ void QCamera3HardwareInterface::captureResultCb(mm_camera_super_buf_t *metadata_
             hdrPlusPerfLock(metadata_buf);
             pthread_mutex_lock(&mMutex);
             handleMetadataWithLock(metadata_buf,
-                    true /* free_and_bufdone_meta_buf */);
+                    true /* free_and_bufdone_meta_buf */,
+                    false /* first frame of batch metadata */ );
             pthread_mutex_unlock(&mMutex);
         }
     } else if (isInputBuffer) {
@@ -4836,10 +4842,18 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                                  uint8_t DevCamDebug_meta_enable,
                                  /* DevCamDebug metadata end */
                                  bool pprocDone,
-                                 uint8_t fwk_cacMode)
+                                 uint8_t fwk_cacMode,
+                                 bool firstMetadataInBatch)
 {
     CameraMetadata camMetadata;
     camera_metadata_t *resultMetadata;
+
+    if (mBatchSize && !firstMetadataInBatch) {
+        /* In batch mode, use cached metadata from the first metadata
+            in the batch */
+        camMetadata.clear();
+        camMetadata = mCachedMetadata;
+    }
 
     if (jpegMetadata.entryCount())
         camMetadata.append(jpegMetadata);
@@ -4852,6 +4866,13 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     // DevCamDebug metadata translateFromHalMetadata
     camMetadata.update(DEVCAMDEBUG_META_ENABLE, &DevCamDebug_meta_enable, 1);
     // DevCamDebug metadata translateFromHalMetadata AF
+
+    if (mBatchSize && !firstMetadataInBatch) {
+        /* In batch mode, use cached metadata instead of parsing metadata buffer again */
+        resultMetadata = camMetadata.release();
+        return resultMetadata;
+    }
+
     IF_META_AVAILABLE(int32_t, DevCamDebug_af_lens_position,
             CAM_INTF_META_DEV_CAM_AF_LENS_POSITION, metadata) {
         int32_t fwk_DevCamDebug_af_lens_position = *DevCamDebug_af_lens_position;
@@ -5055,7 +5076,6 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         camMetadata.update(DEVCAMDEBUG_AWB_DECISION, &fwk_DevCamDebug_awb_decision, 1);
     }
     // DevCamDebug metadata end
-
 
     IF_META_AVAILABLE(uint32_t, frame_number, CAM_INTF_META_FRAME_NUMBER, metadata) {
         int64_t fwk_frame_number = *frame_number;
@@ -5860,6 +5880,12 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     // AF scene change
     IF_META_AVAILABLE(uint8_t, afSceneChange, CAM_INTF_META_AF_SCENE_CHANGE, metadata) {
         camMetadata.update(NEXUS_EXPERIMENTAL_2016_AF_SCENE_CHANGE, afSceneChange, 1);
+    }
+
+    /* In batch mode, cache the first metadata in the batch */
+    if (mBatchSize && firstMetadataInBatch) {
+        mCachedMetadata.clear();
+        mCachedMetadata = camMetadata;
     }
 
     resultMetadata = camMetadata.release();
