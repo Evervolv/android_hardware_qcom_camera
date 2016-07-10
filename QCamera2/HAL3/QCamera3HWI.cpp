@@ -2691,7 +2691,7 @@ void QCamera3HardwareInterface::handleBatchMetadata(
         urgentFrameNumDiff = last_urgent_frame_number + 1 -
                 first_urgent_frame_number;
 
-        LOGD("urgent_frm: valid: %d frm_num: %d - %d",
+        LOGH("urgent_frm: valid: %d frm_num: %d - %d",
                  urgent_frame_number_valid,
                 first_urgent_frame_number, last_urgent_frame_number);
     }
@@ -2702,7 +2702,7 @@ void QCamera3HardwareInterface::handleBatchMetadata(
                 first_frame_number;
         mPendingBatchMap.removeItem(last_frame_number);
 
-        LOGD("frm: valid: %d frm_num: %d - %d",
+        LOGH("frm: valid: %d frm_num: %d - %d",
                  frame_number_valid,
                 first_frame_number, last_frame_number);
 
@@ -2763,7 +2763,7 @@ void QCamera3HardwareInterface::handleBatchMetadata(
                         first_frame_capture_time + (i * NSEC_PER_SEC / mHFRVideoFps);
                 ADD_SET_PARAM_ENTRY_TO_BATCH(metadata,
                         CAM_INTF_META_SENSOR_TIMESTAMP, capture_time);
-                LOGD("batch capture_time: %lld, capture_time: %lld",
+                LOGH("batch capture_time: %lld, capture_time: %lld",
                          last_frame_capture_time, capture_time);
             }
         }
