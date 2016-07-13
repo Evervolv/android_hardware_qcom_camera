@@ -2719,6 +2719,8 @@ typedef enum {
     CAM_PERF_NORMAL = 0,
     CAM_PERF_HIGH,
     CAM_PERF_HIGH_PERFORMANCE,
+    CAM_PERF_RESET,
+    CAM_PERF_SET
 } cam_perf_mode_t;
 
 typedef struct {

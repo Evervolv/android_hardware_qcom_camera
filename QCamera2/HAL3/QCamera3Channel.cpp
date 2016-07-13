@@ -3212,6 +3212,7 @@ void QCamera3PicChannel::jpegEvtHandle(jpeg_job_status_t status,
             free(job);
         }
 
+        obj->resetCppPerfParam();
         return;
         // }
     } else {
@@ -3245,6 +3246,7 @@ QCamera3PicChannel::QCamera3PicChannel(uint32_t cam_handle,
     mYuvWidth = stream->width;
     mYuvHeight = stream->height;
     mStreamType = CAM_STREAM_TYPE_SNAPSHOT;
+    mPendingLiveSnapshotFrames = 0;
     // Use same pixelformat for 4K video case
     mStreamFormat = getStreamDefaultFormat(CAM_STREAM_TYPE_SNAPSHOT,
             stream->width, stream->height);
@@ -3405,6 +3407,11 @@ int32_t QCamera3PicChannel::request(buffer_handle_t *buffer,
 
     // Start postprocessor
     startPostProc(reproc_cfg);
+
+    // Only set the perf mode for online cpp processing
+    if (reproc_cfg.reprocess_type == REPROCESS_TYPE_NONE) {
+        setCppPerfParam();
+    }
 
     // Queue jpeg settings
     rc = queueJpegSetting((uint32_t)index, metadata);
@@ -3684,6 +3691,61 @@ reprocess_type_t QCamera3PicChannel::getReprocessType()
     return expectedReprocess;
 }
 
+/*===========================================================================
+ * FUNCTION   : setCppPerfParam
+ *
+ * DESCRIPTION: set the performance related stream params
+ *
+ * PARAMETERS : NONE
+ *
+ * RETURN     : NONE
+ *==========================================================================*/
+
+void QCamera3PicChannel::setCppPerfParam()
+{
+    if (mPendingLiveSnapshotFrames == 0) {
+        int32_t rc = 0;
+        QCamera3Stream *pStream = mStreams[0];
+        cam_stream_parm_buffer_t param;
+        memset(&param, 0, sizeof(cam_stream_parm_buffer_t));
+        param.type = CAM_STREAM_PARAM_TYPE_REQUEST_OPS_MODE;
+        param.perf_mode = CAM_PERF_SET;
+        rc = pStream->setParameter(param);
+        if (rc != NO_ERROR) {
+            LOGE("%s: setParameter for CAM_PERF_SET failed",
+                __func__);
+        }
+    }
+    mPendingLiveSnapshotFrames++;
+}
+
+/*===========================================================================
+ * FUNCTION   : resetCppPerfParam
+ *
+ * DESCRIPTION: reset the performance related stream params
+ *
+ * PARAMETERS : NONE
+ *
+ * RETURN     : NONE
+ *==========================================================================*/
+
+void QCamera3PicChannel::resetCppPerfParam()
+{
+    if (mPendingLiveSnapshotFrames > 0) {
+        int32_t rc = NO_ERROR;
+        QCamera3Stream *pStream = mStreams[0];
+        cam_stream_parm_buffer_t param;
+        memset(&param, 0, sizeof(cam_stream_parm_buffer_t));
+        param.type = CAM_STREAM_PARAM_TYPE_REQUEST_OPS_MODE;
+        param.perf_mode = CAM_PERF_RESET;
+        rc = pStream->setParameter(param);
+        if (rc != NO_ERROR) {
+            LOGE("%s: setParameter for CAM_PERF_RESET failed",
+                __func__);
+        }
+        mPendingLiveSnapshotFrames--;
+    }
+}
 
 /*===========================================================================
  * FUNCTION   : QCamera3ReprocessChannel
@@ -3899,8 +3961,8 @@ void QCamera3ReprocessChannel::streamCbRoutine(mm_camera_super_buf_t *super_fram
             obj->m_postprocessor.releasePPJobData(pp_job);
         }
         free(pp_job);
-        resetToCamPerfNormal(resultFrameNumber);
     }
+    resetToCamPerfNormal(resultFrameNumber);
     free(super_frame);
     return;
 }
@@ -4564,7 +4626,7 @@ int32_t QCamera3ReprocessChannel::overrideFwkMetadata(
         cam_stream_parm_buffer_t param;
         uint32_t numPendingPriorityFrames = 0;
 
-        if(isPriorityFrame && (mReprocessType != REPROCESS_TYPE_JPEG)) {
+        if(isPriorityFrame) {
             Mutex::Autolock lock(mPriorityFramesLock);
             /* read the length before pushing the frame number to check if
              * vector is empty */
@@ -4572,12 +4634,12 @@ int32_t QCamera3ReprocessChannel::overrideFwkMetadata(
             mPriorityFrames.push(frame->frameNumber);
         }
 
-        if(isPriorityFrame && !numPendingPriorityFrames &&
-            (mReprocessType != REPROCESS_TYPE_JPEG)) {
+        if(isPriorityFrame && !numPendingPriorityFrames) {
             memset(&param, 0, sizeof(cam_stream_parm_buffer_t));
             param.type = CAM_STREAM_PARAM_TYPE_REQUEST_OPS_MODE;
             param.perf_mode = CAM_PERF_HIGH_PERFORMANCE;
             rc = pStream->setParameter(param);
+
             if (rc != NO_ERROR) {
                 ALOGE("%s: setParameter for CAM_PERF_HIGH_PERFORMANCE failed",
                     __func__);
