@@ -236,7 +236,6 @@ public:
         cam_cds_mode_type_t val;
     } QCameraPropMap;
 
-
 private:
 
     // State transition conditions:
@@ -337,6 +336,11 @@ private:
     static void setPAAFSupport(cam_feature_mask_t& feature_mask,
             cam_stream_type_t stream_type,
             cam_color_filter_arrangement_t filter_arrangement);
+
+    template <typename T>
+    static void adjustBlackLevelForCFA(T input[BLACK_LEVEL_PATTERN_CNT],
+            T output[BLACK_LEVEL_PATTERN_CNT],
+            cam_color_filter_arrangement_t color_arrangement);
 
     camera3_device_t   mCameraDevice;
     uint32_t           mCameraId;
