@@ -369,7 +369,7 @@ typedef struct{
     int32_t white_level;
 
     /* A fixed black level offset for each of the Bayer
-       mosaic channels */
+       mosaic channels in RGGB order*/
     int32_t black_level_pattern[BLACK_LEVEL_PATTERN_CNT];
 
     /* Time taken before flash can fire again in nano secs */

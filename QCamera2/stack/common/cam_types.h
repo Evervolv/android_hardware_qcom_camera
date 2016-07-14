@@ -2134,6 +2134,7 @@ typedef enum {
     /*Black level parameters*/
     CAM_INTF_META_LDAF_EXIF,
     CAM_INTF_META_BLACK_LEVEL_SOURCE_PATTERN,
+    /* Applied black level pattern in RGGB order */
     CAM_INTF_META_BLACK_LEVEL_APPLIED_PATTERN, /* 200 */
     CAM_INTF_META_CDS_DATA,
     /*3A low light level information*/
