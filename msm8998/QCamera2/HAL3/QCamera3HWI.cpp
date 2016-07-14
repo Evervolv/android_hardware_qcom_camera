@@ -5983,31 +5983,20 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         camMetadata.update(ANDROID_REPROCESS_EFFECTIVE_EXPOSURE_FACTOR, effectiveExposureFactor, 1);
     }
 
-    IF_META_AVAILABLE(cam_black_level_metadata_t, blackLevelSourcePattern,
-        CAM_INTF_META_BLACK_LEVEL_SOURCE_PATTERN, metadata) {
-
-        LOGD("dynamicblackLevel = %f %f %f %f",
-          blackLevelSourcePattern->cam_black_level[0],
-          blackLevelSourcePattern->cam_black_level[1],
-          blackLevelSourcePattern->cam_black_level[2],
-          blackLevelSourcePattern->cam_black_level[3]);
-    }
-
     IF_META_AVAILABLE(cam_black_level_metadata_t, blackLevelAppliedPattern,
         CAM_INTF_META_BLACK_LEVEL_APPLIED_PATTERN, metadata) {
-        float fwk_blackLevelInd[4];
+        float fwk_blackLevelInd[BLACK_LEVEL_PATTERN_CNT];
 
-        fwk_blackLevelInd[0] = blackLevelAppliedPattern->cam_black_level[0];
-        fwk_blackLevelInd[1] = blackLevelAppliedPattern->cam_black_level[1];
-        fwk_blackLevelInd[2] = blackLevelAppliedPattern->cam_black_level[2];
-        fwk_blackLevelInd[3] = blackLevelAppliedPattern->cam_black_level[3];
+        adjustBlackLevelForCFA(blackLevelAppliedPattern->cam_black_level, fwk_blackLevelInd,
+              gCamCapability[mCameraId]->color_arrangement);
 
-        LOGD("applied dynamicblackLevel = %f %f %f %f",
+        LOGD("applied dynamicblackLevel in RGGB order = %f %f %f %f",
           blackLevelAppliedPattern->cam_black_level[0],
           blackLevelAppliedPattern->cam_black_level[1],
           blackLevelAppliedPattern->cam_black_level[2],
           blackLevelAppliedPattern->cam_black_level[3]);
-        camMetadata.update(QCAMERA3_SENSOR_DYNAMIC_BLACK_LEVEL_PATTERN, fwk_blackLevelInd, 4);
+        camMetadata.update(QCAMERA3_SENSOR_DYNAMIC_BLACK_LEVEL_PATTERN, fwk_blackLevelInd,
+                BLACK_LEVEL_PATTERN_CNT);
 
 #ifndef USE_HAL_3_3
         // Update the ANDROID_SENSOR_DYNAMIC_BLACK_LEVEL
@@ -6017,7 +6006,8 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         fwk_blackLevelInd[1] /= 4.0;
         fwk_blackLevelInd[2] /= 4.0;
         fwk_blackLevelInd[3] /= 4.0;
-        camMetadata.update(ANDROID_SENSOR_DYNAMIC_BLACK_LEVEL, fwk_blackLevelInd, 4);
+        camMetadata.update(ANDROID_SENSOR_DYNAMIC_BLACK_LEVEL, fwk_blackLevelInd,
+                BLACK_LEVEL_PATTERN_CNT);
 #endif
     }
 
@@ -7943,8 +7933,11 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     staticInfo.update(ANDROID_SENSOR_INFO_WHITE_LEVEL,
             &gCamCapability[cameraId]->white_level, 1);
 
+    int32_t adjusted_bl_per_cfa[BLACK_LEVEL_PATTERN_CNT];
+    adjustBlackLevelForCFA(gCamCapability[cameraId]->black_level_pattern, adjusted_bl_per_cfa,
+            gCamCapability[cameraId]->color_arrangement);
     staticInfo.update(ANDROID_SENSOR_BLACK_LEVEL_PATTERN,
-            gCamCapability[cameraId]->black_level_pattern, BLACK_LEVEL_PATTERN_CNT);
+            adjusted_bl_per_cfa, BLACK_LEVEL_PATTERN_CNT);
 
 #ifndef USE_HAL_3_3
     bool hasBlackRegions = false;
@@ -12595,5 +12588,54 @@ bool QCamera3HardwareInterface::is60HzZone()
         return true;
     else
         return false;
+}
+
+/*===========================================================================
+ * FUNCTION   : adjustBlackLevelForCFA
+ *
+ * DESCRIPTION: Adjust the black level pattern in the order of RGGB to the order
+ *              of bayer CFA (Color Filter Array).
+ *
+ * PARAMETERS : @input: black level pattern in the order of RGGB
+ *              @output: black level pattern in the order of CFA
+ *              @color_arrangement: CFA color arrangement
+ *
+ * RETURN     : None
+ *==========================================================================*/
+template<typename T>
+void QCamera3HardwareInterface::adjustBlackLevelForCFA(
+        T input[BLACK_LEVEL_PATTERN_CNT],
+        T output[BLACK_LEVEL_PATTERN_CNT],
+        cam_color_filter_arrangement_t color_arrangement)
+{
+    switch (color_arrangement) {
+    case CAM_FILTER_ARRANGEMENT_GRBG:
+        output[0] = input[1];
+        output[1] = input[0];
+        output[2] = input[3];
+        output[3] = input[2];
+        break;
+    case CAM_FILTER_ARRANGEMENT_GBRG:
+        output[0] = input[2];
+        output[1] = input[3];
+        output[2] = input[0];
+        output[3] = input[1];
+        break;
+    case CAM_FILTER_ARRANGEMENT_BGGR:
+        output[0] = input[3];
+        output[1] = input[2];
+        output[2] = input[1];
+        output[3] = input[0];
+        break;
+    case CAM_FILTER_ARRANGEMENT_RGGB:
+        output[0] = input[0];
+        output[1] = input[1];
+        output[2] = input[2];
+        output[3] = input[3];
+        break;
+    default:
+        LOGE("Invalid color arrangement to derive dynamic blacklevel");
+        break;
+    }
 }
 }; //end namespace qcamera
