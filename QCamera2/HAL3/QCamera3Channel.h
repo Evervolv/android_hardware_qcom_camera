@@ -503,6 +503,8 @@ public:
             void *userdata);
     static void dataNotifyCB(mm_camera_super_buf_t *recvd_frame,
             void *userdata);
+    void setCppPerfParam();
+    void resetCppPerfParam();
 
 private:
     int32_t queueJpegSetting(uint32_t out_buf_index, metadata_buffer_t *metadata);
@@ -520,6 +522,7 @@ private:
     Mutex mFreeBuffersLock;
     List<uint32_t> mFreeBufferList;
     uint32_t mFrameLen;
+    uint32_t mPendingLiveSnapshotFrames;
 };
 
 // reprocess channel class
