@@ -4432,9 +4432,8 @@ int32_t QCamera3ReprocessChannel::overrideMetadata(qcamera_hal3_pp_buffer_t *pp_
                 } else if (jpeg_settings->jpeg_orientation == 270) {
                    rotation_info.rotation = ROTATE_270;
                 }
-                if (jpeg_settings->hdr_snapshot) {
-                    rotation_info.rotation = ROTATE_0;
-                }
+
+                rotation_info.device_rotation = ROTATE_0;
                 rotation_info.streamId = mStreams[0]->getMyServerID();
                 ADD_SET_PARAM_ENTRY_TO_BATCH(meta, CAM_INTF_PARM_ROTATION, rotation_info);
             }

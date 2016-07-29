@@ -11056,6 +11056,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
         } else if (orientation == 270) {
            rotation_info.rotation = ROTATE_270;
         }
+        rotation_info.device_rotation = ROTATE_0;
         rotation_info.streamId = snapshotStreamId;
         ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_JPEG_ORIENTATION, orientation);
         if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_ROTATION, rotation_info)) {
