@@ -2042,7 +2042,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                             pthread_mutex_unlock(&mMutex);
                             return -ENOMEM;
                         }
-                        newStream->max_buffers = channel->getNumBuffers();
+                        newStream->max_buffers = MAX_INFLIGHT_60FPS_REQUESTS;
                         newStream->priv = channel;
                     }
                     break;
@@ -3587,13 +3587,18 @@ int QCamera3HardwareInterface::processCaptureRequest(
             if (rc == NO_ERROR) {
                 int32_t max_fps =
                     (int32_t) meta.find(ANDROID_CONTROL_AE_TARGET_FPS_RANGE).data.i32[1];
-                if (max_fps == 60 || mCaptureIntent == ANDROID_CONTROL_CAPTURE_INTENT_VIDEO_RECORD) {
-                    mMinInFlightRequests = MIN_INFLIGHT_60FPS_REQUESTS;
-                }
-                /* For HFR, more buffers are dequeued upfront to improve the performance */
                 if (mBatchSize) {
+                    /* For HFR, more buffers are dequeued upfront to improve the performance */
                     mMinInFlightRequests = MIN_INFLIGHT_HFR_REQUESTS;
                     mMaxInFlightRequests = MAX_INFLIGHT_HFR_REQUESTS;
+                } else if (max_fps == 60) {
+                    /* for 60 fps usecas increase inflight requests */
+                    mMinInFlightRequests = MIN_INFLIGHT_60FPS_REQUESTS;
+                    mMaxInFlightRequests = MAX_INFLIGHT_60FPS_REQUESTS;
+                } else if (mCaptureIntent == ANDROID_CONTROL_CAPTURE_INTENT_VIDEO_RECORD) {
+                    /* for non 60 fps video use cases, set min = max inflight requests to
+                    avoid frame drops due to degraded system performance */
+                    mMinInFlightRequests = MAX_INFLIGHT_REQUESTS;
                 }
             }
             else {
