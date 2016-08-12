@@ -3168,6 +3168,13 @@ void QCamera3PicChannel::jpegEvtHandle(jpeg_job_status_t status,
                 LOGE("Error %d unregistering stream buffer %d",
                      rc, bufIdx);
             }
+            /* If the frame number is present in the errorFrames list,
+                report error status */
+            for(auto& errFrameNumber : obj->mErrorFrameNumbers) {
+                if (errFrameNumber == resultFrameNumber) {
+                    resultStatus = CAMERA3_BUFFER_STATUS_ERROR;
+                }
+            }
 
             result.stream = obj->mCamera3Stream;
             result.buffer = resultBuffer;
@@ -3588,6 +3595,11 @@ void QCamera3PicChannel::streamCbRoutine(mm_camera_super_buf_t *super_frame,
     stream->getFrameOffset(offset);
     dumpYUV(frame->bufs[0], dim, offset, QCAMERA_DUMP_FRM_INPUT_REPROCESS);
 
+    if (IS_BUFFER_ERROR(super_frame->bufs[0]->flags)) {
+        uint32_t frameNumber = mYuvMemory->getFrameNumber(frameIndex);
+        mErrorFrameNumbers.push_back(frameNumber);
+    }
+
     m_postprocessor.processData(frame);
     free(super_frame);
     return;
@@ -3772,6 +3784,34 @@ void QCamera3PicChannel::resetCppPerfParam()
         }
         mPendingLiveSnapshotFrames--;
     }
+}
+
+/*===========================================================================
+ * FUNCTION   : timeoutFrame
+ *
+ * DESCRIPTION: Method to indicate to channel that a given frame has take too
+ *              long to be generated
+ *
+ * PARAMETERS : framenumber indicating the framenumber of the buffer timingout
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCamera3PicChannel::timeoutFrame(uint32_t frameNumber)
+{
+    int32_t bufIdx;
+
+    bufIdx = mYuvMemory->getBufferIndex(frameNumber);
+
+    if (bufIdx < 0) {
+        ALOGE("%s: Buffer not found for frame:%d", __func__, frameNumber);
+        return -1;
+    }
+
+    mStreams[0]->timeoutFrame(bufIdx);
+
+    return NO_ERROR;
 }
 
 /*===========================================================================
