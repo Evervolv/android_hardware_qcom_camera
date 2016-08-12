@@ -271,6 +271,7 @@ public:
             camera3_buffer_status_t err, void *userdata);
     void setBufferErrorStatus(QCamera3Channel*, uint32_t frameNumber,
             camera3_buffer_status_t err);
+    bool is60HzZone();
 
     // Get dual camera related info
     bool isDeviceLinked() {return mIsDeviceLinked;}
@@ -624,6 +625,8 @@ private:
     cam_dual_camera_cmd_info_t *m_pDualCamCmdPtr;
     cam_sync_related_sensors_event_info_t m_relCamSyncInfo;
     Mutex mFlushLock;
+    bool m60HzZone;
+
 };
 
 }; // namespace qcamera

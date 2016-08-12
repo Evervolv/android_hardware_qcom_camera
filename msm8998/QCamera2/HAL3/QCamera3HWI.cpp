@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include "utils/Timers.h"
 #include "sys/ioctl.h"
+#include <time.h>
 #include <sync/sync.h>
 #include "gralloc_priv.h"
 #include <map>
@@ -490,6 +491,8 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
          }
          dlclose(lib_surface_utils);
     }
+
+    m60HzZone = is60HzZone();
 }
 
 /*===========================================================================
@@ -6553,8 +6556,13 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     }
 
     IF_META_AVAILABLE(uint32_t, hal_ab_mode, CAM_INTF_PARM_ANTIBANDING, metadata) {
+        uint32_t ab_mode = *hal_ab_mode;
+        if (ab_mode == CAM_ANTIBANDING_MODE_AUTO_60HZ ||
+                ab_mode == CAM_ANTIBANDING_MODE_AUTO_50HZ) {
+              ab_mode = CAM_ANTIBANDING_MODE_AUTO;
+        }
         int val = lookupFwkName(ANTIBANDING_MODES_MAP, METADATA_MAP_SIZE(ANTIBANDING_MODES_MAP),
-                *hal_ab_mode);
+                ab_mode);
         if (NAME_NOT_FOUND != val) {
             uint8_t fwk_ab_mode = (uint8_t)val;
             camMetadata.update(ANDROID_CONTROL_AE_ANTIBANDING_MODE, &fwk_ab_mode, 1);
@@ -10385,6 +10393,13 @@ int QCamera3HardwareInterface::translateToHalMetadata
                 METADATA_MAP_SIZE(ANTIBANDING_MODES_MAP), fwk_antibandingMode);
         if (NAME_NOT_FOUND != val) {
             uint32_t hal_antibandingMode = (uint32_t)val;
+            if (hal_antibandingMode == CAM_ANTIBANDING_MODE_AUTO) {
+                if (m60HzZone) {
+                    hal_antibandingMode = CAM_ANTIBANDING_MODE_AUTO_60HZ;
+                } else {
+                    hal_antibandingMode = CAM_ANTIBANDING_MODE_AUTO_50HZ;
+                }
+            }
             if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_ANTIBANDING,
                     hal_antibandingMode)) {
                 rc = BAD_VALUE;
@@ -12558,5 +12573,27 @@ const cam_related_system_calibration_data_t *QCamera3HardwareInterface::getRelat
 {
     return (const cam_related_system_calibration_data_t *)
             &(gCamCapability[mCameraId]->related_cam_calibration);
+}
+
+/*===========================================================================
+ * FUNCTION   : is60HzZone
+ *
+ * DESCRIPTION: Whether the phone is in zone with 60hz electricity frequency
+ *
+ * PARAMETERS : None
+ *
+ * RETURN     : True if in 60Hz zone, False otherwise
+ *==========================================================================*/
+bool QCamera3HardwareInterface::is60HzZone()
+{
+    time_t t = time(NULL);
+    struct tm lt;
+
+    struct tm* r = localtime_r(&t, &lt);
+
+    if (r == NULL || lt.tm_gmtoff <=  -2*60*60 || lt.tm_gmtoff >= 8*60*60)
+        return true;
+    else
+        return false;
 }
 }; //end namespace qcamera
