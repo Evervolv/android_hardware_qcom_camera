@@ -69,6 +69,11 @@ typedef void (*channel_cb_routine)(mm_camera_super_buf_t *metadata,
                                 camera3_stream_buffer_t *buffer,
                                 uint32_t frame_number, bool isInputBuffer,
                                 void *userdata);
+
+typedef void (*channel_cb_buffer_err)(QCamera3Channel* ch, uint32_t frameNumber,
+                                camera3_buffer_status_t err,
+                                void *userdata);
+
 class QCamera3Channel
 {
 public:
@@ -76,6 +81,7 @@ public:
                    uint32_t channel_handle,
                    mm_camera_ops_t *cam_ops,
                    channel_cb_routine cb_routine,
+                   channel_cb_buffer_err cb_buf_err,
                    cam_padding_info_t *paddingInfo,
                    cam_feature_mask_t postprocess_mask,
                    void *userData, uint32_t numBuffers);
@@ -153,6 +159,7 @@ protected:
 
     QCamera3HeapMemory *mStreamInfoBuf;
     channel_cb_routine mChannelCB;
+    channel_cb_buffer_err mChannelCbBufErr;
     //cam_padding_info_t *mPaddingInfo;
     cam_feature_mask_t mPostProcMask;
     uint32_t mYUVDump;
@@ -179,6 +186,7 @@ public:
            uint32_t channel_handle,
            mm_camera_ops_t *cam_ops,
            channel_cb_routine cb_routine,
+           channel_cb_buffer_err cb_buffer_err,
            cam_padding_info_t *paddingInfo,
            void *userData,
            camera3_stream_t *stream,
@@ -275,6 +283,7 @@ public:
                     uint32_t channel_handle,
                     mm_camera_ops_t *cam_ops,
                     channel_cb_routine cb_routine,
+                    channel_cb_buffer_err cb_buffer_err,
                     cam_padding_info_t *paddingInfo,
                     void *userData,
                     camera3_stream_t *stream,
@@ -309,6 +318,7 @@ public:
                     uint32_t channel_handle,
                     mm_camera_ops_t *cam_ops,
                     channel_cb_routine cb_routine,
+                    channel_cb_buffer_err cb_buffer_err,
                     cam_padding_info_t *paddingInfo,
                     cam_feature_mask_t postprocess_mask,
                     void *userData,
@@ -341,6 +351,7 @@ public:
                     uint32_t channel_handle,
                     mm_camera_ops_t *cam_ops,
                     channel_cb_routine cb_routine,
+                    channel_cb_buffer_err cb_buffer_err,
                     cam_padding_info_t *paddingInfo,
                     void *userData,
                     camera3_stream_t *stream,
@@ -412,6 +423,7 @@ public:
             uint32_t channel_handle,
             mm_camera_ops_t *cam_ops,
             channel_cb_routine cb_routine,
+            channel_cb_buffer_err cb_buffer_err,
             cam_padding_info_t *paddingInfo,
             void *userData,
             camera3_stream_t *stream,
@@ -473,6 +485,7 @@ public:
             uint32_t channel_handle,
             mm_camera_ops_t *cam_ops,
             channel_cb_routine cb_routine,
+            channel_cb_buffer_err cb_buffer_err,
             cam_padding_info_t *paddingInfo,
             void *userData,
             camera3_stream_t *stream,
@@ -528,8 +541,6 @@ private:
     List<uint32_t> mFreeBufferList;
     uint32_t mFrameLen;
     uint32_t mPendingLiveSnapshotFrames;
-    //List of frame numbers for which error need to be reported
-    List<int32_t> mErrorFrameNumbers;
 };
 
 // reprocess channel class
@@ -540,6 +551,7 @@ public:
                             uint32_t channel_handle,
                             mm_camera_ops_t *cam_ops,
                             channel_cb_routine cb_routine,
+                            channel_cb_buffer_err cb_buffer_err,
                             cam_padding_info_t *paddingInfo,
                             cam_feature_mask_t postprocess_mask,
                             void *userData, void *ch_hdl);
