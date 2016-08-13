@@ -225,7 +225,7 @@ public:
     int32_t checkStreamCbErrors(mm_camera_super_buf_t *super_frame,
             QCamera3Stream *stream);
     int32_t getStreamSize(cam_dimension_t &dim);
-    int32_t timeoutFrame(uint32_t frameNumber);
+    virtual int32_t timeoutFrame(uint32_t frameNumber);
 
     QCamera3PostProcessor m_postprocessor; // post processor
     void showDebugFPS(int32_t streamType);
@@ -496,6 +496,7 @@ public:
     virtual QCamera3StreamMem *getStreamBufs(uint32_t le);
     virtual void putStreamBufs();
     virtual reprocess_type_t getReprocessType();
+    virtual int32_t timeoutFrame(uint32_t frameNumber);
 
     QCamera3Exif *getExifData(metadata_buffer_t *metadata,
             jpeg_settings_t *jpeg_settings);
@@ -527,6 +528,8 @@ private:
     List<uint32_t> mFreeBufferList;
     uint32_t mFrameLen;
     uint32_t mPendingLiveSnapshotFrames;
+    //List of frame numbers for which error need to be reported
+    List<int32_t> mErrorFrameNumbers;
 };
 
 // reprocess channel class
