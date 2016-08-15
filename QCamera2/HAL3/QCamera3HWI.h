@@ -232,6 +232,7 @@ public:
             camera3_buffer_status_t err, void *userdata);
     void setBufferErrorStatus(QCamera3Channel*, uint32_t frameNumber,
             camera3_buffer_status_t err);
+    bool is60HzZone();
 
     template <typename fwkType, typename halType> struct QCameraMap {
         fwkType fwk_name;
@@ -556,6 +557,7 @@ private:
     QCamera3HeapMemory *m_pRelCamSyncHeap;
     cam_sync_related_sensors_event_info_t *m_pRelCamSyncBuf;
     cam_sync_related_sensors_event_info_t m_relCamSyncInfo;
+    bool m60HzZone;
 
 };
 
