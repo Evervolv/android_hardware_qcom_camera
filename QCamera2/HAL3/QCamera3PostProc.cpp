@@ -601,7 +601,7 @@ int32_t QCamera3PostProcessor::processData(mm_camera_super_buf_t *input,
 int32_t QCamera3PostProcessor::processData(qcamera_fwk_input_pp_data_t *frame)
 {
     if (frame->reproc_config.reprocess_type != REPROCESS_TYPE_NONE) {
-        ATRACE_INT("Camera:Reprocess", 1);
+        KPI_ATRACE_INT("Camera:Reprocess", 1);
         pthread_mutex_lock(&mReprocJobLock);
         // enqueu to post proc input queue
         m_inputFWKPPQ.enqueue((void *)frame);
@@ -706,7 +706,7 @@ int32_t QCamera3PostProcessor::processJpegSettingData(
 int32_t QCamera3PostProcessor::processPPData(mm_camera_super_buf_t *frame)
 {
     qcamera_hal3_pp_data_t *job = (qcamera_hal3_pp_data_t *)m_ongoingPPQ.dequeue();
-    ATRACE_INT("Camera:Reprocess", 0);
+    KPI_ATRACE_INT("Camera:Reprocess", 0);
     if (job == NULL || ((NULL == job->src_frame) && (NULL == job->fwk_src_frame))) {
         LOGE("Cannot find reprocess job");
         return BAD_VALUE;
