@@ -638,6 +638,9 @@ typedef struct cam_capability{
 
     /*Available Spatial Alignment solutions*/
     uint32_t avail_spatial_align_solns;
+
+    /* Whether camera timestamp is calibrated with sensor */
+    uint8_t timestamp_calibrated;
 } cam_capability_t;
 
 typedef enum {
