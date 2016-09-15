@@ -523,6 +523,8 @@ typedef struct{
 
     /* Dual cam calibration data */
     cam_related_system_calibration_data_t related_cam_calibration;
+    /* Whether camera timestamp is calibrated with sensor */
+    uint8_t timestamp_calibrated;
 } cam_capability_t;
 
 typedef enum {
