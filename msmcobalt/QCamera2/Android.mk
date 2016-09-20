@@ -110,6 +110,7 @@ endif
 
 #LOCAL_STATIC_LIBRARIES := libqcamera2_util
 LOCAL_C_INCLUDES += \
+        $(TARGET_OUT_HEADERS)/mm-core/omxcore \
         $(TARGET_OUT_HEADERS)/qcom/display
 LOCAL_C_INCLUDES += \
         hardware/qcom/display/libqservice
