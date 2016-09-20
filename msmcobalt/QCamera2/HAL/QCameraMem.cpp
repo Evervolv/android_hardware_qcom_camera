@@ -1601,9 +1601,9 @@ native_handle_t *QCameraVideoMemory::updateNativeHandle(uint32_t index, bool met
 int QCameraVideoMemory::closeNativeHandle(const void *data, bool metadata)
 {
     int32_t rc = NO_ERROR;
+#ifdef USE_MEDIA_EXTENSIONS
     int32_t index = -1;
 
-#ifdef USE_MEDIA_EXTENSIONS
     camera_memory_t *video_mem = NULL;
 
     if (metadata) {
@@ -1630,6 +1630,9 @@ int QCameraVideoMemory::closeNativeHandle(const void *data, bool metadata)
     } else {
         LOGW("Warning: Not of type video meta buffer");
     }
+#else
+    (void) data;
+    (void) metadata;
 #endif
     return rc;
 }
