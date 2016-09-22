@@ -2859,7 +2859,7 @@ void QCamera2HardwareInterface::dumpFrameToFile(QCameraStream *stream,
                             }
                         }
 
-                        LOGH("written number of bytes %ld\n",
+                        LOGH("written number of bytes %zd\n",
                              written_len);
                         close(file_fd);
                     } else {
