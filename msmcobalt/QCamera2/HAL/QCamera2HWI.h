@@ -631,6 +631,7 @@ private:
     pthread_t mLiveSnapshotThread;
     pthread_t mIntPicThread;
     bool mFlashNeeded;
+    bool mFlashConfigured;
     uint32_t mDeviceRotation;
     uint32_t mCaptureRotation;
     uint32_t mJpegExifRotation;
@@ -761,7 +762,6 @@ private:
     bool TsMakeupProcess(mm_camera_buf_def_t *frame,QCameraStream * stream,TSRect& faceRect);
 #endif
     QCameraMemory *mMetadataMem;
-    QCameraVideoMemory *mVideoMem;
 
     static uint32_t sNextJobId;
 
