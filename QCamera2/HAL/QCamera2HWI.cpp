@@ -3069,7 +3069,7 @@ QCameraHeapMemory *QCamera2HardwareInterface::allocateStreamInfoBuf(
             mParameters.getHfrFps(pFpsRange);
             streamInfo->user_buf_info.frameInterval =
                     (long)((1000/pFpsRange.video_max_fps) * 1000);
-            LOGH("Video Batch Count = %d, interval = %d",
+            LOGH("Video Batch Count = %d, interval = %ld",
                     streamInfo->user_buf_info.frame_buf_cnt,
                     streamInfo->user_buf_info.frameInterval);
         }

@@ -1376,7 +1376,7 @@ int32_t QCameraStream::getBufs(cam_frame_len_offset_t *offset,
     *num_bufs = mNumBufs;
     *initial_reg_flag = regFlags;
     *bufs = mBufDefs;
-    LOGH("stream type: %d, mRegFlags: 0x%x, numBufs: %d",
+    LOGH("stream type: %d, mRegFlags: %p, numBufs: %d",
              mStreamInfo->stream_type, regFlags, mNumBufs);
 
     if (mNumBufsNeedAlloc > 0) {
