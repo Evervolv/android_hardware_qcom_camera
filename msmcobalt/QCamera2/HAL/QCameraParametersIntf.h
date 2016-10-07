@@ -87,6 +87,11 @@ public:
             cam_dimension_t &dim);
     int32_t getStreamFormat(cam_stream_type_t streamType,
             cam_format_t &format);
+
+    int32_t getStreamSubFormat(
+      cam_stream_type_t streamType, cam_sub_format_type_t &sub_format);
+
+
     int32_t getStreamDimension(cam_stream_type_t streamType,
             cam_dimension_t &dim);
 
@@ -155,7 +160,8 @@ public:
     int32_t stopAEBracket();
     int32_t updateRAW(cam_dimension_t max_dim);
     bool isDISEnabled();
-    cam_is_type_t getISType();
+    int32_t setISType();
+    cam_is_type_t getVideoISType();
     cam_is_type_t getPreviewISType();
     uint8_t getMobicatMask();
 
@@ -228,6 +234,7 @@ public:
     int32_t updateOisValue(bool oisValue);
     int32_t setIntEvent(cam_int_evt_params_t params);
     bool getofflineRAW();
+    bool getQuadraCfa();
     int32_t updatePpFeatureMask(cam_stream_type_t stream_type);
     int32_t getStreamPpMask(cam_stream_type_t stream_type, cam_feature_mask_t &pp_mask);
     int32_t getSharpness();
@@ -298,6 +305,8 @@ public:
         bool hal3,
         cam_feature_mask_t featureMask,
         cam_analysis_info_t *pAnalysisInfo);
+    int32_t updateDtVc(int32_t *dt, int32_t *vc);
+
 private:
     QCameraParameters *mImpl;
     mutable Mutex mLock;

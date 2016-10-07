@@ -83,14 +83,14 @@
 #define CAMERA_SHARPNESS_STEP 1
 
 const CAMERA_MAIN_MENU_TBL_T camera_main_menu_tbl[] = {
-  {START_PREVIEW,               "Start preview"},
+  {START_PREVIEW,              "Start preview"},
   {STOP_PREVIEW,               "Stop preview/video"},
   {SET_WHITE_BALANCE,          "Set white balance mode"},
   {SET_TINTLESS_ENABLE,        "Set Tintless Enable"},
   {SET_TINTLESS_DISABLE,       "Set Tintless Disable"},
   {SET_EXP_METERING,           "Set exposure metering mode"},
   {GET_CTRL_VALUE,             "Get control value menu"},
-  {TOGGLE_AFR,                 "Toggle auto frame rate. Default fixed frame rate"},
+  {TOGGLE_EZTUNE,              "Toggle EZtune. Default EZTune Off"},
   {SET_ISO,                    "ISO changes."},
   {BRIGHTNESS_GOTO_SUBMENU,    "Brightness changes."},
   {CONTRAST_GOTO_SUBMENU,      "Contrast changes."},
@@ -243,6 +243,8 @@ int brightness = CAMERA_DEF_BRIGHTNESS;
 int contrast = CAMERA_DEF_CONTRAST;
 int saturation = CAMERA_DEF_SATURATION;
 int sharpness = CAMERA_DEF_SHARPNESS;
+int ev_numerator = 0;
+
 #else
 int brightness = 0;
 int contrast = 0;
@@ -345,9 +347,9 @@ int next_menu(menu_id_change_t current_menu_id, char keypress, camera_action_t *
           next_menu_id = MENU_ID_SATURATIONCHANGE;
           break;
 
-        case TOGGLE_AFR:
-          * action_id_ptr = ACTION_TOGGLE_AFR;
-          LOGD("next_menu_id = MENU_ID_TOGGLEAFR = %d\n", next_menu_id);
+        case TOGGLE_EZTUNE:
+          * action_id_ptr = ACTION_TOGGLE_EZTUNE;
+          LOGD("next_menu_id = MENU_ID_TOGGLE EZTUNE = %d\n", next_menu_id);
           break;
 
         case SET_ISO:
@@ -996,27 +998,20 @@ int increase_brightness (mm_camera_lib_handle *lib_handle) {
  * DESCRIPTION:
  * ===========================================================================*/
 
-int increase_EV (void) {
-#if 0
-   int rc = 0;
-   int32_t value = 0;
-   rc = cam_config_is_parm_supported(cam_id, MM_CAMERA_PARM_EXPOSURE_COMPENSATION);
-    if(!rc) {
-       printf("MM_CAMERA_PARM_EXPOSURE_COMPENSATION mode is not supported for this sensor");
-       return -1;
-    }
-    ev_numerator += 1;
+int increase_EV (mm_camera_lib_handle *lib_handle) {
+
+    ev_numerator += 4;
     if(ev_numerator >= EXPOSURE_COMPENSATION_MINIMUM_NUMERATOR &&
             ev_numerator <= EXPOSURE_COMPENSATION_MAXIMUM_NUMERATOR){
-        int16_t  numerator16 = (int16_t)(ev_numerator & 0x0000ffff);
-        uint16_t denominator16 = EXPOSURE_COMPENSATION_DENOMINATOR;
-        value = numerator16 << 16 | denominator16;
+
     } else {
        printf("Reached max EV.\n");
     }
-    return mm_app_set_config_parm(cam_id, MM_CAMERA_PARM_EXPOSURE_COMPENSATION, value);
-#endif
-  return 0;
+    printf("Increase EV to %d\n", ev_numerator);
+    return mm_camera_lib_send_command(lib_handle,
+                                       MM_CAMERA_LIB_EV,
+                                       &ev_numerator,
+                                       NULL);
 }
 
 /*===========================================================================
@@ -1024,27 +1019,21 @@ int increase_EV (void) {
  *
  * DESCRIPTION:
  * ===========================================================================*/
-int decrease_EV (void) {
-#if 0
-   int rc = 0;
-   int32_t  value = 0;
-   rc = cam_config_is_parm_supported(cam_id, MM_CAMERA_PARM_EXPOSURE_COMPENSATION);
-    if(!rc) {
-       printf("MM_CAMERA_PARM_EXPOSURE_COMPENSATION mode is not supported for this sensor");
-       return -1;
-    }
-    ev_numerator -= 1;
+int decrease_EV (mm_camera_lib_handle *lib_handle) {
+
+    ev_numerator -= 4;
     if(ev_numerator >= EXPOSURE_COMPENSATION_MINIMUM_NUMERATOR &&
             ev_numerator <= EXPOSURE_COMPENSATION_MAXIMUM_NUMERATOR){
-        int16_t  numerator16 = (int16_t)(ev_numerator & 0x0000ffff);
-        uint16_t denominator16 = EXPOSURE_COMPENSATION_DENOMINATOR;
-        value = numerator16 << 16 | denominator16;
+
     } else {
        printf("Reached min EV.\n");
     }
-    return mm_app_set_config_parm(cam_id, MM_CAMERA_PARM_EXPOSURE_COMPENSATION, value);
-#endif
-  return 0;
+    printf("Decrease EV to %d\n", ev_numerator);
+    return mm_camera_lib_send_command(lib_handle,
+                                       MM_CAMERA_LIB_EV,
+                                       &ev_numerator,
+                                       NULL);
+
 }
 
 /*===========================================================================
@@ -1304,7 +1293,6 @@ int toggle_afr () {
 #endif
   return 0;
 }
-
 int set_zoom (mm_camera_lib_handle *lib_handle, int zoom_action_param) {
 
     if (zoom_action_param == ZOOM_IN) {
@@ -1662,6 +1650,7 @@ static int submain()
     int action_param;
     uint8_t previewing = 0;
     int isZSL = 0;
+    int isezTune = 0;
     uint8_t wnr_enabled = 0;
     mm_camera_lib_handle lib_handle;
     int num_cameras;
@@ -1722,9 +1711,6 @@ static int submain()
             goto ERROR;
         }
     }
-    /*start the eztune server*/
-    LOGH("Starting eztune Server \n");
-    eztune_server_start(&lib_handle);
 
     do {
         print_current_menu (current_menu_id);
@@ -1823,12 +1809,12 @@ static int submain()
 
             case ACTION_EV_INCREASE:
                 LOGD("Selection for the EV increase\n");
-                increase_EV ();
+                increase_EV (&lib_handle);
                 break;
 
             case ACTION_EV_DECREASE:
                 LOGD("Selection for the EV decrease\n");
-                decrease_EV ();
+                decrease_EV (&lib_handle);
                 break;
 
             case ACTION_SATURATION_INCREASE:
@@ -1844,6 +1830,26 @@ static int submain()
             case ACTION_TOGGLE_AFR:
                 LOGD("Select for auto frame rate toggling\n");
                 toggle_afr();
+                break;
+
+            case ACTION_TOGGLE_EZTUNE:
+                LOGE("Select for EzTune");
+                printf("EZTUNE Toggle\n");
+                isezTune = !isezTune;
+                if (isezTune) {
+                    printf("EZ TUNE On !!!");
+                } else {
+                    printf("EZ TUNE Off !!!");
+                }
+
+                rc = mm_camera_lib_send_command(&lib_handle,
+                                      MM_CAMERA_LIB_EZTUNE_ENABLE,
+                                      &isezTune,
+                                      NULL);
+                if (rc != MM_CAMERA_OK) {
+                    LOGE("mm_camera_lib_send_command() err=%d\n",  rc);
+                    goto ERROR;
+                }
                 break;
 
             case ACTION_SET_ISO:
@@ -1976,24 +1982,20 @@ static int submain()
                 snap_dim.height = dimension_tbl[action_param].height;
                 break;
 
-      case ACTION_START_RECORDING:
-        LOGD("Start recording action\n");
-#if 0
-        if (mm_app_start_video(cam_id) < 0)
-          goto ERROR;
-        is_rec = 1;
-#endif
-        break;
-      case ACTION_STOP_RECORDING:
-        LOGD("Stop recording action\n");
-#if 0
-        if(is_rec) {
-          if (mm_app_stop_video(cam_id) < 0)
-            goto ERROR;
-          is_rec = 0;
-        }
-#endif
-        break;
+           case ACTION_START_RECORDING:
+             LOGD("Start recording action\n");
+             mm_app_start_record_preview(&lib_handle.test_obj);
+             is_rec = 1;
+             break;
+
+           case ACTION_STOP_RECORDING:
+             LOGD("Stop recording action\n");
+             if(is_rec) {
+                 mm_app_stop_record_preview(&lib_handle.test_obj);
+                 is_rec = 0;
+             }
+
+             break;
       case ACTION_TAKE_LIVE_SNAPSHOT:
         printf("Selection for live shot\n");
 #if 0
