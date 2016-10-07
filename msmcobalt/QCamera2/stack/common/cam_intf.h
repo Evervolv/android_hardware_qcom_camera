@@ -283,6 +283,11 @@ typedef struct{
     size_t zzhdr_sizes_tbl_cnt;                             /* Number of resolutions in zzHDR mode*/
     cam_dimension_t zzhdr_sizes_tbl[MAX_SIZES_CNT];         /* Table for ZZHDR supported sizes */
 
+    size_t supported_quadra_cfa_dim_cnt;              /* Number of resolutions in Quadra CFA mode */
+    cam_dimension_t quadra_cfa_dim[MAX_SIZES_CNT];    /* Table for Quadra CFA supported sizes */
+    cam_format_t quadra_cfa_format;                   /* Quadra CFA output format */
+    uint32_t is_remosaic_lib_present;                 /* Flag indicating if remosaic lib present */
+
     /* supported preview formats */
     size_t supported_preview_fmt_cnt;
     cam_format_t supported_preview_fmts[CAM_FORMAT_MAX];
@@ -544,6 +549,14 @@ typedef struct{
 
     /* Dual cam calibration data */
     cam_related_system_calibration_data_t related_cam_calibration;
+
+    /* Meta_RAW capability */
+    uint8_t meta_raw_channel_count;
+    uint8_t vc[MAX_SIZES_CNT];
+    uint8_t dt[MAX_SIZES_CNT];
+    cam_format_t supported_meta_raw_fmts[CAM_FORMAT_MAX];
+    cam_dimension_t raw_meta_dim[MAX_SIZES_CNT];
+    cam_sub_format_type_t sub_fmt[CAM_FORMAT_SUBTYPE_MAX];
 } cam_capability_t;
 
 typedef enum {
@@ -656,6 +669,16 @@ typedef struct {
 
     /* if frames will not be received */
     uint8_t noFrameExpected;
+
+    /* DT for this stream */
+    int32_t dt;
+
+    /* VC for this stream */
+    int32_t vc;
+
+   /* Subformat for this stream */
+    cam_sub_format_type_t sub_format_type;
+
 } cam_stream_info_t;
 
 /*****************************************************************************
@@ -928,6 +951,10 @@ typedef struct {
     INCLUDE(CAM_INTF_META_TOUCH_AE_RESULT,              int32_t,                     1);
     INCLUDE(CAM_INTF_PARM_DUAL_LED_CALIBRATION,         int32_t,                     1);
     INCLUDE(CAM_INTF_PARM_ADV_CAPTURE_MODE,             uint8_t,                     1);
+    INCLUDE(CAM_INTF_PARM_QUADRA_CFA,                   int32_t,                     1);
+    INCLUDE(CAM_INTF_META_RAW,                          cam_dimension_t,             1);
+    INCLUDE(CAM_INTF_META_STREAM_INFO_FOR_PIC_RES,      cam_stream_size_info_t,      1);
+
 
     /* HAL3 specific */
     INCLUDE(CAM_INTF_META_STREAM_INFO,                  cam_stream_size_info_t,      1);
@@ -980,6 +1007,7 @@ typedef struct {
     INCLUDE(CAM_INTF_PARM_INSTANT_AEC,                  uint8_t,                     1);
     INCLUDE(CAM_INTF_META_REPROCESS_FLAGS,              uint8_t,                     1);
     INCLUDE(CAM_INTF_PARM_JPEG_ENCODE_CROP,             cam_stream_crop_info_t,      1);
+    INCLUDE(CAM_INTF_PARM_JPEG_SCALE_DIMENSION,         cam_dimension_t,             1);
 } metadata_data_t;
 
 /* Update clear_metadata_buffer() function when a new is_xxx_valid is added to
