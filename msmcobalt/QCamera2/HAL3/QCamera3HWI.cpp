@@ -106,6 +106,15 @@ namespace qcamera {
 
 #define TIMEOUT_NEVER -1
 
+/* Face landmarks indices */
+#define LEFT_EYE_X             0
+#define LEFT_EYE_Y             1
+#define RIGHT_EYE_X            2
+#define RIGHT_EYE_Y            3
+#define MOUTH_X                4
+#define MOUTH_Y                5
+#define TOTAL_LANDMARK_INDICES 6
+
 cam_capability_t *gCamCapability[MM_CAMERA_MAX_NUM_SENSORS];
 const camera_metadata_t *gStaticMetadata[MM_CAMERA_MAX_NUM_SENSORS];
 extern pthread_mutex_t gCamLock;
@@ -116,6 +125,21 @@ const QCamera3HardwareInterface::QCameraPropMap QCamera3HardwareInterface::CDS_M
     {"On",  CAM_CDS_MODE_ON},
     {"Off", CAM_CDS_MODE_OFF},
     {"Auto",CAM_CDS_MODE_AUTO}
+};
+const QCamera3HardwareInterface::QCameraMap<
+        camera_metadata_enum_android_video_hdr_mode_t,
+        cam_video_hdr_mode_t> QCamera3HardwareInterface::VIDEO_HDR_MODES_MAP[] = {
+    { QCAMERA3_VIDEO_HDR_MODE_OFF,  CAM_VIDEO_HDR_MODE_OFF },
+    { QCAMERA3_VIDEO_HDR_MODE_ON,   CAM_VIDEO_HDR_MODE_ON }
+};
+
+
+const QCamera3HardwareInterface::QCameraMap<
+        camera_metadata_enum_android_ir_mode_t,
+        cam_ir_mode_type_t> QCamera3HardwareInterface::IR_MODES_MAP [] = {
+    {QCAMERA3_IR_MODE_OFF,  CAM_IR_MODE_OFF},
+    {QCAMERA3_IR_MODE_ON, CAM_IR_MODE_ON},
+    {QCAMERA3_IR_MODE_AUTO, CAM_IR_MODE_AUTO}
 };
 
 const QCamera3HardwareInterface::QCameraMap<
@@ -3351,39 +3375,19 @@ void QCamera3HardwareInterface::handleBufferWithLock(
             }
             mPendingBuffersMap.removeBuf(buffer->buffer);
 
-            bool notifyNow = true;
-            for (pendingRequestIterator j = mPendingRequestsList.begin();
-                    j != mPendingRequestsList.end(); j++) {
-                if (j->frame_number < frame_number) {
-                    notifyNow = false;
-                    break;
-                }
-            }
+            camera3_capture_result result;
+            memset(&result, 0, sizeof(camera3_capture_result));
+            result.frame_number = frame_number;
+            result.result = i->settings;
+            result.input_buffer = i->input_buffer;
+            result.num_output_buffers = 1;
+            result.output_buffers = buffer;
+            result.partial_result = PARTIAL_RESULT_COUNT;
 
-            if (notifyNow) {
-                camera3_capture_result result;
-                memset(&result, 0, sizeof(camera3_capture_result));
-                result.frame_number = frame_number;
-                result.result = i->settings;
-                result.input_buffer = i->input_buffer;
-                result.num_output_buffers = 1;
-                result.output_buffers = buffer;
-                result.partial_result = PARTIAL_RESULT_COUNT;
-
-                mCallbackOps->notify(mCallbackOps, &notify_msg);
-                mCallbackOps->process_capture_result(mCallbackOps, &result);
-                LOGD("Notify reprocess now %d!", frame_number);
-                i = erasePendingRequest(i);
-            } else {
-                // Cache reprocess result for later
-                PendingReprocessResult pendingResult;
-                memset(&pendingResult, 0, sizeof(PendingReprocessResult));
-                pendingResult.notify_msg = notify_msg;
-                pendingResult.buffer = *buffer;
-                pendingResult.frame_number = frame_number;
-                mPendingReprocessResultList.push_back(pendingResult);
-                LOGD("Cache reprocess result %d!", frame_number);
-            }
+            mCallbackOps->notify(mCallbackOps, &notify_msg);
+            mCallbackOps->process_capture_result(mCallbackOps, &result);
+            LOGD("Notify reprocess now %d!", frame_number);
+            i = erasePendingRequest(i);
         } else {
             for (List<RequestedBufferInfo>::iterator j = i->buffers.begin();
                 j != i->buffers.end(); j++) {
@@ -3632,6 +3636,14 @@ int QCamera3HardwareInterface::processCaptureRequest(
             }
         }
 
+        if (meta.exists(QCAMERA3_VIDEO_HDR_MODE)) {
+            cam_video_hdr_mode_t vhdr = (cam_video_hdr_mode_t)
+                    meta.find(QCAMERA3_VIDEO_HDR_MODE).data.i32[0];
+            rc = setVideoHdrMode(mParameters, vhdr);
+            if (rc != NO_ERROR) {
+                LOGE("setVideoHDR is failed");
+            }
+        }
 
         //TODO: validate the arguments, HSV scenemode should have only the
         //advertised fps ranges
@@ -5124,7 +5136,12 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                                         landmarks->face_landmarks[i].mouth_center.y);
 
                                 convertLandmarks(landmarks->face_landmarks[i], faceLandmarks+k);
-                                k+= 6;
+                                k+= TOTAL_LANDMARK_INDICES;
+                            }
+                        } else {
+                            for (size_t i = 0; i < numFaces; i++) {
+                                setInvalidLandmarks(faceLandmarks+k);
+                                k+= TOTAL_LANDMARK_INDICES;
                             }
                         }
 
@@ -5540,6 +5557,20 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     // CDS
     IF_META_AVAILABLE(int32_t, cds, CAM_INTF_PARM_CDS_MODE, metadata) {
         camMetadata.update(QCAMERA3_CDS_MODE, cds, 1);
+    }
+
+    IF_META_AVAILABLE(cam_sensor_hdr_type_t, vhdr, CAM_INTF_PARM_SENSOR_HDR, metadata) {
+        int32_t fwk_hdr;
+        if(*vhdr == CAM_SENSOR_HDR_OFF) {
+            fwk_hdr = QCAMERA3_VIDEO_HDR_MODE_OFF;
+        } else {
+            fwk_hdr = QCAMERA3_VIDEO_HDR_MODE_ON;
+        }
+        camMetadata.update(QCAMERA3_VIDEO_HDR_MODE, &fwk_hdr, 1);
+    }
+
+    IF_META_AVAILABLE(cam_ir_mode_type_t, ir, CAM_INTF_META_IR_MODE, metadata) {
+        camMetadata.update(QCAMERA3_IR_MODE,(int32_t *) &ir, 1);
     }
 
     // TNR
@@ -6283,12 +6314,50 @@ void QCamera3HardwareInterface::convertLandmarks(
         cam_face_landmarks_info_t landmark_data,
         int32_t *landmarks)
 {
-    landmarks[0] = (int32_t)landmark_data.left_eye_center.x;
-    landmarks[1] = (int32_t)landmark_data.left_eye_center.y;
-    landmarks[2] = (int32_t)landmark_data.right_eye_center.x;
-    landmarks[3] = (int32_t)landmark_data.right_eye_center.y;
-    landmarks[4] = (int32_t)landmark_data.mouth_center.x;
-    landmarks[5] = (int32_t)landmark_data.mouth_center.y;
+    if (landmark_data.is_left_eye_valid) {
+        landmarks[LEFT_EYE_X] = (int32_t)landmark_data.left_eye_center.x;
+        landmarks[LEFT_EYE_Y] = (int32_t)landmark_data.left_eye_center.y;
+    } else {
+        landmarks[LEFT_EYE_X] = FACE_INVALID_POINT;
+        landmarks[LEFT_EYE_Y] = FACE_INVALID_POINT;
+    }
+
+    if (landmark_data.is_right_eye_valid) {
+        landmarks[RIGHT_EYE_X] = (int32_t)landmark_data.right_eye_center.x;
+        landmarks[RIGHT_EYE_Y] = (int32_t)landmark_data.right_eye_center.y;
+    } else {
+        landmarks[RIGHT_EYE_X] = FACE_INVALID_POINT;
+        landmarks[RIGHT_EYE_Y] = FACE_INVALID_POINT;
+    }
+
+    if (landmark_data.is_mouth_valid) {
+        landmarks[MOUTH_X] = (int32_t)landmark_data.mouth_center.x;
+        landmarks[MOUTH_Y] = (int32_t)landmark_data.mouth_center.y;
+    } else {
+        landmarks[MOUTH_X] = FACE_INVALID_POINT;
+        landmarks[MOUTH_Y] = FACE_INVALID_POINT;
+    }
+}
+
+/*===========================================================================
+ * FUNCTION   : setInvalidLandmarks
+ *
+ * DESCRIPTION: helper method to set invalid landmarks
+ *
+ * PARAMETERS :
+ *   @landmarks : int32_t destination array
+ *
+ *
+ *==========================================================================*/
+void QCamera3HardwareInterface::setInvalidLandmarks(
+        int32_t *landmarks)
+{
+    landmarks[LEFT_EYE_X] = FACE_INVALID_POINT;
+    landmarks[LEFT_EYE_Y] = FACE_INVALID_POINT;
+    landmarks[RIGHT_EYE_X] = FACE_INVALID_POINT;
+    landmarks[RIGHT_EYE_Y] = FACE_INVALID_POINT;
+    landmarks[MOUTH_X] = FACE_INVALID_POINT;
+    landmarks[MOUTH_Y] = FACE_INVALID_POINT;
 }
 
 #define DATA_PTR(MEM_OBJ,INDEX) MEM_OBJ->getPtr( INDEX )
@@ -6867,6 +6936,10 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
              supportedFaceDetectMode);
 
     int32_t maxFaces = gCamCapability[cameraId]->max_num_roi;
+    /* support mode should be OFF if max number of face is 0 */
+    if (maxFaces <= 0) {
+        supportedFaceDetectMode = 0;
+    }
     Vector<uint8_t> availableFaceDetectModes;
     availableFaceDetectModes.add(ANDROID_STATISTICS_FACE_DETECT_MODE_OFF);
     if (supportedFaceDetectMode == 1) {
@@ -7699,6 +7772,19 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     staticInfo.update(QCAMERA3_OPAQUE_RAW_STRIDES, strides.array(),
             strides.size());
 
+    //Video HDR default
+    if ((gCamCapability[cameraId]->qcom_supported_feature_mask) &
+            (CAM_QCOM_FEATURE_STAGGERED_VIDEO_HDR |
+            CAM_QCOM_FEATURE_ZIGZAG_VIDEO_HDR | CAM_QCOM_FEATURE_SENSOR_HDR)) {
+        int32_t vhdr_mode[] = {
+                QCAMERA3_VIDEO_HDR_MODE_OFF,
+                QCAMERA3_VIDEO_HDR_MODE_ON};
+
+        size_t vhdr_mode_count = sizeof(vhdr_mode) / sizeof(int32_t);
+        staticInfo.update(QCAMERA3_AVAILABLE_VIDEO_HDR_MODES,
+                    vhdr_mode, vhdr_mode_count);
+    }
+
     staticInfo.update(QCAMERA3_DUALCAM_CALIB_META_DATA_BLOB,
             (const uint8_t*)&gCamCapability[cameraId]->related_cam_calibration,
             sizeof(gCamCapability[cameraId]->related_cam_calibration));
@@ -7736,6 +7822,23 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     else
         LOGW("Warning: ANDROID_SENSOR_OPAQUE_RAW_SIZE is using rough estimation(2 bytes/pixel)");
 #endif
+
+    if (gCamCapability[cameraId]->supported_ir_mode_cnt > 0) {
+        int32_t avail_ir_modes[CAM_IR_MODE_MAX];
+        size = 0;
+        count = CAM_IR_MODE_MAX;
+        count = MIN(gCamCapability[cameraId]->supported_ir_mode_cnt, count);
+        for (size_t i = 0; i < count; i++) {
+            int val = lookupFwkName(IR_MODES_MAP, METADATA_MAP_SIZE(IR_MODES_MAP),
+                    gCamCapability[cameraId]->supported_ir_modes[i]);
+            if (NAME_NOT_FOUND != val) {
+                avail_ir_modes[size] = (int32_t)val;
+                size++;
+            }
+        }
+        staticInfo.update(QCAMERA3_IR_AVAILABLE_MODES,
+                avail_ir_modes, size);
+    }
 
     gStaticMetadata[cameraId] = staticInfo.release();
     return rc;
@@ -8170,6 +8273,10 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
         break;
     }
+    // Set CAC to OFF if underlying device doesn't support
+    if (gCamCapability[mCameraId]->aberration_modes_count == 0) {
+        cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_OFF;
+    }
     settings.update(ANDROID_COLOR_CORRECTION_ABERRATION_MODE, &cacMode, 1);
     settings.update(ANDROID_CONTROL_CAPTURE_INTENT, &controlIntent, 1);
     settings.update(ANDROID_CONTROL_VIDEO_STABILIZATION_MODE, &vsMode, 1);
@@ -8448,6 +8555,14 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
 
     int32_t mode = cds_mode;
     settings.update(QCAMERA3_CDS_MODE, &mode, 1);
+
+    int32_t hdr_mode = (int32_t)QCAMERA3_VIDEO_HDR_MODE_OFF;
+    settings.update(QCAMERA3_VIDEO_HDR_MODE, &hdr_mode, 1);
+
+    /* IR Mode Default Off */
+    int32_t ir_mode = (int32_t)QCAMERA3_IR_MODE_OFF;
+    settings.update(QCAMERA3_IR_MODE, &ir_mode, 1);
+
     mDefaultMetadata[type] = settings.release();
 
     return mDefaultMetadata[type];
@@ -9544,6 +9659,30 @@ int QCamera3HardwareInterface::translateToHalMetadata
         }
     }
 
+    // Video HDR
+    if (frame_settings.exists(QCAMERA3_VIDEO_HDR_MODE)) {
+        cam_video_hdr_mode_t vhdr = (cam_video_hdr_mode_t)
+                frame_settings.find(QCAMERA3_VIDEO_HDR_MODE).data.i32[0];
+        rc = setVideoHdrMode(mParameters, vhdr);
+        if (rc != NO_ERROR) {
+            LOGE("setVideoHDR is failed");
+        }
+    }
+
+    //IR
+    if(frame_settings.exists(QCAMERA3_IR_MODE)) {
+        cam_ir_mode_type_t fwk_ir = (cam_ir_mode_type_t)
+                frame_settings.find(QCAMERA3_IR_MODE).data.i32[0];
+        if ((CAM_IR_MODE_MAX <= fwk_ir) || (0 > fwk_ir)) {
+            LOGE("Invalid IR mode %d!", fwk_ir);
+        } else {
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata,
+                    CAM_INTF_META_IR_MODE, fwk_ir)) {
+                rc = BAD_VALUE;
+            }
+        }
+    }
+
     // TNR
     if (frame_settings.exists(QCAMERA3_TEMPORAL_DENOISE_ENABLE) &&
         frame_settings.exists(QCAMERA3_TEMPORAL_DENOISE_PROCESS_TYPE)) {
@@ -10061,6 +10200,67 @@ int32_t QCamera3HardwareInterface::extractSceneMode(
         if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata,
                 CAM_INTF_PARM_BESTSHOT_MODE, sceneMode)) {
             rc = BAD_VALUE;
+        }
+    }
+    return rc;
+}
+
+/*===========================================================================
+ * FUNCTION   : setVideoHdrMode
+ *
+ * DESCRIPTION: Set Video HDR mode from frameworks set metadata
+ *
+ * PARAMETERS :
+ *      @hal_metadata: hal metadata structure
+ *      @metaMode: QCAMERA3_VIDEO_HDR_MODE
+ *
+ * RETURN     : None
+ *==========================================================================*/
+int32_t QCamera3HardwareInterface::setVideoHdrMode(
+        metadata_buffer_t *hal_metadata, cam_video_hdr_mode_t vhdr)
+{
+    int32_t rc = NO_ERROR;
+    if ((CAM_VIDEO_HDR_MODE_MAX <= (vhdr)) || (0 > (vhdr))) {
+        LOGE("%s: Invalid Video HDR mode %d!", __func__, vhdr);
+        rc = BAD_VALUE;
+    } else {
+        cam_sensor_hdr_type_t vhdr_type = CAM_SENSOR_HDR_MAX;
+        if(vhdr == QCAMERA3_VIDEO_HDR_MODE_OFF) {
+            LOGD("Setting HDR mode Off");
+            vhdr_type = CAM_SENSOR_HDR_OFF;
+        } else {
+            char video_hdr_prop[PROPERTY_VALUE_MAX];
+            memset(video_hdr_prop, 0, sizeof(video_hdr_prop));
+            property_get("persist.camera.hdr.video", video_hdr_prop, "3");
+            uint8_t use_hdr_video = (uint8_t)atoi(video_hdr_prop);
+            if ((gCamCapability[mCameraId]->qcom_supported_feature_mask &
+                    CAM_QCOM_FEATURE_SENSOR_HDR) &&
+                    (use_hdr_video == CAM_SENSOR_HDR_IN_SENSOR)) {
+                LOGD("Setting HDR mode In Sensor");
+                vhdr_type = CAM_SENSOR_HDR_IN_SENSOR;
+            }
+            if ((gCamCapability[mCameraId]->qcom_supported_feature_mask &
+                    CAM_QCOM_FEATURE_ZIGZAG_VIDEO_HDR) &&
+                    (use_hdr_video == CAM_SENSOR_HDR_ZIGZAG)) {
+                LOGD("Setting HDR mode Zigzag");
+                vhdr_type = CAM_SENSOR_HDR_ZIGZAG;
+            }
+            if ((gCamCapability[mCameraId]->qcom_supported_feature_mask &
+                    CAM_QCOM_FEATURE_STAGGERED_VIDEO_HDR) &&
+                    (use_hdr_video == CAM_SENSOR_HDR_STAGGERED)) {
+                LOGD("Setting HDR mode Staggered");
+                vhdr_type = CAM_SENSOR_HDR_STAGGERED;
+            }
+            if(vhdr_type == CAM_SENSOR_HDR_MAX) {
+                LOGD("HDR mode not supported");
+                rc = BAD_VALUE;
+            }
+        }
+        if(rc == NO_ERROR) {
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata,
+                    CAM_INTF_PARM_SENSOR_HDR, vhdr_type)) {
+                rc = BAD_VALUE;
+            }
         }
     }
     return rc;
