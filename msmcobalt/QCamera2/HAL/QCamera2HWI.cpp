@@ -1647,6 +1647,7 @@ QCamera2HardwareInterface::QCamera2HardwareInterface(uint32_t cameraId)
       mPLastFrameCount(0),
       mPLastFpsTime(0),
       mPFps(0),
+      mLowLightConfigured(false),
       mInstantAecFrameCount(0),
       m_bIntJpegEvtPending(false),
       m_bIntRawEvtPending(false),
@@ -1666,7 +1667,8 @@ QCamera2HardwareInterface::QCamera2HardwareInterface(uint32_t cameraId)
       mMetadataMem(NULL),
       mCACDoneReceived(false),
       m_bNeedRestart(false),
-      mBootToMonoTimestampOffset(0)
+      mBootToMonoTimestampOffset(0),
+      bDepthAFCallbacks(true)
 {
 #ifdef TARGET_TS_MAKEUP
     memset(&mFaceRect, -1, sizeof(mFaceRect));
@@ -1973,6 +1975,10 @@ int QCamera2HardwareInterface::openCamera()
         mBootToMonoTimestampOffset = getBootToMonoTimeOffset();
     }
     LOGH("mBootToMonoTimestampOffset = %lld", mBootToMonoTimestampOffset);
+
+    memset(value, 0, sizeof(value));
+    property_get("persist.camera.depth.focus.cb", value, "1");
+    bDepthAFCallbacks = atoi(value);
 
     return NO_ERROR;
 
@@ -3955,6 +3961,10 @@ int32_t QCamera2HardwareInterface::unconfigureAdvancedCapture()
 {
     int32_t rc = NO_ERROR;
 
+    /*Disable Quadra CFA mode*/
+    LOGH("Disabling Quadra CFA mode");
+    mParameters.setQuadraCfaMode(false, true);
+
     if (mAdvancedCaptureConfigured) {
 
         mAdvancedCaptureConfigured = false;
@@ -3972,9 +3982,9 @@ int32_t QCamera2HardwareInterface::unconfigureAdvancedCapture()
             rc = mParameters.stopAEBracket();
         } else if ((mParameters.isChromaFlashEnabled())
                 || (mFlashConfigured && !mLongshotEnabled)
-                || (mParameters.getLowLightLevel() != CAM_LOW_LIGHT_OFF)
+                || (mLowLightConfigured == true)
                 || (mParameters.getManualCaptureMode() >= CAM_MANUAL_CAPTURE_TYPE_2)) {
-            rc = mParameters.resetFrameCapture(TRUE);
+            rc = mParameters.resetFrameCapture(TRUE, mLowLightConfigured);
         } else if (mParameters.isUbiFocusEnabled() || mParameters.isUbiRefocus()) {
             rc = configureAFBracketing(false);
         } else if (mParameters.isOptiZoomEnabled()) {
@@ -4025,6 +4035,9 @@ int32_t QCamera2HardwareInterface::configureAdvancedCapture()
         LOGE("Cannot support Advanced capture modes");
         return rc;
     }
+    /*Enable Quadra CFA mode*/
+    LOGH("Enabling Quadra CFA mode");
+    mParameters.setQuadraCfaMode(true, true);
 
     setOutputImageCount(0);
     mInputCount = 0;
@@ -4068,6 +4081,9 @@ int32_t QCamera2HardwareInterface::configureAdvancedCapture()
             || (mParameters.getLowLightLevel() != CAM_LOW_LIGHT_OFF)
             || (mParameters.getManualCaptureMode() >= CAM_MANUAL_CAPTURE_TYPE_2)) {
         rc = mParameters.configFrameCapture(TRUE);
+        if (mParameters.getLowLightLevel() != CAM_LOW_LIGHT_OFF) {
+            mLowLightConfigured = true;
+        }
     } else if (mFlashNeeded && !mLongshotEnabled) {
         rc = mParameters.configFrameCapture(TRUE);
         mFlashConfigured = true;
@@ -4346,10 +4362,11 @@ int32_t QCamera2HardwareInterface::stopAdvancedCapture(
         rc = pChannel->stopAdvancedCapture(MM_CAMERA_AF_BRACKETING);
     } else if (mParameters.isChromaFlashEnabled()
             || (mFlashConfigured && !mLongshotEnabled)
-            || (mParameters.getLowLightLevel() != CAM_LOW_LIGHT_OFF)
+            || (mLowLightConfigured == true)
             || (mParameters.getManualCaptureMode() >= CAM_MANUAL_CAPTURE_TYPE_2)) {
         rc = pChannel->stopAdvancedCapture(MM_CAMERA_FRAME_CAPTURE);
         mFlashConfigured = false;
+        mLowLightConfigured = false;
     } else if(mParameters.isHDREnabled()
             || mParameters.isAEBracketEnabled()) {
         rc = pChannel->stopAdvancedCapture(MM_CAMERA_AE_BRACKETING);
@@ -4393,7 +4410,7 @@ int32_t QCamera2HardwareInterface::startAdvancedCapture(
         rc = pChannel->startAdvancedCapture(MM_CAMERA_AE_BRACKETING);
     } else if (mParameters.isChromaFlashEnabled()
             || (mFlashNeeded && !mLongshotEnabled)
-            || (mParameters.getLowLightLevel() != CAM_LOW_LIGHT_OFF)
+            || (mLowLightConfigured == true)
             || (mParameters.getManualCaptureMode() >= CAM_MANUAL_CAPTURE_TYPE_2)) {
         cam_capture_frame_config_t config = mParameters.getCaptureFrameConfig();
         rc = pChannel->startAdvancedCapture(MM_CAMERA_FRAME_CAPTURE, &config);
@@ -4928,6 +4945,7 @@ int QCamera2HardwareInterface::stopCaptureChannel(bool destroy)
     if (mParameters.isJpegPictureFormat() ||
         mParameters.isNV16PictureFormat() ||
         mParameters.isNV21PictureFormat()) {
+        mParameters.setQuadraCfaMode(false, true);
         rc = stopChannel(QCAMERA_CH_TYPE_CAPTURE);
         if (destroy && (NO_ERROR == rc)) {
             // Destroy camera channel but dont release context
@@ -5350,6 +5368,9 @@ int QCamera2HardwareInterface::takeLiveSnapshot_internal()
     int rc = NO_ERROR;
 
     QCameraChannel *pChannel = NULL;
+    QCameraChannel *pPreviewChannel = NULL;
+    QCameraStream  *pPreviewStream = NULL;
+    QCameraStream  *pStream = NULL;
 
     //Set rotation value from user settings as Jpeg rotation
     //to configure back-end modules.
@@ -5372,6 +5393,45 @@ int QCamera2HardwareInterface::takeLiveSnapshot_internal()
         LOGE("Snapshot/Video channel not initialized");
         rc = NO_INIT;
         goto end;
+    }
+
+    // Check if all preview buffers are mapped before creating
+    // a jpeg session as preview stream buffers are queried during the same
+    pPreviewChannel = m_channels[QCAMERA_CH_TYPE_PREVIEW];
+    if (pPreviewChannel != NULL) {
+        uint32_t numStreams = pPreviewChannel->getNumOfStreams();
+
+        for (uint8_t i = 0 ; i < numStreams ; i++ ) {
+            pStream = pPreviewChannel->getStreamByIndex(i);
+            if (!pStream)
+                continue;
+            if (CAM_STREAM_TYPE_PREVIEW == pStream->getMyType()) {
+                pPreviewStream = pStream;
+                break;
+            }
+        }
+
+        if (pPreviewStream != NULL) {
+            Mutex::Autolock l(mMapLock);
+            QCameraMemory *pMemory = pStream->getStreamBufs();
+            if (!pMemory) {
+                LOGE("Error!! pMemory is NULL");
+                return -ENOMEM;
+            }
+
+            uint8_t waitCnt = 2;
+            while (!pMemory->checkIfAllBuffersMapped() && (waitCnt > 0)) {
+                LOGL(" Waiting for preview buffers to be mapped");
+                mMapCond.waitRelative(
+                        mMapLock, CAMERA_DEFERRED_MAP_BUF_TIMEOUT);
+                LOGL("Wait completed!!");
+                waitCnt--;
+            }
+            // If all buffers are not mapped after retries, assert
+            assert(pMemory->checkIfAllBuffersMapped());
+        } else {
+            assert(pPreviewStream);
+        }
     }
 
     DeferWorkArgs args;
@@ -6174,8 +6234,8 @@ int32_t QCamera2HardwareInterface::processAutoFocusEvent(cam_auto_focus_data_t &
         return ret;
     }
     cam_focus_mode_type focusMode = mParameters.getFocusMode();
-    LOGH("[AF_DBG]  focusMode=%d, focusState=%d",
-             focusMode, focus_data.focus_state);
+    LOGH("[AF_DBG]  focusMode=%d, focusState=%d isDepth=%d",
+             focusMode, focus_data.focus_state, focus_data.isDepth);
 
     switch (focusMode) {
     case CAM_FOCUS_MODE_AUTO:
@@ -6242,6 +6302,12 @@ int32_t QCamera2HardwareInterface::processAutoFocusEvent(cam_auto_focus_data_t &
         if (((focus_data.focus_state == CAM_AF_STATE_PASSIVE_FOCUSED) ||
                 (focus_data.focus_state == CAM_AF_STATE_PASSIVE_UNFOCUSED) ||
                 (focus_data.focus_state == CAM_AF_STATE_PASSIVE_SCAN)) && mActiveAF) {
+            break;
+        }
+
+        if (!bDepthAFCallbacks && focus_data.isDepth &&
+                (focus_data.focus_state == CAM_AF_STATE_PASSIVE_SCAN)) {
+            LOGD("Skip sending scan state to app, if depth focus");
             break;
         }
 
@@ -8130,7 +8196,7 @@ int32_t QCamera2HardwareInterface::preparePreview()
             }
         }
 
-        if (mParameters.getofflineRAW()) {
+        if (mParameters.getofflineRAW() && !mParameters.getQuadraCfa()) {
             addChannel(QCAMERA_CH_TYPE_RAW);
         }
     } else {
@@ -8435,38 +8501,53 @@ int32_t QCamera2HardwareInterface::processFaceDetectionResult(cam_faces_data_t *
 
             if (faces_data->landmark_valid) {
                 // Center of left eye
-                faces[i].left_eye[0] = MAP_TO_DRIVER_COORDINATE(
-                        faces_data->landmark_data.face_landmarks[i].left_eye_center.x,
-                        display_dim.width, 2000, -1000);
-                faces[i].left_eye[1] = MAP_TO_DRIVER_COORDINATE(
-                        faces_data->landmark_data.face_landmarks[i].left_eye_center.y,
-                        display_dim.height, 2000, -1000);
+                if (faces_data->landmark_data.face_landmarks[i].is_left_eye_valid) {
+                    faces[i].left_eye[0] = MAP_TO_DRIVER_COORDINATE(
+                            faces_data->landmark_data.face_landmarks[i].left_eye_center.x,
+                            display_dim.width, 2000, -1000);
+                    faces[i].left_eye[1] = MAP_TO_DRIVER_COORDINATE(
+                            faces_data->landmark_data.face_landmarks[i].left_eye_center.y,
+                            display_dim.height, 2000, -1000);
+                } else {
+                    faces[i].left_eye[0] = FACE_INVALID_POINT;
+                    faces[i].left_eye[1] = FACE_INVALID_POINT;
+                }
 
                 // Center of right eye
-                faces[i].right_eye[0] = MAP_TO_DRIVER_COORDINATE(
-                        faces_data->landmark_data.face_landmarks[i].right_eye_center.x,
-                        display_dim.width, 2000, -1000);
-                faces[i].right_eye[1] = MAP_TO_DRIVER_COORDINATE(
-                        faces_data->landmark_data.face_landmarks[i].right_eye_center.y,
-                        display_dim.height, 2000, -1000);
+                if (faces_data->landmark_data.face_landmarks[i].is_right_eye_valid) {
+                    faces[i].right_eye[0] = MAP_TO_DRIVER_COORDINATE(
+                            faces_data->landmark_data.face_landmarks[i].right_eye_center.x,
+                            display_dim.width, 2000, -1000);
+                    faces[i].right_eye[1] = MAP_TO_DRIVER_COORDINATE(
+                            faces_data->landmark_data.face_landmarks[i].right_eye_center.y,
+                            display_dim.height, 2000, -1000);
+                } else {
+                    faces[i].right_eye[0] = FACE_INVALID_POINT;
+                    faces[i].right_eye[1] = FACE_INVALID_POINT;
+                }
 
                 // Center of mouth
-                faces[i].mouth[0] = MAP_TO_DRIVER_COORDINATE(
-                        faces_data->landmark_data.face_landmarks[i].mouth_center.x,
-                        display_dim.width, 2000, -1000);
-                faces[i].mouth[1] = MAP_TO_DRIVER_COORDINATE(
-                        faces_data->landmark_data.face_landmarks[i].mouth_center.y,
-                        display_dim.height, 2000, -1000);
+                if (faces_data->landmark_data.face_landmarks[i].is_mouth_valid) {
+                    faces[i].mouth[0] = MAP_TO_DRIVER_COORDINATE(
+                            faces_data->landmark_data.face_landmarks[i].mouth_center.x,
+                            display_dim.width, 2000, -1000);
+                    faces[i].mouth[1] = MAP_TO_DRIVER_COORDINATE(
+                            faces_data->landmark_data.face_landmarks[i].mouth_center.y,
+                            display_dim.height, 2000, -1000);
+                } else {
+                    faces[i].mouth[0] = FACE_INVALID_POINT;
+                    faces[i].mouth[1] = FACE_INVALID_POINT;
+                }
             } else {
                 // return -2000 if invalid
-                faces[i].left_eye[0] = -2000;
-                faces[i].left_eye[1] = -2000;
+                faces[i].left_eye[0] = FACE_INVALID_POINT;
+                faces[i].left_eye[1] = FACE_INVALID_POINT;
 
-                faces[i].right_eye[0] = -2000;
-                faces[i].right_eye[1] = -2000;
+                faces[i].right_eye[0] = FACE_INVALID_POINT;
+                faces[i].right_eye[1] = FACE_INVALID_POINT;
 
-                faces[i].mouth[0] = -2000;
-                faces[i].mouth[1] = -2000;
+                faces[i].mouth[0] = FACE_INVALID_POINT;
+                faces[i].mouth[1] = FACE_INVALID_POINT;
             }
 
 #ifndef VANILLA_HAL
