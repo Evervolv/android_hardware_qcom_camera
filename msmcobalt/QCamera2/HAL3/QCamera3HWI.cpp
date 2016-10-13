@@ -1225,8 +1225,15 @@ void QCamera3HardwareInterface::addToPPFeatureMask(int stream_format,
     int property_len;
 
     /* Get feature mask from property */
+#ifdef _LE_CAMERA_
+    char swtnr_feature_mask_value[PROPERTY_VALUE_MAX];
+    snprintf(swtnr_feature_mask_value, PROPERTY_VALUE_MAX, "%lld", CAM_QTI_FEATURE_SW_TNR);
+    property_len = property_get("persist.camera.hal3.feature",
+            feature_mask_value, swtnr_feature_mask_value);
+#else
     property_len = property_get("persist.camera.hal3.feature",
             feature_mask_value, "0");
+#endif
     if ((property_len > 2) && (feature_mask_value[0] == '0') &&
             (feature_mask_value[1] == 'x')) {
         args_converted = sscanf(feature_mask_value, "0x%llx", &feature_mask);
@@ -3813,11 +3820,13 @@ int QCamera3HardwareInterface::processCaptureRequest(
             if (mIsMainCamera == 1) {
                 m_pRelCamSyncBuf->mode = CAM_MODE_PRIMARY;
                 m_pRelCamSyncBuf->type = CAM_TYPE_MAIN;
+                m_pRelCamSyncBuf->sync_3a_mode = CAM_3A_SYNC_FOLLOW;
                 // related session id should be session id of linked session
                 m_pRelCamSyncBuf->related_sensor_session_id = sessionId[mLinkedCameraId];
             } else {
                 m_pRelCamSyncBuf->mode = CAM_MODE_SECONDARY;
                 m_pRelCamSyncBuf->type = CAM_TYPE_AUX;
+                m_pRelCamSyncBuf->sync_3a_mode = CAM_3A_SYNC_FOLLOW;
                 m_pRelCamSyncBuf->related_sensor_session_id = sessionId[mLinkedCameraId];
             }
             pthread_mutex_unlock(&gCamLock);
@@ -4394,11 +4403,13 @@ int QCamera3HardwareInterface::flush(bool restartChannels)
         if (mIsMainCamera == 1) {
             m_pRelCamSyncBuf->mode = CAM_MODE_PRIMARY;
             m_pRelCamSyncBuf->type = CAM_TYPE_MAIN;
+            m_pRelCamSyncBuf->sync_3a_mode = CAM_3A_SYNC_FOLLOW;
             // related session id should be session id of linked session
             m_pRelCamSyncBuf->related_sensor_session_id = sessionId[mLinkedCameraId];
         } else {
             m_pRelCamSyncBuf->mode = CAM_MODE_SECONDARY;
             m_pRelCamSyncBuf->type = CAM_TYPE_AUX;
+            m_pRelCamSyncBuf->sync_3a_mode = CAM_3A_SYNC_FOLLOW;
             m_pRelCamSyncBuf->related_sensor_session_id = sessionId[mLinkedCameraId];
         }
         pthread_mutex_unlock(&gCamLock);
@@ -5571,6 +5582,16 @@ QCamera3HardwareInterface::translateFromHalMetadata(
 
     IF_META_AVAILABLE(cam_ir_mode_type_t, ir, CAM_INTF_META_IR_MODE, metadata) {
         camMetadata.update(QCAMERA3_IR_MODE,(int32_t *) &ir, 1);
+    }
+
+    // AEC SPEED
+    IF_META_AVAILABLE(float, aec, CAM_INTF_META_AEC_CONVERGENCE_SPEED, metadata) {
+        camMetadata.update(QCAMERA3_AEC_CONVERGENCE_SPEED, aec, 1);
+    }
+
+    // AWB SPEED
+    IF_META_AVAILABLE(float, awb, CAM_INTF_META_AWB_CONVERGENCE_SPEED, metadata) {
+        camMetadata.update(QCAMERA3_AWB_CONVERGENCE_SPEED, awb, 1);
     }
 
     // TNR
@@ -8563,6 +8584,14 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     int32_t ir_mode = (int32_t)QCAMERA3_IR_MODE_OFF;
     settings.update(QCAMERA3_IR_MODE, &ir_mode, 1);
 
+    /* Manual Convergence AEC Speed is disabled by default*/
+    float default_aec_speed = 0;
+    settings.update(QCAMERA3_AEC_CONVERGENCE_SPEED, &default_aec_speed, 1);
+
+    /* Manual Convergence AWB Speed is disabled by default*/
+    float default_awb_speed = 0;
+    settings.update(QCAMERA3_AWB_CONVERGENCE_SPEED, &default_awb_speed, 1);
+
     mDefaultMetadata[type] = settings.release();
 
     return mDefaultMetadata[type];
@@ -9678,6 +9707,34 @@ int QCamera3HardwareInterface::translateToHalMetadata
         } else {
             if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata,
                     CAM_INTF_META_IR_MODE, fwk_ir)) {
+                rc = BAD_VALUE;
+            }
+        }
+    }
+
+    if (frame_settings.exists(QCAMERA3_AEC_CONVERGENCE_SPEED)) {
+        float aec_speed;
+        aec_speed = frame_settings.find(QCAMERA3_AEC_CONVERGENCE_SPEED).data.f[0];
+        LOGD("AEC Speed :%f", aec_speed);
+        if ( aec_speed < 0 ) {
+            LOGE("Invalid AEC mode %f!", aec_speed);
+        } else {
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_AEC_CONVERGENCE_SPEED,
+                    aec_speed)) {
+                rc = BAD_VALUE;
+            }
+        }
+    }
+
+    if (frame_settings.exists(QCAMERA3_AWB_CONVERGENCE_SPEED)) {
+        float awb_speed;
+        awb_speed = frame_settings.find(QCAMERA3_AWB_CONVERGENCE_SPEED).data.f[0];
+        LOGD("AWB Speed :%f", awb_speed);
+        if ( awb_speed < 0 ) {
+            LOGE("Invalid AWB mode %f!", awb_speed);
+        } else {
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_AWB_CONVERGENCE_SPEED,
+                    awb_speed)) {
                 rc = BAD_VALUE;
             }
         }

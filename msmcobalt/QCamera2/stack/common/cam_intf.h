@@ -86,6 +86,7 @@ typedef struct {
     cam_sync_related_sensors_control_t sync_control;
     cam_sync_type_t type;
     cam_sync_mode_t mode;
+    cam_3a_sync_mode_t sync_3a_mode;
     /* session Id of the other camera session
        Linking will be done with this session in the
        backend */
@@ -827,6 +828,7 @@ typedef struct {
     INCLUDE(CAM_INTF_PARM_WHITE_BALANCE,                int32_t,                     1);
     INCLUDE(CAM_INTF_META_AWB_REGIONS,                  cam_area_t,                  1);
     INCLUDE(CAM_INTF_META_AWB_STATE,                    uint32_t,                    1);
+    INCLUDE(CAM_INTF_META_AWB_CONVERGENCE_SPEED,        float,                       1);
     INCLUDE(CAM_INTF_META_BLACK_LEVEL_LOCK,             uint32_t,                    1);
     INCLUDE(CAM_INTF_META_MODE,                         uint32_t,                    1);
     INCLUDE(CAM_INTF_META_EDGE_MODE,                    cam_edge_application_t,      1);
@@ -839,6 +841,8 @@ typedef struct {
     INCLUDE(CAM_INTF_META_LENS_FILTERDENSITY,           float,                       1);
     INCLUDE(CAM_INTF_META_LENS_FOCAL_LENGTH,            float,                       1);
     INCLUDE(CAM_INTF_META_LENS_FOCUS_DISTANCE,          float,                       1);
+    INCLUDE(CAM_INTF_META_FOCUS_VALUE,                  float,                       1);
+    INCLUDE(CAM_INTF_META_SPOT_LIGHT_DETECT,            uint8_t,                     1);
     INCLUDE(CAM_INTF_META_LENS_FOCUS_RANGE,             float,                       2);
     INCLUDE(CAM_INTF_META_LENS_STATE,                   cam_af_lens_state_t,         1);
     INCLUDE(CAM_INTF_META_LENS_OPT_STAB_MODE,           uint32_t,                    1);
@@ -962,6 +966,7 @@ typedef struct {
     /* HAL3 specific */
     INCLUDE(CAM_INTF_META_STREAM_INFO,                  cam_stream_size_info_t,      1);
     INCLUDE(CAM_INTF_META_AEC_MODE,                     uint32_t,                    1);
+    INCLUDE(CAM_INTF_META_AEC_CONVERGENCE_SPEED,        float,                       1);
     INCLUDE(CAM_INTF_META_AEC_PRECAPTURE_TRIGGER,       cam_trigger_t,               1);
     INCLUDE(CAM_INTF_META_AF_TRIGGER,                   cam_trigger_t,               1);
     INCLUDE(CAM_INTF_META_CAPTURE_INTENT,               uint32_t,                    1);
