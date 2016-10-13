@@ -867,11 +867,26 @@ typedef enum {
 } cam_cds_mode_type_t;
 
 typedef enum {
+    CAM_IR_MODE_OFF,
+    CAM_IR_MODE_ON,
+    CAM_IR_MODE_AUTO,
+    CAM_IR_MODE_MAX
+} cam_ir_mode_type_t;
+
+typedef enum {
     CAM_SENSOR_HDR_OFF,
     CAM_SENSOR_HDR_IN_SENSOR = 1,
     CAM_SENSOR_HDR_ZIGZAG,
+    CAM_SENSOR_HDR_STAGGERED,
     CAM_SENSOR_HDR_MAX,
 } cam_sensor_hdr_type_t;
+
+typedef enum {
+    CAM_VIDEO_HDR_MODE_OFF,
+    CAM_VIDEO_HDR_MODE_ON,
+    CAM_VIDEO_HDR_MODE_MAX,
+} cam_video_hdr_mode_t;
+
 
 typedef struct  {
     int32_t left;
@@ -1062,6 +1077,9 @@ typedef struct {
 #define CAM_FACE_PROCESS_MASK_SMILE         (1U<<4)
 #define CAM_FACE_PROCESS_MASK_GAZE          (1U<<5)
 
+/* Keep this in sync with invalid landmark value : system/core/include/system/camera.h */
+#define FACE_INVALID_POINT -2000
+
 typedef struct {
     uint32_t fd_mode;          /* mask of face process */
     uint32_t num_fd;
@@ -1168,8 +1186,11 @@ typedef struct {
 } cam_face_contour_data_t;
 
 typedef struct {
+    uint8_t is_left_eye_valid;
     cam_coordinate_type_t left_eye_center;  /* coordinate of center of left eye */
+    uint8_t is_right_eye_valid;
     cam_coordinate_type_t right_eye_center; /* coordinate of center of right eye */
+    uint8_t is_mouth_valid;
     cam_coordinate_type_t mouth_center;     /* coordinate of center of mouth */
 } cam_face_landmarks_info_t;
 
@@ -1367,6 +1388,7 @@ typedef struct {
     cam_focus_mode_type focus_mode;        /* focus mode from backend */
     int32_t focus_pos;
     cam_af_flush_info_t flush_info;
+    uint8_t isDepth;
 } cam_auto_focus_data_t;
 
 typedef struct {
@@ -2203,6 +2225,9 @@ typedef enum {
     /* Number of streams and size of streams in
        current configuration for pic res*/
     CAM_INTF_META_STREAM_INFO_FOR_PIC_RES,
+    CAM_INTF_META_FOCUS_DEPTH_INFO,
+    /* Operation Mode for IR */
+    CAM_INTF_META_IR_MODE,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
@@ -2426,6 +2451,8 @@ typedef struct {
 #define CAM_QCOM_FEATURE_PAAF           (((cam_feature_mask_t)1UL)<<32)
 #define CAM_QCOM_FEATURE_QUADRA_CFA     (((cam_feature_mask_t)1UL)<<33)
 #define CAM_QTI_FEATURE_PPEISCORE       (((cam_feature_mask_t)1UL)<<34)
+#define CAM_QCOM_FEATURE_ZIGZAG_VIDEO_HDR (((cam_feature_mask_t)1UL)<<35)
+#define CAM_QCOM_FEATURE_STAGGERED_VIDEO_HDR (((cam_feature_mask_t)1UL)<<36)
 #define CAM_QCOM_FEATURE_PP_SUPERSET    (CAM_QCOM_FEATURE_DENOISE2D|CAM_QCOM_FEATURE_CROP|\
                                          CAM_QCOM_FEATURE_ROTATION|CAM_QCOM_FEATURE_SHARPNESS|\
                                          CAM_QCOM_FEATURE_SCALE|CAM_QCOM_FEATURE_CAC|\
