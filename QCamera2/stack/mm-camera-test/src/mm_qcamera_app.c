@@ -35,8 +35,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/msm_ion.h>
+#include <stdio.h>
+#include <sys/ioctl.h>
 #define MMAN_H <SYSTEM_HEADER_PREFIX/mman.h>
 #include MMAN_H
+#include <unistd.h>
 
 // Camera dependencies
 #include "mm_qcamera_dbg.h"
