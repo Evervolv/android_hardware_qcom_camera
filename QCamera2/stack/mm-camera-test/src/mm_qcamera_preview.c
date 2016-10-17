@@ -31,16 +31,18 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <semaphore.h>
+#include <stdio.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
 #define MMAN_H <SYSTEM_HEADER_PREFIX/mman.h>
 #include MMAN_H
+#include <unistd.h>
 
 // Camera dependencies
 #include "mm_qcamera_app.h"
 #include "mm_qcamera_dbg.h"
 #include "mm_qcamera_app.h"
-#include <assert.h>
-#include <sys/mman.h>
-#include <semaphore.h>
 
 static void mm_app_metadata_notify_cb(mm_camera_super_buf_t *bufs,
                                      void *user_data)
