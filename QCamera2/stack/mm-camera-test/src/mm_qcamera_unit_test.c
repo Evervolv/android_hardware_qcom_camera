@@ -36,6 +36,8 @@
 #define MM_QCAMERA_APP_UTEST_INNER_LOOP 1
 #define MM_QCAM_APP_TEST_NUM 128
 
+#include <unistd.h>
+
 static mm_app_tc_t mm_app_tc[MM_QCAM_APP_TEST_NUM];
 
 int mm_app_tc_open_close(mm_camera_app_t *cam_app)
