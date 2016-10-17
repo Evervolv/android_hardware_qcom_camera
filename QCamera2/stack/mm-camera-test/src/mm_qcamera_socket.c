@@ -29,6 +29,8 @@
 
 // System dependencies
 #include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 // Camera dependencies
 #include "mm_qcamera_socket.h"
