@@ -1040,7 +1040,7 @@ typedef struct {
     INCLUDE(CAM_INTF_PARM_SET_VFE_COMMAND,              tune_cmd_t,                  1);
     INCLUDE(CAM_INTF_PARM_SET_PP_COMMAND,               tune_cmd_t,                  1);
     INCLUDE(CAM_INTF_PARM_MAX_DIMENSION,                cam_dimension_t,             1);
-    INCLUDE(CAM_INTF_PARM_RAW_DIMENSION,                cam_dimension_t,             1);
+    INCLUDE(CAM_INTF_PARM_SENSOR_MODE_INFO,             cam_sensor_mode_info_t,      1);
     INCLUDE(CAM_INTF_PARM_TINTLESS,                     int32_t,                     1);
     INCLUDE(CAM_INTF_PARM_WB_MANUAL,                    cam_manual_wb_parm_t,        1);
     INCLUDE(CAM_INTF_PARM_CDS_MODE,                     int32_t,                     1);

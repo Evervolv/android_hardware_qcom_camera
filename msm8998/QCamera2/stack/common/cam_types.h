@@ -595,6 +595,12 @@ typedef struct {
 } cam_dimension_t;
 
 typedef struct {
+    cam_dimension_t active_array_size; // Size of the active array.
+    cam_dimension_t pixel_array_size;  // Size of the pixel array.
+    uint32_t op_pixel_clk;             // Sensor output rate.
+} cam_sensor_mode_info_t;
+
+typedef struct {
     cam_frame_len_offset_t plane_info;
 } cam_stream_buf_plane_info_t;
 
@@ -2020,7 +2026,7 @@ typedef enum {
     CAM_INTF_PARM_RECORDING_HINT,
     CAM_INTF_PARM_HDR,
     CAM_INTF_PARM_MAX_DIMENSION,
-    CAM_INTF_PARM_RAW_DIMENSION,
+    CAM_INTF_PARM_SENSOR_MODE_INFO,
     CAM_INTF_PARM_FRAMESKIP,
     CAM_INTF_PARM_ZSL_MODE,  /* indicating if it's running in ZSL mode */
     CAM_INTF_PARM_BURST_NUM,

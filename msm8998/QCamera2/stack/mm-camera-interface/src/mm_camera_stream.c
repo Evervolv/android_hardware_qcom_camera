@@ -3309,6 +3309,7 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
     uint8_t isAFamily = mm_camera_util_chip_is_a_family();
     int offset_x = 0, offset_y = 0;
     int stride = 0, scanline = 0;
+    int stride_in_bytes = 0;
 
     if (isAFamily) {
         stride = dim->width;
@@ -3327,13 +3328,11 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
                 (2 * offset_y)), padding->height_padding);
     }
 
+    stride_in_bytes = stride;
+
     switch (fmt) {
     case CAM_FORMAT_YUV_420_NV12:
     case CAM_FORMAT_YUV_420_NV21:
-    case CAM_FORMAT_Y_ONLY:
-    case CAM_FORMAT_Y_ONLY_10_BPP:
-    case CAM_FORMAT_Y_ONLY_12_BPP:
-    case CAM_FORMAT_Y_ONLY_14_BPP:
         /* 2 planes: Y + CbCr */
         buf_planes->plane_info.num_planes = 2;
 
@@ -3347,6 +3346,7 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
         buf_planes->plane_info.mp[0].offset_y = offset_y;
         buf_planes->plane_info.mp[0].stride = stride;
         buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].stride_in_bytes = stride_in_bytes;
         buf_planes->plane_info.mp[0].width = dim->width;
         buf_planes->plane_info.mp[0].height = dim->height;
 
@@ -3361,6 +3361,7 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
         buf_planes->plane_info.mp[1].offset_y = offset_y;
         buf_planes->plane_info.mp[1].stride = stride;
         buf_planes->plane_info.mp[1].scanline = scanline;
+        buf_planes->plane_info.mp[1].stride_in_bytes = stride_in_bytes;
         buf_planes->plane_info.mp[1].width = dim->width;
         buf_planes->plane_info.mp[1].height = dim->height / 2;
 

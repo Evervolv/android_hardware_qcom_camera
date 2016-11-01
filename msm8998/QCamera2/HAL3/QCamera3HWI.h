@@ -46,6 +46,8 @@
 #include "QCameraCommon.h"
 #include "QCamera3VendorTags.h"
 
+#include "HdrPlusClient.h"
+
 extern "C" {
 #include "mm_camera_interface.h"
 #include "mm_jpeg_interface.h"
@@ -148,7 +150,7 @@ private:
     Mutex mRegistryLock;
 };
 
-class QCamera3HardwareInterface {
+class QCamera3HardwareInterface : HdrPlusClientListener {
 public:
     /* static variable and functions accessed by camera service */
     static camera3_device_ops_t mCameraOps;
@@ -361,7 +363,7 @@ private:
     bool isHdrSnapshotRequest(camera3_capture_request *request);
     int32_t setMobicat();
 
-    int32_t getSensorOutputSize(cam_dimension_t &sensor_dim);
+    int32_t getSensorModeInfo(cam_sensor_mode_info_t &sensorModeInfo);
     int32_t setHalFpsRange(const CameraMetadata &settings,
             metadata_buffer_t *hal_metadata);
     int32_t extractSceneMode(const CameraMetadata &frame_settings, uint8_t metaMode,
@@ -419,6 +421,7 @@ private:
     QCamera3SupportChannel *mSupportChannel;
     QCamera3SupportChannel *mAnalysisChannel;
     QCamera3RawDumpChannel *mRawDumpChannel;
+    QCamera3HdrPlusRawSrcChannel *mHdrPlusRawSrcChannel;
     QCamera3RegularChannel *mDummyBatchChannel;
     QCameraPerfLockMgr mPerfLockMgr;
     QCameraCommon   mCommon;
@@ -631,6 +634,21 @@ private:
     Mutex mFlushLock;
     bool m60HzZone;
 
+    // Stream IDs used in stream configuration with HDR+ client.
+    const static uint32_t kPbRaw10InputStreamId = 0;
+    const static uint32_t kPbYuvOutputStreamId = 1;
+    const static uint32_t kPbRaw16OutputStreamId = 2;
+
+    // Fill pbcamera::StreamConfiguration based on the channel stream.
+    status_t fillPbStreamConfig(pbcamera::StreamConfiguration *config, uint32_t pbStreamId,
+            int pbStreamFormat, QCamera3Channel *channel, uint32_t streamIndex);
+
+    // HDR+ client callbacks.
+    void onCaptureResult(pbcamera::CaptureResult *result,
+            const camera_metadata_t &resultMetadata) override;
+    void onFailedCaptureResult(pbcamera::CaptureResult *failedResult) override;
+
+    std::shared_ptr<HdrPlusClient> mHdrPlusClient;
 };
 
 }; // namespace qcamera

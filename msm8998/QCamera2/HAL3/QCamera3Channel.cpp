@@ -2602,6 +2602,39 @@ int32_t QCamera3RawDumpChannel::initialize(cam_is_type_t isType)
     }
     return rc;
 }
+
+/*************************************************************************************/
+// HDR+ RAW Source Channel related functions
+QCamera3HdrPlusRawSrcChannel::QCamera3HdrPlusRawSrcChannel(uint32_t cam_handle,
+                    uint32_t channel_handle,
+                    mm_camera_ops_t *cam_ops,
+                    cam_dimension_t rawDumpSize,
+                    cam_padding_info_t *paddingInfo,
+                    void *userData,
+                    cam_feature_mask_t postprocess_mask, uint32_t numBuffers) :
+    QCamera3RawDumpChannel(cam_handle, channel_handle, cam_ops, rawDumpSize, paddingInfo, userData,
+                    postprocess_mask, numBuffers)
+{
+}
+
+QCamera3HdrPlusRawSrcChannel::~QCamera3HdrPlusRawSrcChannel()
+{
+}
+
+void QCamera3HdrPlusRawSrcChannel::streamCbRoutine(mm_camera_super_buf_t *super_frame,
+                            __unused QCamera3Stream *stream)
+{
+    if (super_frame == NULL || super_frame->num_bufs != 1) {
+        LOGE("super_frame is not valid");
+        return;
+    }
+
+    // TODO: Send RAW buffer to Easel.
+
+    bufDone(super_frame);
+    free(super_frame);
+}
+
 /*************************************************************************************/
 
 /* QCamera3YUVChannel methods */

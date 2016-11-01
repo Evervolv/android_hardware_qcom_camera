@@ -11767,6 +11767,7 @@ int32_t QCameraParameters::setFrameSkip(enum msm_vfe_frame_skip_pattern pattern)
 int32_t QCameraParameters::getSensorOutputSize(cam_dimension_t max_dim, cam_dimension_t &sensor_dim)
 {
     int32_t rc = NO_ERROR;
+    cam_sensor_mode_info_t modeInfo;
     cam_dimension_t pic_dim;
 
     //No need to update RAW dimensions if meta raw is enabled.
@@ -11815,15 +11816,16 @@ int32_t QCameraParameters::getSensorOutputSize(cam_dimension_t max_dim, cam_dime
         return BAD_TYPE;
     }
 
-    ADD_GET_PARAM_ENTRY_TO_BATCH(m_pParamBuf, CAM_INTF_PARM_RAW_DIMENSION);
+    ADD_GET_PARAM_ENTRY_TO_BATCH(m_pParamBuf, CAM_INTF_PARM_SENSOR_MODE_INFO);
 
     rc = commitGetBatch();
     if (rc != NO_ERROR) {
-        LOGE("Failed to get commit CAM_INTF_PARM_RAW_DIMENSION");
+        LOGE("Failed to get commit CAM_INTF_PARM_SENSOR_MODE_INFO");
         return rc;
     }
 
-    READ_PARAM_ENTRY(m_pParamBuf, CAM_INTF_PARM_RAW_DIMENSION, sensor_dim);
+    READ_PARAM_ENTRY(m_pParamBuf, CAM_INTF_PARM_SENSOR_MODE_INFO, modeInfo);
+    sensor_dim = modeInfo.active_array_size;
 
     LOGH("RAW Dimension = %d X %d",sensor_dim.width,sensor_dim.height);
     if (sensor_dim.width == 0 || sensor_dim.height == 0) {
@@ -12755,8 +12757,8 @@ void *QCameraParameters::getPointerofParam(cam_intf_parm_type_t meta_id,
             return POINTER_OF_META(CAM_INTF_PARM_SET_PP_COMMAND, metadata);
         case CAM_INTF_PARM_MAX_DIMENSION:
             return POINTER_OF_META(CAM_INTF_PARM_MAX_DIMENSION, metadata);
-        case CAM_INTF_PARM_RAW_DIMENSION:
-            return POINTER_OF_META(CAM_INTF_PARM_RAW_DIMENSION, metadata);
+        case CAM_INTF_PARM_SENSOR_MODE_INFO:
+            return POINTER_OF_META(CAM_INTF_PARM_SENSOR_MODE_INFO, metadata);
         case CAM_INTF_PARM_TINTLESS:
             return POINTER_OF_META(CAM_INTF_PARM_TINTLESS, metadata);
         case CAM_INTF_PARM_WB_MANUAL:
@@ -13179,8 +13181,8 @@ uint32_t QCameraParameters::getSizeofParam(cam_intf_parm_type_t param_id)
           return SIZE_OF_PARAM(CAM_INTF_PARM_SET_PP_COMMAND, metadata);
         case CAM_INTF_PARM_MAX_DIMENSION:
           return SIZE_OF_PARAM(CAM_INTF_PARM_MAX_DIMENSION, metadata);
-        case CAM_INTF_PARM_RAW_DIMENSION:
-          return SIZE_OF_PARAM(CAM_INTF_PARM_RAW_DIMENSION, metadata);
+        case CAM_INTF_PARM_SENSOR_MODE_INFO:
+          return SIZE_OF_PARAM(CAM_INTF_PARM_SENSOR_MODE_INFO, metadata);
         case CAM_INTF_PARM_TINTLESS:
           return SIZE_OF_PARAM(CAM_INTF_PARM_TINTLESS, metadata);
         case CAM_INTF_PARM_WB_MANUAL:
