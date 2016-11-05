@@ -37,6 +37,7 @@
 #include TIME_H
 #define IOCTL_H <SYSTEM_HEADER_PREFIX/ioctl.h>
 #include IOCTL_H
+#include <cutils/properties.h>
 
 // Camera dependencies
 #include "cam_semaphore.h"
@@ -86,8 +87,9 @@ int32_t mm_stream_calc_offset_preview(cam_stream_info_t *stream_info,
                                       cam_dimension_t *dim,
                                       cam_padding_info_t *padding,
                                       cam_stream_buf_plane_info_t *buf_planes);
-int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
+int32_t mm_stream_calc_offset_post_view(cam_stream_info_t *stream_info,
                                       cam_dimension_t *dim,
+                                      cam_padding_info_t *padding,
                                       cam_stream_buf_plane_info_t *buf_planes);
 
 int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
@@ -140,6 +142,9 @@ int32_t mm_stream_reg_frame_sync(mm_stream_t *my_obj,
         mm_evt_paylod_reg_frame_sync *sync);
 int32_t mm_stream_trigger_frame_sync(mm_stream_t *my_obj, uint8_t start_sync);
 int32_t mm_stream_switch_stream_callback(mm_stream_t *my_obj);
+int32_t mm_stream_handle_cache_ops(mm_stream_t* my_obj,
+        mm_camera_buf_def_t* buf, bool deque);
+
 
 /*===========================================================================
  * FUNCTION   : mm_stream_notify_channel
@@ -1692,6 +1697,9 @@ int32_t mm_stream_read_msm_frame(mm_stream_t * my_obj,
         buf_info->buf->ts.tv_sec  = vb.timestamp.tv_sec;
         buf_info->buf->ts.tv_nsec = vb.timestamp.tv_usec * 1000;
         buf_info->buf->flags = vb.flags;
+        // Buffers are cleaned/invalidated when received by HAL
+        // Cache ops not required on DQBUF
+        buf_info->buf->cache_flags = 0;
 
         LOGH("VIDIOC_DQBUF buf_index %d, frame_idx %d, stream type %d, rc %d,"
                 "queued: %d, buf_type = %d flags = %d",
@@ -1708,15 +1716,9 @@ int32_t mm_stream_read_msm_frame(mm_stream_t * my_obj,
             mm_stream_read_user_buf(my_obj, buf_info);
         }
 
-        if ( NULL != my_obj->mem_vtbl.clean_invalidate_buf ) {
-            rc = my_obj->mem_vtbl.clean_invalidate_buf(idx,
-                my_obj->mem_vtbl.user_data);
-            if (0 > rc) {
-                LOGE("Clean invalidate cache failed on buffer index: %d",
-                     idx);
-            }
-        } else {
-            LOGE("Clean invalidate cache op not supported");
+        rc = mm_stream_handle_cache_ops(my_obj, buf_info->buf, TRUE);
+        if (rc != 0) {
+            LOGE("Error cleaning/invalidating the buffer");
         }
     }
 
@@ -1909,18 +1911,10 @@ int32_t mm_stream_qbuf(mm_stream_t *my_obj, mm_camera_buf_def_t *buf)
     buffer.m.planes = &planes[0];
     buffer.length = (__u32)length;
 
-    if ( NULL != my_obj->mem_vtbl.invalidate_buf ) {
-        rc = my_obj->mem_vtbl.invalidate_buf(buffer.index,
-                                             my_obj->mem_vtbl.user_data);
-        if ( 0 > rc ) {
-            LOGE("Cache invalidate failed on buffer index: %d",
-                       buffer.index);
-            return rc;
-        }
-    } else {
-        LOGE("Cache invalidate op not added");
+    rc = mm_stream_handle_cache_ops(my_obj, buf, FALSE);
+    if (rc != 0) {
+        LOGE("Error cleaning/invalidating the buffer");
     }
-
     pthread_mutex_lock(&my_obj->buf_lock);
     my_obj->queued_buffer_count++;
     if (1 == my_obj->queued_buffer_count) {
@@ -2938,22 +2932,27 @@ int32_t mm_stream_calc_offset_preview(cam_stream_info_t *stream_info,
  *              padding information
  *
  * PARAMETERS :
- *   @fmt     : image format
+ *   @stream_info  : Stream information
  *   @dim     : image dimension
+ *   @padding : Padding info
  *   @buf_planes : [out] buffer plane information
  *
  * RETURN     : int32_t type of status
  *              0  -- success
  *              -1 -- failure
  *==========================================================================*/
-int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
+int32_t mm_stream_calc_offset_post_view(cam_stream_info_t *stream_info,
                                       cam_dimension_t *dim,
+                                      cam_padding_info_t *padding,
                                       cam_stream_buf_plane_info_t *buf_planes)
 {
     int32_t rc = 0;
     int stride = 0, scanline = 0;
 
-    switch (fmt) {
+    uint32_t width_padding = 0;
+    uint32_t height_padding = 0;
+
+    switch (stream_info->fmt) {
     case CAM_FORMAT_YUV_420_NV12:
     case CAM_FORMAT_YUV_420_NV21:
     case CAM_FORMAT_Y_ONLY:
@@ -2963,8 +2962,16 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
         /* 2 planes: Y + CbCr */
         buf_planes->plane_info.num_planes = 2;
 
-        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_64);
-        scanline = PAD_TO_SIZE(dim->height, CAM_PAD_TO_64);
+        if (stream_info->stream_type != CAM_STREAM_TYPE_OFFLINE_PROC) {
+            width_padding =  padding->width_padding;
+            height_padding = CAM_PAD_TO_2;
+        } else {
+            width_padding =  padding->width_padding;
+            height_padding = padding->height_padding;
+        }
+
+        stride = PAD_TO_SIZE(dim->width, width_padding);
+        scanline = PAD_TO_SIZE(dim->height, height_padding);
         buf_planes->plane_info.mp[0].offset = 0;
         buf_planes->plane_info.mp[0].len = (uint32_t)(stride * scanline);
         buf_planes->plane_info.mp[0].offset_x = 0;
@@ -2974,8 +2981,8 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
         buf_planes->plane_info.mp[0].width = dim->width;
         buf_planes->plane_info.mp[0].height = dim->height;
 
-        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_64);
-        scanline = PAD_TO_SIZE(dim->height / 2, CAM_PAD_TO_64);
+        stride = PAD_TO_SIZE(dim->width, width_padding);
+        scanline = PAD_TO_SIZE(dim->height / 2, height_padding);
         buf_planes->plane_info.mp[1].offset = 0;
         buf_planes->plane_info.mp[1].len =
             (uint32_t)(stride * scanline);
@@ -2995,8 +3002,16 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
         /* 2 planes: Y + CbCr */
         buf_planes->plane_info.num_planes = 2;
 
-        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_32);
-        scanline = PAD_TO_SIZE(dim->height, CAM_PAD_TO_32);
+        if (stream_info->stream_type != CAM_STREAM_TYPE_OFFLINE_PROC) {
+            width_padding =  CAM_PAD_TO_32;
+            height_padding = CAM_PAD_TO_32;
+        } else {
+            width_padding =  padding->width_padding;
+            height_padding = padding->height_padding;
+        }
+
+        stride = PAD_TO_SIZE(dim->width, width_padding);
+        scanline = PAD_TO_SIZE(dim->height, height_padding);
         buf_planes->plane_info.mp[0].offset = 0;
         buf_planes->plane_info.mp[0].len =
                 PAD_TO_SIZE((uint32_t)(stride * scanline), CAM_PAD_TO_4K);
@@ -3007,8 +3022,8 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
         buf_planes->plane_info.mp[0].width = dim->width;
         buf_planes->plane_info.mp[0].height = dim->height;
 
-        stride = PAD_TO_SIZE(dim->width / 2, CAM_PAD_TO_32) * 2;
-        scanline = PAD_TO_SIZE(dim->height / 2, CAM_PAD_TO_32);
+        stride = PAD_TO_SIZE(dim->width / 2, width_padding) * 2;
+        scanline = PAD_TO_SIZE(dim->height / 2, height_padding);
         buf_planes->plane_info.mp[1].offset = 0;
         buf_planes->plane_info.mp[1].len =
                 PAD_TO_SIZE((uint32_t)(stride * scanline), CAM_PAD_TO_4K);
@@ -3028,8 +3043,16 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
         /* 3 planes: Y + Cr + Cb */
         buf_planes->plane_info.num_planes = 3;
 
-        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_16);
-        scanline = PAD_TO_SIZE(dim->height, CAM_PAD_TO_2);
+        if (stream_info->stream_type != CAM_STREAM_TYPE_OFFLINE_PROC) {
+            width_padding =  CAM_PAD_TO_16;
+            height_padding = CAM_PAD_TO_2;
+        } else {
+            width_padding =  padding->width_padding;
+            height_padding = padding->height_padding;
+        }
+
+        stride = PAD_TO_SIZE(dim->width, width_padding);
+        scanline = PAD_TO_SIZE(dim->height, height_padding);
         buf_planes->plane_info.mp[0].offset = 0;
         buf_planes->plane_info.mp[0].len = (uint32_t)(stride * scanline);
         buf_planes->plane_info.mp[0].offset_x = 0;
@@ -3039,8 +3062,8 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
         buf_planes->plane_info.mp[0].width = dim->width;
         buf_planes->plane_info.mp[0].height = dim->height;
 
-        stride = PAD_TO_SIZE(stride / 2, CAM_PAD_TO_16);
-        scanline = scanline / 2;
+        stride = PAD_TO_SIZE(stride / 2, width_padding);
+        scanline = PAD_TO_SIZE(stride / 2, height_padding);
         buf_planes->plane_info.mp[1].offset = 0;
         buf_planes->plane_info.mp[1].len =
             (uint32_t)(stride * scanline);
@@ -3072,8 +3095,13 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
         /* 2 planes: Y + CbCr */
         buf_planes->plane_info.num_planes = 2;
 
-        stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_16);
-        scanline = dim->height;
+        if (stream_info->stream_type != CAM_STREAM_TYPE_OFFLINE_PROC) {
+            stride = PAD_TO_SIZE(dim->width, CAM_PAD_TO_16);
+            scanline = dim->height;
+        } else {
+            stride = PAD_TO_SIZE(dim->width, padding->width_padding);
+            scanline = PAD_TO_SIZE(dim->height, padding->height_padding);
+        }
         buf_planes->plane_info.mp[0].offset = 0;
         buf_planes->plane_info.mp[0].len = (uint32_t)(stride * scanline);
         buf_planes->plane_info.mp[0].offset_x = 0;
@@ -3100,11 +3128,16 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
     case CAM_FORMAT_YUV_420_NV12_VENUS:
 #ifdef VENUS_PRESENT
         // using Venus
-        stride = VENUS_Y_STRIDE(COLOR_FMT_NV12, dim->width);
-        scanline = VENUS_Y_SCANLINES(COLOR_FMT_NV12, dim->height);
+        if (stream_info->stream_type != CAM_STREAM_TYPE_OFFLINE_PROC) {
+            stride = VENUS_Y_STRIDE(COLOR_FMT_NV12, dim->width);
+            scanline = VENUS_Y_SCANLINES(COLOR_FMT_NV12, dim->height);
+        } else {
+            stride = PAD_TO_SIZE(dim->width, padding->width_padding);
+            scanline = PAD_TO_SIZE(dim->height, padding->height_padding);
+        }
 
         buf_planes->plane_info.frame_len =
-            VENUS_BUFFER_SIZE(COLOR_FMT_NV12, dim->width, dim->height);
+            VENUS_BUFFER_SIZE(COLOR_FMT_NV12, stride, scanline);
         buf_planes->plane_info.num_planes = 2;
         buf_planes->plane_info.mp[0].len = (uint32_t)(stride * scanline);
         buf_planes->plane_info.mp[0].offset = 0;
@@ -3114,8 +3147,13 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
         buf_planes->plane_info.mp[0].scanline = scanline;
         buf_planes->plane_info.mp[0].width = dim->width;
         buf_planes->plane_info.mp[0].height = dim->height;
-        stride = VENUS_UV_STRIDE(COLOR_FMT_NV12, dim->width);
-        scanline = VENUS_UV_SCANLINES(COLOR_FMT_NV12, dim->height);
+        if (stream_info->stream_type != CAM_STREAM_TYPE_OFFLINE_PROC) {
+            stride = VENUS_UV_STRIDE(COLOR_FMT_NV12, dim->width);
+            scanline = VENUS_UV_SCANLINES(COLOR_FMT_NV12, dim->height);
+        } else {
+            stride = PAD_TO_SIZE(dim->width, padding->width_padding);
+            scanline = PAD_TO_SIZE(dim->height, padding->height_padding);
+        }
         buf_planes->plane_info.mp[1].len =
             buf_planes->plane_info.frame_len - buf_planes->plane_info.mp[0].len;
         buf_planes->plane_info.mp[1].offset = 0;
@@ -3133,8 +3171,13 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
     case CAM_FORMAT_YUV_420_NV21_VENUS:
 #ifdef VENUS_PRESENT
         // using Venus
-        stride = VENUS_Y_STRIDE(COLOR_FMT_NV21, dim->width);
-        scanline = VENUS_Y_SCANLINES(COLOR_FMT_NV21, dim->height);
+        if (stream_info->stream_type != CAM_STREAM_TYPE_OFFLINE_PROC) {
+            stride = VENUS_Y_STRIDE(COLOR_FMT_NV21, dim->width);
+            scanline = VENUS_Y_SCANLINES(COLOR_FMT_NV21, dim->height);
+        } else {
+            stride = PAD_TO_SIZE(dim->width, padding->width_padding);
+            scanline = PAD_TO_SIZE(dim->height, padding->height_padding);
+        }
         buf_planes->plane_info.frame_len =
                 VENUS_BUFFER_SIZE(COLOR_FMT_NV21, dim->width, dim->height);
         buf_planes->plane_info.num_planes = 2;
@@ -3146,8 +3189,13 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
         buf_planes->plane_info.mp[0].scanline = scanline;
         buf_planes->plane_info.mp[0].width = dim->width;
         buf_planes->plane_info.mp[0].height = dim->height;
-        stride = VENUS_UV_STRIDE(COLOR_FMT_NV21, dim->width);
-        scanline = VENUS_UV_SCANLINES(COLOR_FMT_NV21, dim->height);
+        if (stream_info->stream_type != CAM_STREAM_TYPE_OFFLINE_PROC) {
+            stride = VENUS_UV_STRIDE(COLOR_FMT_NV21, dim->width);
+            scanline = VENUS_UV_SCANLINES(COLOR_FMT_NV21, dim->height);
+        } else {
+            stride = PAD_TO_SIZE(dim->width, padding->width_padding);
+            scanline = PAD_TO_SIZE(dim->height, padding->height_padding);
+        }
         buf_planes->plane_info.mp[1].len =
                 buf_planes->plane_info.frame_len - buf_planes->plane_info.mp[0].len;
         buf_planes->plane_info.mp[1].offset = 0;
@@ -3167,8 +3215,13 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
         {
             int meta_stride = 0,meta_scanline = 0;
             // using UBWC
-            stride = VENUS_Y_STRIDE(COLOR_FMT_NV12_UBWC, dim->width);
-            scanline = VENUS_Y_SCANLINES(COLOR_FMT_NV12_UBWC, dim->height);
+            if (stream_info->stream_type != CAM_STREAM_TYPE_OFFLINE_PROC) {
+                stride = VENUS_Y_STRIDE(COLOR_FMT_NV12_UBWC, dim->width);
+                scanline = VENUS_Y_SCANLINES(COLOR_FMT_NV12_UBWC, dim->height);
+            } else {
+                stride = PAD_TO_SIZE(dim->width, padding->width_padding);
+                scanline = PAD_TO_SIZE(dim->height, padding->height_padding);
+            }
             meta_stride = VENUS_Y_META_STRIDE(COLOR_FMT_NV12_UBWC, dim->width);
             meta_scanline = VENUS_Y_META_SCANLINES(COLOR_FMT_NV12_UBWC, dim->height);
 
@@ -3215,7 +3268,7 @@ int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
         break;
     default:
         LOGE("Invalid cam_format for preview %d",
-                    fmt);
+                    stream_info->fmt);
         rc = -1;
         break;
     }
@@ -4468,8 +4521,9 @@ int32_t mm_stream_calc_offset_postproc(cam_stream_info_t *stream_info,
                                            plns);
         break;
     case CAM_STREAM_TYPE_POSTVIEW:
-        rc = mm_stream_calc_offset_post_view(stream_info->fmt,
+        rc = mm_stream_calc_offset_post_view(stream_info,
                                            &stream_info->dim,
+                                           padding,
                                            plns);
         break;
     case CAM_STREAM_TYPE_SNAPSHOT:
@@ -4569,6 +4623,7 @@ uint32_t mm_stream_calc_lcm(int32_t num1, int32_t num2)
 int32_t mm_stream_calc_offset(mm_stream_t *my_obj)
 {
     int32_t rc = 0;
+    uint32_t i;
 
     cam_dimension_t dim = my_obj->stream_info->dim;
     if (my_obj->stream_info->pp_config.feature_mask & CAM_QCOM_FEATURE_ROTATION &&
@@ -4589,8 +4644,9 @@ int32_t mm_stream_calc_offset(mm_stream_t *my_obj)
                                            &my_obj->stream_info->buf_planes);
         break;
     case CAM_STREAM_TYPE_POSTVIEW:
-      rc = mm_stream_calc_offset_post_view(my_obj->stream_info->fmt,
+      rc = mm_stream_calc_offset_post_view(my_obj->stream_info,
                                          &dim,
+                                         &my_obj->padding_info,
                                          &my_obj->stream_info->buf_planes);
       break;
     case CAM_STREAM_TYPE_SNAPSHOT:
@@ -4634,6 +4690,17 @@ int32_t mm_stream_calc_offset(mm_stream_t *my_obj)
     }
 
     my_obj->frame_offset = my_obj->stream_info->buf_planes.plane_info;
+    LOGH("Stream type %d num_planes %d", my_obj->stream_info->stream_type,
+            my_obj->frame_offset.num_planes);
+    for (i = 0; i < my_obj->frame_offset.num_planes; i++) {
+        LOGH("Plane %d, stride %d, scanline %d, width %d, height %d, \
+                length %d", i, my_obj->frame_offset.mp[i].stride,
+                my_obj->frame_offset.mp[i].scanline,
+                my_obj->frame_offset.mp[i].width,
+                my_obj->frame_offset.mp[i].height,
+                my_obj->frame_offset.mp[i].len);
+    }
+
     return rc;
 }
 
@@ -4853,3 +4920,84 @@ int32_t mm_stream_reg_buf_cb(mm_stream_t *my_obj,
 
     return rc;
 }
+
+/*===========================================================================
+ * FUNCTION   : mm_stream_handle_cache_ops
+ *
+ * DESCRIPTION: handles cache ops of a stream buffer
+ *
+ * PARAMETERS :
+ *   @my_obj       : stream object
+ *   @buf     : ptr to a stream buffer
+ *   @deque  : specifies if enqueue or dequeue
+ *
+ * RETURN     : zero for success
+ *                  non-zero error value
+ *==========================================================================*/
+int32_t mm_stream_handle_cache_ops(mm_stream_t* my_obj,
+        mm_camera_buf_def_t* buf, bool deque)
+{
+    int32_t rc = 0;
+    if(!my_obj || !buf) {
+        LOGE("Error!! my_obj: %p, buf_info: %p", my_obj, buf);
+        rc = -1;
+        return rc;
+    }
+    if ((my_obj->mem_vtbl.clean_invalidate_buf  == NULL) ||
+            (my_obj->mem_vtbl.invalidate_buf  == NULL) ||
+            (my_obj->mem_vtbl.clean_buf  == NULL)) {
+        LOGI("Clean/Invalidate cache ops not supported %p %p %p",
+            my_obj->mem_vtbl.clean_invalidate_buf,
+            my_obj->mem_vtbl.invalidate_buf,
+            my_obj->mem_vtbl.clean_buf);
+        // Not a fatal error
+        rc = 0;
+        return rc;
+    }
+
+    // Modify clean and invalidate flags depending on cache ops for stream
+    switch (my_obj->stream_info->cache_ops) {
+        case CAM_STREAM_CACHE_OPS_CLEAR_FLAGS:
+            buf->cache_flags = 0;
+            break;
+        case CAM_STREAM_CACHE_OPS_DISABLED:
+            if (deque) {
+                buf->cache_flags = CPU_HAS_READ_WRITTEN;
+            }
+            else {
+                buf->cache_flags = CPU_HAS_READ;
+            }
+        case CAM_STREAM_CACHE_OPS_HONOUR_FLAGS:
+        default:
+            // Do not change flags
+            break;
+    }
+
+    if ((buf->cache_flags & CPU_HAS_READ_WRITTEN) ==
+        CPU_HAS_READ_WRITTEN) {
+        rc = my_obj->mem_vtbl.clean_invalidate_buf(
+                buf->buf_idx, my_obj->mem_vtbl.user_data);
+    } else if ((buf->cache_flags & CPU_HAS_READ) ==
+        CPU_HAS_READ) {
+        rc = my_obj->mem_vtbl.invalidate_buf(
+                buf->buf_idx, my_obj->mem_vtbl.user_data);
+    } else if ((buf->cache_flags & CPU_HAS_WRITTEN) ==
+        CPU_HAS_WRITTEN) {
+        rc = my_obj->mem_vtbl.clean_buf(
+                buf->buf_idx, my_obj->mem_vtbl.user_data);
+    }
+
+    LOGH("[CACHE_OPS] Stream type: %d buf index: %d cache ops flags: 0x%x",
+            buf->stream_type, buf->buf_idx, buf->cache_flags);
+
+    if (rc != 0) {
+        LOGE("Clean/Invalidate cache failed on buffer index: %d",
+                buf->buf_idx);
+    } else {
+       // Reset buffer cache flags after cache ops
+        buf->cache_flags = 0;
+    }
+
+    return rc;
+}
+
