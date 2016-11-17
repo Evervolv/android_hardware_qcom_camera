@@ -6915,60 +6915,46 @@ QCamera3HardwareInterface::translateFromHalMetadata(
 
     IF_META_AVAILABLE(uint32_t, histogramMode, CAM_INTF_META_STATS_HISTOGRAM_MODE, metadata) {
         uint8_t fwk_histogramMode = (uint8_t) *histogramMode;
+        int32_t histogramBins = 0;
         camMetadata.update(QCAMERA3_HISTOGRAM_MODE, &fwk_histogramMode, 1);
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_ENABLE, &fwk_histogramMode, 1);
 
-        if (fwk_histogramMode == QCAMERA3_HISTOGRAM_MODE_ON) {
+        IF_META_AVAILABLE(int32_t, histBins, CAM_INTF_META_STATS_HISTOGRAM_BINS, metadata) {
+            histogramBins = *histBins;
+            camMetadata.update(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS, &histogramBins, 1);
+        }
+
+        if (fwk_histogramMode == QCAMERA3_HISTOGRAM_MODE_ON && histogramBins > 0) {
             IF_META_AVAILABLE(cam_hist_stats_t, stats_data, CAM_INTF_META_HISTOGRAM, metadata) {
                 // process histogram statistics info
-                uint32_t hist_buf[4][CAM_HISTOGRAM_STATS_SIZE];
-                uint32_t hist_size = sizeof(cam_histogram_data_t::hist_buf);
-                cam_histogram_data_t rHistData, grHistData, gbHistData, bHistData;
-                memset(&rHistData, 0, sizeof(rHistData));
-                memset(&grHistData, 0, sizeof(grHistData));
-                memset(&gbHistData, 0, sizeof(gbHistData));
-                memset(&bHistData, 0, sizeof(bHistData));
+                int32_t* histogramData = NULL;
 
                 switch (stats_data->type) {
                 case CAM_HISTOGRAM_TYPE_BAYER:
                     switch (stats_data->bayer_stats.data_type) {
                         case CAM_STATS_CHANNEL_GR:
-                            rHistData = grHistData = gbHistData = bHistData =
-                                    stats_data->bayer_stats.gr_stats;
-                            break;
+                          histogramData = (int32_t *)stats_data->bayer_stats.gr_stats.hist_buf;
+                          break;
                         case CAM_STATS_CHANNEL_GB:
-                            rHistData = grHistData = gbHistData = bHistData =
-                                    stats_data->bayer_stats.gb_stats;
-                            break;
+                          histogramData = (int32_t *)stats_data->bayer_stats.gb_stats.hist_buf;
+                          break;
                         case CAM_STATS_CHANNEL_B:
-                            rHistData = grHistData = gbHistData = bHistData =
-                                    stats_data->bayer_stats.b_stats;
-                            break;
-                        case CAM_STATS_CHANNEL_ALL:
-                            rHistData = stats_data->bayer_stats.r_stats;
-                            gbHistData = stats_data->bayer_stats.gb_stats;
-                            grHistData = stats_data->bayer_stats.gr_stats;
-                            bHistData = stats_data->bayer_stats.b_stats;
-                            break;
+                          histogramData = (int32_t *)stats_data->bayer_stats.b_stats.hist_buf;
+                          break;
                         case CAM_STATS_CHANNEL_Y:
+                        case CAM_STATS_CHANNEL_ALL:
                         case CAM_STATS_CHANNEL_R:
                         default:
-                            rHistData = grHistData = gbHistData = bHistData =
-                                    stats_data->bayer_stats.r_stats;
-                            break;
+                          histogramData = (int32_t *)stats_data->bayer_stats.r_stats.hist_buf;
+                          break;
                     }
                     break;
                 case CAM_HISTOGRAM_TYPE_YUV:
-                    rHistData = grHistData = gbHistData = bHistData =
-                            stats_data->yuv_stats;
+                    histogramData = (int32_t *)stats_data->yuv_stats.hist_buf;
                     break;
                 }
 
-                memcpy(hist_buf, rHistData.hist_buf, hist_size);
-                memcpy(hist_buf[1], gbHistData.hist_buf, hist_size);
-                memcpy(hist_buf[2], grHistData.hist_buf, hist_size);
-                memcpy(hist_buf[3], bHistData.hist_buf, hist_size);
-
-                camMetadata.update(QCAMERA3_HISTOGRAM_STATS, (int32_t*)hist_buf, hist_size*4);
+                camMetadata.update(NEXUS_EXPERIMENTAL_2017_HISTOGRAM, histogramData, histogramBins);
             }
         }
     }
@@ -8800,6 +8786,19 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     staticInfo.update(QCAMERA3_HISTOGRAM_MAX_COUNT,
             &gCamCapability[cameraId]->max_histogram_count, 1);
 
+    //Set supported bins to be {max_bins, max_bins/2, max_bins/4, ...}
+    //so that app can request fewer number of bins than the maximum supported.
+    std::vector<int32_t> histBins;
+    int32_t maxHistBins = gCamCapability[cameraId]->max_histogram_count;
+    histBins.push_back(maxHistBins);
+    while ((maxHistBins >> 1) >= MIN_CAM_HISTOGRAM_STATS_SIZE &&
+           (maxHistBins & 0x1) == 0) {
+        histBins.push_back(maxHistBins >> 1);
+        maxHistBins >>= 1;
+    }
+    staticInfo.update(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_SUPPORTED_BINS,
+            histBins.data(), histBins.size());
+
     int32_t sharpness_map_size[] = {
             gCamCapability[cameraId]->sharpness_map_size.width,
             gCamCapability[cameraId]->sharpness_map_size.height};
@@ -9583,6 +9582,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        /* DevCamDebug metadata request_keys_basic */
        DEVCAMDEBUG_META_ENABLE,
        /* DevCamDebug metadata end */
+       NEXUS_EXPERIMENTAL_2017_HISTOGRAM_ENABLE,
+       NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS
        };
 
     size_t request_keys_cnt =
@@ -9683,6 +9684,9 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        DEVCAMDEBUG_AWB_CCT,
        DEVCAMDEBUG_AWB_DECISION,
        /* DevCamDebug metadata end */
+       NEXUS_EXPERIMENTAL_2017_HISTOGRAM_ENABLE,
+       NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS,
+       NEXUS_EXPERIMENTAL_2017_HISTOGRAM,
        };
 
     size_t result_keys_cnt =
@@ -10418,6 +10422,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     uint8_t tonemap_mode;
     bool highQualityModeEntryAvailable = FALSE;
     bool fastModeEntryAvailable = FALSE;
+    uint8_t histogramEnable = false;
     vsMode = ANDROID_CONTROL_VIDEO_STABILIZATION_MODE_OFF;
     optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
     uint8_t shadingmap_mode = ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF;
@@ -10520,6 +10525,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         focusMode = ANDROID_CONTROL_AF_MODE_OFF;
     }
     settings.update(ANDROID_CONTROL_AF_MODE, &focusMode, 1);
+    settings.update(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_ENABLE, &histogramEnable, 1);
 
     if (gCamCapability[mCameraId]->optical_stab_modes_count == 1 &&
             gCamCapability[mCameraId]->optical_stab_modes[0] == CAM_OPT_STAB_ON)
@@ -12300,6 +12306,25 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
 
         if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata,
                 CAM_INTF_META_HYBRID_AE, *hybrid_ae)) {
+            rc = BAD_VALUE;
+        }
+    }
+
+    // Histogram
+    if (frame_settings.exists(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_ENABLE)) {
+        uint8_t histogramMode =
+                frame_settings.find(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_ENABLE).data.u8[0];
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_STATS_HISTOGRAM_MODE,
+                histogramMode)) {
+            rc = BAD_VALUE;
+        }
+    }
+
+    if (frame_settings.exists(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS)) {
+        int32_t histogramBins =
+                 frame_settings.find(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS).data.i32[0];
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_STATS_HISTOGRAM_BINS,
+                histogramBins)) {
             rc = BAD_VALUE;
         }
     }
