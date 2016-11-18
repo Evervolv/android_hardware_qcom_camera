@@ -601,7 +601,8 @@ typedef struct cam_capability{
     /*camera index*/
     uint32_t camera_index;
 
-    /*Slave capability*/
+    /*main and aux cam capability*/
+    struct cam_capability *main_cam_cap;
     struct cam_capability *aux_cam_cap;
     cam_sync_type_t cam_sensor_mode;
 } cam_capability_t;
@@ -627,6 +628,8 @@ typedef struct {
     uint32_t meta_stream_handle;  /* meta data stream ID. only valid if meta_present != 0 */
     uint32_t meta_buf_index;      /* buf index to meta data buffer. only valid if meta_present != 0 */
 
+    uint8_t is_offline_meta_bypass;
+
     /* opaque metadata required for reprocessing */
     int32_t private_data[MAX_METADATA_PRIVATE_PAYLOAD_SIZE_IN_BYTES];
     cam_rect_t crop_rect;
@@ -646,7 +649,7 @@ typedef struct {
 } cam_stream_img_prop_t;
 
 typedef struct {
-    uint8_t enableStream; /*0 – stop and 1-start */
+    uint8_t enableStream; /*0 - stop and 1-start */
 } cam_request_frames;
 
 typedef struct {
