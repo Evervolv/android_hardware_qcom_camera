@@ -1195,7 +1195,7 @@ int32_t QCameraPostProcessor::processJpegEvt(qcamera_jpeg_evt_payload_t *evt)
         qcamera_release_data_t release_data;
         memset(&release_data, 0, sizeof(qcamera_release_data_t));
         release_data.data = jpeg_mem;
-        LOGI("[KPI Perf]: PROFILE_JPEG_CB ");
+        LOGI("[KPI Perf]: PROFILE_JPEG_CB");
         rc = sendDataNotify(CAMERA_MSG_COMPRESSED_IMAGE,
                 jpeg_mem,
                 0,
@@ -1251,6 +1251,8 @@ end:
     // wait up data proc thread to do next job,
     // if previous request is blocked due to ongoing jpeg job
     m_dataProcTh.sendCmd(CAMERA_CMD_TYPE_DO_NEXT_JOB, FALSE, FALSE);
+
+    m_parent->m_perfLockMgr.releasePerfLock(PERF_LOCK_TAKE_SNAPSHOT);
 
     return rc;
 }
@@ -1428,6 +1430,50 @@ int32_t QCameraPostProcessor::processPPData(mm_camera_super_buf_t *frame)
         if (meta_frame != NULL) {
             // fill in meta data frame ptr
             jpeg_job->metadata = (metadata_buffer_t *)meta_frame->buffer;
+        }
+
+        if (m_parent->mParameters.getQuadraCfa()) {
+            // find offline metadata frame for quadra CFA
+            mm_camera_buf_def_t *pOfflineMetaFrame = NULL;
+            QCameraStream * pOfflineMetadataStream = NULL;
+            QCameraChannel *pChannel = m_parent->getChannelByHandle(frame->ch_id);
+            if (pChannel == NULL) {
+                for (int8_t i = 0; i < mPPChannelCount; i++) {
+                    if ((mPPChannels[i] != NULL) &&
+                            (mPPChannels[i]->getMyHandle() == frame->ch_id)) {
+                        pChannel = mPPChannels[i];
+                        break;
+                    }
+                }
+            }
+            if (pChannel == NULL) {
+                LOGE("No corresponding channel (ch_id = %d) exist, return here",
+                        frame->ch_id);
+                return BAD_VALUE;
+            }
+
+            for (uint32_t i = 0; i < frame->num_bufs; i++) {
+                pOfflineMetadataStream = pChannel->getStreamByHandle(frame->bufs[i]->stream_id);
+                if (pOfflineMetadataStream != NULL) {
+                    if (pOfflineMetadataStream->isOrignalTypeOf(CAM_STREAM_TYPE_METADATA)) {
+                        pOfflineMetaFrame = frame->bufs[i];
+                        break;
+                    }
+                }
+            }
+            if (pOfflineMetaFrame != NULL) {
+                // fill in meta data frame ptr
+                jpeg_job->metadata = (metadata_buffer_t *)pOfflineMetaFrame->buffer;
+
+                // Dump offline metadata for Tuning
+                char value[PROPERTY_VALUE_MAX];
+                property_get("persist.camera.dumpmetadata", value, "0");
+                int32_t enabled = atoi(value);
+                if (enabled && jpeg_job->metadata->is_tuning_params_valid) {
+                    m_parent->dumpMetadataToFile(pOfflineMetadataStream,pOfflineMetaFrame,
+                                                 (char *)"Offline_isp_meta");
+                }
+            }
         }
 
         // enqueu reprocessed frame to jpeg input queue
@@ -2536,7 +2582,7 @@ int32_t QCameraPostProcessor::encodeData(qcamera_jpeg_data_t *jpeg_job_data,
     if (main_frame != NULL) {
         main_stream->handleCacheOps(main_frame);
     }
-    if (thumb_frame != NULL) {
+    if ((thumb_stream != NULL) && (thumb_frame != NULL)) {
         thumb_stream->handleCacheOps(thumb_frame);
     }
 
