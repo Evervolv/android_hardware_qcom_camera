@@ -174,7 +174,6 @@ private:
     sp<MediaRecorder> mRecorder;
     CameraParameters mParams;
     SkBitmap *skBMDec;
-    SkImageEncoder* skJpegEnc;
     SkBitmap skBMtmp;
     sp<IMemory> PiPPtrTmp;
 

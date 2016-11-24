@@ -419,13 +419,8 @@ status_t CameraContext::encodeJPEG(SkWStream * stream,
 {
     int qFactor = 100;
 
-    skJpegEnc = SkImageEncoder::Create(SkImageEncoder::kJPEG_Type);
-    if (!skJpegEnc) {
-        ALOGE(" skJpegEnc is NULL\n");
-        return BAD_VALUE;
-    }
-
-    if (skJpegEnc->encodeStream(stream, *bitmap, qFactor) == false) {
+    if (!SkEncodeImage(stream, *bitmap, SkEncodedImageFormat::kJPEG, qFactor)) {
+        ALOGE(" SkEncodeImage failed\n");
         return BAD_VALUE;
     }
 
