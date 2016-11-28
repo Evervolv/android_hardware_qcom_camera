@@ -38,6 +38,7 @@
 #include "mm_camera.h"
 #include "mm_camera_muxer.h"
 
+#include "cam_cond.h"
 
 extern mm_camera_obj_t* mm_camera_util_get_camera_by_handler(uint32_t cam_handler);
 extern mm_channel_t * mm_camera_util_get_channel_by_handler(mm_camera_obj_t * cam_obj,

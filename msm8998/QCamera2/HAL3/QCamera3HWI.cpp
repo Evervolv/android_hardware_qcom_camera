@@ -60,6 +60,7 @@
 extern "C" {
 #include "mm_camera_dbg.h"
 }
+#include "cam_cond.h"
 
 using namespace android;
 
@@ -437,9 +438,9 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
     //TBD - To see if this hardcoding is needed. Check by printing if this is filled by mctl to 3
     gCamCapability[cameraId]->min_num_pp_bufs = 3;
 
-    pthread_cond_init(&mBuffersCond, NULL);
+    PTHREAD_COND_INIT(&mBuffersCond);
 
-    pthread_cond_init(&mRequestCond, NULL);
+    PTHREAD_COND_INIT(&mRequestCond);
     mPendingLiveRequest = 0;
     mCurrentRequestId = -1;
     pthread_mutex_init(&mMutex, NULL);
@@ -5023,7 +5024,7 @@ no_error:
     // Added a timed condition wait
     struct timespec ts;
     uint8_t isValidTimeout = 1;
-    rc = clock_gettime(CLOCK_REALTIME, &ts);
+    rc = clock_gettime(CLOCK_MONOTONIC, &ts);
     if (rc < 0) {
       isValidTimeout = 0;
       LOGE("Error reading the real time clock!!");
@@ -5275,7 +5276,7 @@ int QCamera3HardwareInterface::flushPerf()
     }
 
     /* wait on a signal that buffers were received */
-    rc = clock_gettime(CLOCK_REALTIME, &timeout);
+    rc = clock_gettime(CLOCK_MONOTONIC, &timeout);
     if (rc < 0) {
         LOGE("Error reading the real time clock, cannot use timed wait");
     } else {

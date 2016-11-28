@@ -1317,7 +1317,7 @@ int32_t mm_stream_streamon(mm_stream_t *my_obj)
             LOGD("waiting for mapping to done: strm fd = %d",
                      my_obj->fd);
             struct timespec ts;
-            clock_gettime(CLOCK_REALTIME, &ts);
+            clock_gettime(CLOCK_MONOTONIC, &ts);
             ts.tv_sec += WAIT_TIMEOUT;
             rc = pthread_cond_timedwait(&my_obj->buf_cond, &my_obj->buf_lock, &ts);
             if (rc == ETIMEDOUT) {
