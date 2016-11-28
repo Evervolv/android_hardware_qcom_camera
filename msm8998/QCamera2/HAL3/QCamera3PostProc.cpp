@@ -1200,8 +1200,8 @@ int32_t QCamera3PostProcessor::encodeFWKData(qcamera_hal3_jpeg_data_t *jpeg_job_
         return BAD_VALUE;
     }
 
-    if ((NULL != jpeg_job_data->fwk_frame) && (NULL != jpeg_job_data->src_frame)) {
-        LOGE("Unsupported case both framework and camera source buffers are invalid!");
+    if ((NULL != jpeg_job_data->src_frame) || (NULL != jpeg_job_data->src_reproc_frame)) {
+        LOGE("Unsupported case either camera src_frame or src_reproc_frame is not NULL!");
         return BAD_VALUE;
     }
 
