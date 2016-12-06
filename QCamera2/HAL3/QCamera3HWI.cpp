@@ -3049,7 +3049,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                 /* this will be handled in handleInputBufferWithLock */
                 i++;
                 continue;
-            } else if (mBatchSize) {
+            } else {
 
                 mPendingLiveRequest--;
 
@@ -3058,14 +3058,6 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                 result.result = dummyMetadata.release();
 
                 notifyError(i->frame_number, CAMERA3_MSG_ERROR_RESULT);
-            } else {
-                LOGE("Fatal: Missing metadata buffer for frame number %d", i->frame_number);
-                if (free_and_bufdone_meta_buf) {
-                    mMetadataChannel->bufDone(metadata_buf);
-                    free(metadata_buf);
-                }
-                mState = ERROR;
-                goto done_metadata;
             }
         } else {
             mPendingLiveRequest--;
@@ -4775,7 +4767,10 @@ void QCamera3HardwareInterface::captureResultCb(mm_camera_super_buf_t *metadata_
                 camera3_stream_buffer_t *buffer, uint32_t frame_number, bool isInputBuffer)
 {
     if (metadata_buf) {
-        if (mBatchSize) {
+        pthread_mutex_lock(&mMutex);
+        uint8_t batchSize = mBatchSize;
+        pthread_mutex_unlock(&mMutex);
+        if (batchSize) {
             handleBatchMetadata(metadata_buf,
                     true /* free_and_bufdone_meta_buf */);
         } else { /* mBatchSize = 0 */
@@ -7071,7 +7066,9 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     staticInfo.update(ANDROID_TONEMAP_MAX_CURVE_POINTS,
             &gCamCapability[cameraId]->max_tone_map_curve_points, 1);
 
-    uint8_t timestampSource = ANDROID_SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME;
+    uint8_t timestampSource = (gCamCapability[cameraId]->timestamp_calibrated ?
+            ANDROID_SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME :
+            ANDROID_SENSOR_INFO_TIMESTAMP_SOURCE_UNKNOWN);
     staticInfo.update(ANDROID_SENSOR_INFO_TIMESTAMP_SOURCE,
             &timestampSource, 1);
 
@@ -8425,6 +8422,8 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     bool fastModeEntryAvailable = FALSE;
     vsMode = ANDROID_CONTROL_VIDEO_STABILIZATION_MODE_OFF;
     optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
+    uint8_t shadingmap_mode = ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF;
+
     switch (type) {
       case CAMERA3_TEMPLATE_PREVIEW:
         controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_PREVIEW;
@@ -8457,6 +8456,9 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
             cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_HIGH_QUALITY;
         } else if (fastModeEntryAvailable) {
             cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_FAST;
+        }
+        if (CAM_SENSOR_RAW == gCamCapability[mCameraId]->sensor_type.sens_type) {
+            shadingmap_mode = ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_ON;
         }
         break;
       case CAMERA3_TEMPLATE_VIDEO_RECORD:
@@ -8531,6 +8533,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
             || ois_disable)
         optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
     settings.update(ANDROID_LENS_OPTICAL_STABILIZATION_MODE, &optStabMode, 1);
+    settings.update(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE, &shadingmap_mode, 1);
 
     settings.update(ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION,
             &gCamCapability[mCameraId]->exposure_compensation_default, 1);
@@ -8604,8 +8607,6 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     static const uint8_t hotPixelMapMode = ANDROID_STATISTICS_HOT_PIXEL_MAP_MODE_OFF;
     settings.update(ANDROID_STATISTICS_HOT_PIXEL_MAP_MODE, &hotPixelMapMode, 1);
 
-    static const uint8_t lensShadingMode = ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF;
-    settings.update(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE, &lensShadingMode, 1);
 
     static const uint8_t blackLevelLock = ANDROID_BLACK_LEVEL_LOCK_OFF;
     settings.update(ANDROID_BLACK_LEVEL_LOCK, &blackLevelLock, 1);
@@ -8713,13 +8714,6 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     /* black level lock */
     uint8_t blacklevel_lock = ANDROID_BLACK_LEVEL_LOCK_OFF;
     settings.update(ANDROID_BLACK_LEVEL_LOCK, &blacklevel_lock, 1);
-
-    /* lens shading map mode */
-    uint8_t shadingmap_mode = ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF;
-    if (CAM_SENSOR_RAW == gCamCapability[mCameraId]->sensor_type.sens_type) {
-        shadingmap_mode = ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_ON;
-    }
-    settings.update(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE, &shadingmap_mode, 1);
 
     //special defaults for manual template
     if (type == CAMERA3_TEMPLATE_MANUAL) {
