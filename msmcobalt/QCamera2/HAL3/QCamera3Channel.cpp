@@ -212,7 +212,7 @@ int32_t QCamera3Channel::addStream(cam_stream_type_t streamType,
  *==========================================================================*/
 int32_t QCamera3Channel::start()
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_CH_START);
     int32_t rc = NO_ERROR;
 
     if (m_numStreams > 1) {
@@ -250,7 +250,7 @@ int32_t QCamera3Channel::start()
  *==========================================================================*/
 int32_t QCamera3Channel::stop()
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_CH_STOP);
     int32_t rc = NO_ERROR;
     if(!m_bIsActive) {
         LOGE("Attempt to stop inactive channel");
@@ -334,7 +334,7 @@ int32_t QCamera3Channel::setPerFrameMapUnmap(bool enable)
  *==========================================================================*/
 int32_t QCamera3Channel::flush()
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_CH_FLUSH);
     return NO_ERROR;
 }
 
@@ -807,7 +807,7 @@ QCamera3ProcessingChannel::~QCamera3ProcessingChannel()
 void QCamera3ProcessingChannel::streamCbRoutine(mm_camera_super_buf_t *super_frame,
         QCamera3Stream *stream)
 {
-     ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_PROC_CH_STRM_CB);
     //FIXME Q Buf back in case of error?
     uint8_t frameIndex;
     buffer_handle_t *resultBuffer;
@@ -984,6 +984,10 @@ int32_t QCamera3ProcessingChannel::timeoutFrame(uint32_t frameNumber)
  * @frameNumber     : frame number of the request
  * @pInputBuffer    : pointer to input buffer if an input request
  * @metadata        : parameters associated with the request
+ * @internalreq      : boolean to indicate if this is purely internal request
+ *                    needing internal buffer allocation
+ * @meteringonly    : boolean indicating metering only frame subset of internal
+ *                    not consumed by postprocessor
  *
  * RETURN     : 0 on a success start of capture
  *              -EINVAL on invalid input
@@ -993,7 +997,9 @@ int32_t QCamera3ProcessingChannel::request(buffer_handle_t *buffer,
         uint32_t frameNumber,
         camera3_stream_buffer_t* pInputBuffer,
         metadata_buffer_t* metadata,
-        int &indexUsed)
+        int &indexUsed,
+        __unused bool internalRequest = false,
+        __unused bool meteringOnly = false)
 {
     int32_t rc = NO_ERROR;
     int index;
@@ -1122,7 +1128,7 @@ int32_t QCamera3ProcessingChannel::initialize(__unused cam_is_type_t isType)
 int32_t QCamera3ProcessingChannel::registerBuffer(buffer_handle_t *buffer,
         cam_is_type_t isType)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_PROC_CH_REG_BUF);
     int rc = 0;
     mIsType = isType;
     cam_stream_type_t streamType;
@@ -1311,7 +1317,7 @@ int32_t QCamera3ProcessingChannel::getStreamSize(cam_dimension_t &dim)
  *==========================================================================*/
 QCamera3StreamMem* QCamera3ProcessingChannel::getStreamBufs(uint32_t /*len*/)
 {
-    KPI_ATRACE_CALL();
+    KPI_ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_GETSTREAMBUFS);
     return &mMemory;
 }
 
@@ -1577,6 +1583,11 @@ int32_t QCamera3ProcessingChannel::setReprocConfig(reprocess_config_t &reproc_cf
         LOGE("Stream %d plane info calculation failed!", mStreamType);
         return rc;
     }
+
+    IF_META_AVAILABLE(cam_hdr_param_t, hdr_info, CAM_INTF_PARM_HAL_BRACKETING_HDR, metadata) {
+        reproc_cfg.hdr_param = *hdr_info;
+    }
+
     return rc;
 }
 
@@ -1596,7 +1607,7 @@ int32_t QCamera3ProcessingChannel::setReprocConfig(reprocess_config_t &reproc_cf
 void QCamera3ProcessingChannel::reprocessCbRoutine(buffer_handle_t *resultBuffer,
         uint32_t resultFrameNumber)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_PROC_CH_REPROC_CB);
     int rc = NO_ERROR;
 
     rc = releaseOfflineMemory(resultFrameNumber);
@@ -1795,7 +1806,7 @@ QCamera3RegularChannel::~QCamera3RegularChannel()
 
 int32_t QCamera3RegularChannel::initialize(cam_is_type_t isType)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_REG_CH_INIT);
     int32_t rc = NO_ERROR;
 
     cam_dimension_t streamDim;
@@ -1959,7 +1970,7 @@ int32_t QCamera3RegularChannel::queueBatchBuf()
  *==========================================================================*/
 int32_t QCamera3RegularChannel::request(buffer_handle_t *buffer, uint32_t frameNumber, int &indexUsed)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_REG_CH_REQ);
     //FIX ME: Return buffer back in case of failures below.
 
     int32_t rc = NO_ERROR;
@@ -2061,7 +2072,7 @@ QCamera3MetadataChannel::~QCamera3MetadataChannel()
 
 int32_t QCamera3MetadataChannel::initialize(cam_is_type_t isType)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_METADATA_CH_INIT);
     int32_t rc;
     cam_dimension_t streamDim;
 
@@ -2189,7 +2200,7 @@ void QCamera3RawChannel::streamCbRoutine(
                         mm_camera_super_buf_t *super_frame,
                         QCamera3Stream * stream)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_RAW_CH_STRM_CB);
     /* Move this back down once verified */
     if (mRawDump)
         dumpRawSnapshot(super_frame->bufs[0]);
@@ -2658,7 +2669,7 @@ QCamera3YUVChannel::~QCamera3YUVChannel()
  *==========================================================================*/
 int32_t QCamera3YUVChannel::initialize(cam_is_type_t isType)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_YUV_CH_INIT);
     int32_t rc = NO_ERROR;
     cam_dimension_t streamDim;
 
@@ -2734,6 +2745,10 @@ int32_t QCamera3YUVChannel::initialize(cam_is_type_t isType)
  * @frameNumber     : frame number of the request
  * @pInputBuffer    : pointer to input buffer if an input request
  * @metadata        : parameters associated with the request
+ * @internalreq      : boolean to indicate if this is purely internal request
+ *                    needing internal buffer allocation
+ * @meteringonly    : boolean indicating metering only frame subset of internal
+ *                    not consumed by postprocessor
  *
  * RETURN     : 0 on a success start of capture
  *              -EINVAL on invalid input
@@ -2743,7 +2758,9 @@ int32_t QCamera3YUVChannel::request(buffer_handle_t *buffer,
         uint32_t frameNumber,
         camera3_stream_buffer_t* pInputBuffer,
         metadata_buffer_t* metadata, bool &needMetadata,
-        int &indexUsed)
+        int &indexUsed,
+        __unused bool internalRequest = false,
+        __unused bool meteringOnly = false)
 {
     int32_t rc = NO_ERROR;
     Mutex::Autolock lock(mOfflinePpLock);
@@ -2830,7 +2847,7 @@ int32_t QCamera3YUVChannel::request(buffer_handle_t *buffer,
 void QCamera3YUVChannel::streamCbRoutine(mm_camera_super_buf_t *super_frame,
         QCamera3Stream *stream)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_YUV_CH_STRM_CB);
     uint8_t frameIndex;
     int32_t resultFrameNumber;
 
@@ -3137,14 +3154,14 @@ void QCamera3PicChannel::jpegEvtHandle(jpeg_job_status_t status,
                                               mm_jpeg_output_t *p_output,
                                               void *userdata)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_PIC_CH_JPEG_EVT_HANDLE);
     buffer_handle_t *resultBuffer = NULL;
     buffer_handle_t *jpegBufferHandle = NULL;
     int resultStatus = CAMERA3_BUFFER_STATUS_OK;
     camera3_stream_buffer_t result;
     camera3_jpeg_blob_t jpegHeader;
 
-    KPI_ATRACE_INT("SNAPSHOT", 0);
+    KPI_ATRACE_CAMSCOPE_INT("SNAPSHOT", CAMSCOPE_HAL3_SNAPSHOT, 0);
     QCamera3PicChannel *obj = (QCamera3PicChannel *)userdata;
     if (obj) {
         //Construct payload for process_capture_result. Call mChannelCb
@@ -3375,6 +3392,7 @@ int32_t QCamera3PicChannel::flush()
     }
     Mutex::Autolock lock(mFreeBuffersLock);
     mFreeBufferList.clear();
+
     for (uint32_t i = 0; i < mCamera3Stream->max_buffers; i++) {
         mFreeBufferList.push_back(i);
     }
@@ -3440,6 +3458,10 @@ int32_t QCamera3PicChannel::initialize(cam_is_type_t isType)
  * @frameNumber  : frame number of the request
  * @pInputBuffer : pointer to input buffer if an input request
  * @metadata     : parameters associated with the request
+ * @internalreq      : boolean to indicate if this is purely internal request
+ *                    needing internal buffer allocation
+ * @meteringonly    : boolean indicating metering only frame subset of internal
+ *                    not consumed by postprocessor
  *
  * RETURN     : 0 on a success start of capture
  *              -EINVAL on invalid input
@@ -3448,9 +3470,10 @@ int32_t QCamera3PicChannel::initialize(cam_is_type_t isType)
 int32_t QCamera3PicChannel::request(buffer_handle_t *buffer,
         uint32_t frameNumber,
         camera3_stream_buffer_t *pInputBuffer,
-        metadata_buffer_t *metadata, int &indexUsed)
+        metadata_buffer_t *metadata, int &indexUsed,
+        bool internalRequest, bool meteringOnly)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_PIC_CH_REQ);
     //FIX ME: Return buffer back in case of failures below.
 
     int32_t rc = NO_ERROR;
@@ -3462,6 +3485,7 @@ int32_t QCamera3PicChannel::request(buffer_handle_t *buffer,
     //and recalculate the plane info
     dim.width = (int32_t)mYuvWidth;
     dim.height = (int32_t)mYuvHeight;
+
     setReprocConfig(reproc_cfg, pInputBuffer, metadata, mStreamFormat, dim);
 
     // Picture stream has already been started before any request comes in
@@ -3470,31 +3494,37 @@ int32_t QCamera3PicChannel::request(buffer_handle_t *buffer,
         return NO_INIT;
     }
 
-    int index = mMemory.getMatchBufIndex((void*)buffer);
-
-    if(index < 0) {
-        rc = registerBuffer(buffer, mIsType);
-        if (NO_ERROR != rc) {
-            LOGE("On-the-fly buffer registration failed %d",
-                     rc);
-            return rc;
-        }
-
-        index = mMemory.getMatchBufIndex((void*)buffer);
-        if (index < 0) {
-            LOGE("Could not find object among registered buffers");
-            return DEAD_OBJECT;
-        }
-    }
-    LOGD("buffer index %d, frameNumber: %u", index, frameNumber);
-
-    rc = mMemory.markFrameNumber((uint32_t)index, frameNumber);
-
     // Start postprocessor
     startPostProc(reproc_cfg);
 
-    // Queue jpeg settings
-    rc = queueJpegSetting((uint32_t)index, metadata);
+    if (!internalRequest) {
+        int index = mMemory.getMatchBufIndex((void*)buffer);
+
+        if(index < 0) {
+            rc = registerBuffer(buffer, mIsType);
+            if (NO_ERROR != rc) {
+                LOGE("On-the-fly buffer registration failed %d",
+                         rc);
+                return rc;
+            }
+
+            index = mMemory.getMatchBufIndex((void*)buffer);
+            if (index < 0) {
+                LOGE("Could not find object among registered buffers");
+                return DEAD_OBJECT;
+            }
+        }
+        LOGD("buffer index %d, frameNumber: %u", index, frameNumber);
+
+        rc = mMemory.markFrameNumber((uint32_t)index, frameNumber);
+
+        // Queue jpeg settings
+        rc = queueJpegSetting((uint32_t)index, metadata);
+
+    } else {
+        LOGD("Internal request @ Picchannel");
+    }
+
 
     if (pInputBuffer == NULL) {
         Mutex::Autolock lock(mFreeBuffersLock);
@@ -3512,7 +3542,11 @@ int32_t QCamera3PicChannel::request(buffer_handle_t *buffer,
             bufIdx = *it;
             mFreeBufferList.erase(it);
         }
-        mYuvMemory->markFrameNumber(bufIdx, frameNumber);
+        if (meteringOnly) {
+            mYuvMemory->markFrameNumber(bufIdx, 0xFFFFFFFF);
+        } else {
+            mYuvMemory->markFrameNumber(bufIdx, frameNumber);
+        }
         mStreams[0]->bufDone(bufIdx);
         indexUsed = bufIdx;
     } else {
@@ -3554,7 +3588,7 @@ int32_t QCamera3PicChannel::request(buffer_handle_t *buffer,
 void QCamera3PicChannel::dataNotifyCB(mm_camera_super_buf_t *recvd_frame,
                                  void *userdata)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_PIC_CH_DATA_NOTIFY_CB);
     LOGD("E\n");
     QCamera3PicChannel *channel = (QCamera3PicChannel *)userdata;
 
@@ -3594,7 +3628,7 @@ void QCamera3PicChannel::dataNotifyCB(mm_camera_super_buf_t *recvd_frame,
 void QCamera3PicChannel::streamCbRoutine(mm_camera_super_buf_t *super_frame,
                             QCamera3Stream *stream)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_PIC_CH_STRM_CB);
     //TODO
     //Used only for getting YUV. Jpeg callback will be sent back from channel
     //directly to HWI. Refer to func jpegEvtHandle
@@ -3624,6 +3658,13 @@ void QCamera3PicChannel::streamCbRoutine(mm_camera_super_buf_t *super_frame,
              stream->bufDone(frameIndex);
          }
          return;
+    }
+
+    if ((uint32_t)mYuvMemory->getFrameNumber(frameIndex) == EMPTY_FRAMEWORK_FRAME_NUMBER) {
+        LOGD("Internal Request recycle frame");
+        Mutex::Autolock lock(mFreeBuffersLock);
+        mFreeBufferList.push_back(frameIndex);
+        return;
     }
 
     frame = (mm_camera_super_buf_t *)malloc(sizeof(mm_camera_super_buf_t));
@@ -3724,6 +3765,14 @@ int32_t QCamera3PicChannel::queueJpegSetting(uint32_t index, metadata_buffer_t *
         strlcpy(settings->gps_processing_method, (const char *)proc_methods,
                 sizeof(settings->gps_processing_method));
     }
+
+    settings->hdr_snapshot = 0;
+    IF_META_AVAILABLE(cam_hdr_param_t, hdr_info, CAM_INTF_PARM_HAL_BRACKETING_HDR, metadata) {
+        if (hdr_info->hdr_enable) {
+            settings->hdr_snapshot = 1;
+        }
+    }
+
 
     // Image description
     const char *eepromVersion = hal_obj->getEepromVersionInfo();
@@ -3898,7 +3947,7 @@ int32_t QCamera3ReprocessChannel::initialize(cam_is_type_t isType)
 int32_t QCamera3ReprocessChannel::registerBuffer(buffer_handle_t *buffer,
         cam_is_type_t isType)
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_REPROC_CH_REG_BUF);
     int rc = 0;
     mIsType = isType;
     cam_stream_type_t streamType;
@@ -4147,7 +4196,7 @@ QCamera3ReprocessChannel::~QCamera3ReprocessChannel()
  *==========================================================================*/
 int32_t QCamera3ReprocessChannel::start()
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_REPROC_CH_START);
     int32_t rc = NO_ERROR;
 
     rc = QCamera3Channel::start();
@@ -4177,7 +4226,7 @@ int32_t QCamera3ReprocessChannel::start()
  *==========================================================================*/
 int32_t QCamera3ReprocessChannel::stop()
 {
-    ATRACE_CALL();
+    ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_REPROC_CH_STOP);
     int32_t rc = NO_ERROR;
 
     rc = QCamera3Channel::stop();
@@ -4381,6 +4430,9 @@ int32_t QCamera3ReprocessChannel::overrideMetadata(qcamera_hal3_pp_buffer_t *pp_
                    rotation_info.rotation = ROTATE_180;
                 } else if (jpeg_settings->jpeg_orientation == 270) {
                    rotation_info.rotation = ROTATE_270;
+                }
+                if (jpeg_settings->hdr_snapshot) {
+                    rotation_info.rotation = ROTATE_0;
                 }
                 rotation_info.streamId = mStreams[0]->getMyServerID();
                 ADD_SET_PARAM_ENTRY_TO_BATCH(meta, CAM_INTF_PARM_ROTATION, rotation_info);

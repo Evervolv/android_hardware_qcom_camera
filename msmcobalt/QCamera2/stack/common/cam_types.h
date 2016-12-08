@@ -38,7 +38,7 @@
 #define MAX_METADATA_PRIVATE_PAYLOAD_SIZE_IN_BYTES 8096
 #define AWB_DEBUG_DATA_SIZE               (45000)
 #define AEC_DEBUG_DATA_SIZE               (5000)
-#define AF_DEBUG_DATA_SIZE                (50000)
+#define AF_DEBUG_DATA_SIZE                (60000)
 #define ASD_DEBUG_DATA_SIZE               (100)
 #define STATS_BUFFER_DEBUG_DATA_SIZE      (75000)
 #define BESTATS_BUFFER_DEBUG_DATA_SIZE    (150000)
@@ -107,7 +107,7 @@
 #define EXIF_IMAGE_DESCRIPTION_SIZE 100
 
 #define MAX_INFLIGHT_REQUESTS  6
-#define MAX_INFLIGHT_BLOB      3
+#define MAX_INFLIGHT_BLOB      10
 #define MIN_INFLIGHT_REQUESTS  3
 #define MIN_INFLIGHT_60FPS_REQUESTS (6)
 #define MAX_INFLIGHT_REPROCESS_REQUESTS 1
@@ -179,6 +179,14 @@ typedef enum {
     /*front aux camera*/
     CAM_POSITION_FRONT_AUX
 } cam_position_t;
+
+// Counter clock wise
+typedef enum {
+    ROTATE_0 = 1<<0,
+    ROTATE_90 = 1<<1,
+    ROTATE_180 = 1<<2,
+    ROTATE_270 = 1<<3,
+} cam_rotation_t;
 
 typedef enum {
     CAM_LENS_NORMAL,
@@ -1701,6 +1709,11 @@ typedef enum {
 } cam_3a_sync_mode_t;
 
 typedef struct {
+    float widthMargins;  /*Width margin in %*/
+    float heightMargins; /*Height margin in %*/
+} cam_frame_margins_t;
+
+typedef struct {
     cam_dimension_t stream_sizes[MAX_NUM_STREAMS];
     uint32_t num_streams;
     cam_stream_type_t type[MAX_NUM_STREAMS];
@@ -1709,6 +1722,7 @@ typedef struct {
     cam_is_type_t is_type[MAX_NUM_STREAMS];
     cam_hfr_mode_t hfr_mode;
     cam_format_t format[MAX_NUM_STREAMS];
+    cam_rotation_t rotation[MAX_NUM_STREAMS];
     uint32_t buf_alignment;
     uint32_t min_stride;
     uint32_t min_scanline;
@@ -1717,6 +1731,8 @@ typedef struct {
     uint32_t dt[MAX_NUM_STREAMS];
     uint32_t vc[MAX_NUM_STREAMS];
     cam_sub_format_type_t sub_format_type[MAX_NUM_STREAMS];
+    cam_frame_margins_t margins[MAX_NUM_STREAMS];
+    cam_dimension_t stream_sz_plus_margin[MAX_NUM_STREAMS]; /*stream sizes + margin*/
 } cam_stream_size_info_t;
 
 typedef enum {
@@ -1780,6 +1796,32 @@ typedef struct {
     uint32_t num_streams;
     uint32_t stream_id[MAX_NUM_STREAMS];
 } cam_buf_divert_info_t;
+
+typedef enum {
+    CAM_SPATIAL_ALIGN_QCOM = 1 << 0,
+    CAM_SPATIAL_ALIGN_OEM  = 1 << 1
+} cam_spatial_align_type_t;
+
+typedef struct {
+    uint32_t shift_horz;
+    uint32_t shift_vert;
+} cam_sac_output_shift_t;
+
+typedef struct {
+    uint8_t                is_master_preview_valid;
+    uint8_t                master_preview;
+    uint8_t                is_master_3A_valid;
+    uint8_t                master_3A;
+    uint8_t                is_ready_status_valid;
+    uint8_t                ready_status;
+    uint8_t                is_output_shift_valid;
+    cam_sac_output_shift_t output_shift;
+    uint8_t                is_wide_focus_roi_shift_valid;
+    cam_sac_output_shift_t wide_focus_roi_shift;
+    uint8_t                is_tele_focus_roi_shift_valid;
+    cam_sac_output_shift_t tele_focus_roi_shift;
+} cam_sac_output_info_t;
+
 
 typedef  struct {
     uint8_t is_stats_valid;               /* if histgram data is valid */
@@ -2284,6 +2326,12 @@ typedef enum {
     CAM_INTF_META_FOCUS_VALUE,
     /*Spot light detection result output from af core*/
     CAM_INTF_META_SPOT_LIGHT_DETECT,
+    /* HAL based HDR*/
+    CAM_INTF_PARM_HAL_BRACKETING_HDR,
+    /* Dual camera - Spatial Alignment Compute/Correction output info*/
+    CAM_INTF_META_DC_SAC_OUTPUT_INFO,
+    /* Dual camera - enable low power mode for the slave camera */
+    CAM_INTF_META_DC_LOW_POWER_ENABLE,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
@@ -2510,6 +2558,7 @@ typedef struct {
 #define CAM_QCOM_FEATURE_ZIGZAG_VIDEO_HDR (((cam_feature_mask_t)1UL)<<35)
 #define CAM_QCOM_FEATURE_STAGGERED_VIDEO_HDR (((cam_feature_mask_t)1UL)<<36)
 #define CAM_QCOM_FEATURE_METADATA_BYPASS (((cam_feature_mask_t)1UL)<<37)
+#define CAM_QTI_FEATURE_SAT             (((cam_feature_mask_t)1UL)<<38)
 #define CAM_QCOM_FEATURE_PP_SUPERSET    (CAM_QCOM_FEATURE_DENOISE2D|CAM_QCOM_FEATURE_CROP|\
                                          CAM_QCOM_FEATURE_ROTATION|CAM_QCOM_FEATURE_SHARPNESS|\
                                          CAM_QCOM_FEATURE_SCALE|CAM_QCOM_FEATURE_CAC|\
@@ -2518,14 +2567,6 @@ typedef struct {
 
 #define CAM_QCOM_FEATURE_PP_PASS_1      CAM_QCOM_FEATURE_PP_SUPERSET
 #define CAM_QCOM_FEATURE_PP_PASS_2      CAM_QCOM_FEATURE_SCALE | CAM_QCOM_FEATURE_CROP;
-
-// Counter clock wise
-typedef enum {
-    ROTATE_0 = 1<<0,
-    ROTATE_90 = 1<<1,
-    ROTATE_180 = 1<<2,
-    ROTATE_270 = 1<<3,
-} cam_rotation_t;
 
 typedef struct {
    cam_rotation_t rotation;         /* jpeg rotation */

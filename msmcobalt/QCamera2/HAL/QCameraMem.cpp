@@ -1602,10 +1602,43 @@ native_handle_t *QCameraVideoMemory::getNativeHandle(uint32_t index, bool metada
 /*===========================================================================
  * FUNCTION   : closeNativeHandle
  *
- * DESCRIPTION: close video native handle and update cached ptrs
+ * DESCRIPTION: static function to close video native handle.
  *
  * PARAMETERS :
  *   @data  : ptr to video frame to be returned
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int QCameraVideoMemory::closeNativeHandle(const void *data)
+{
+    int32_t rc = NO_ERROR;
+
+#ifdef USE_MEDIA_EXTENSIONS
+    const media_metadata_buffer *packet =
+            (const media_metadata_buffer *)data;
+    if ((packet != NULL) && (packet->eType ==
+            kMetadataBufferTypeNativeHandleSource)
+            && (packet->pHandle)) {
+        native_handle_close(packet->pHandle);
+        native_handle_delete(packet->pHandle);
+    } else {
+        LOGE("Invalid Data. Could not release");
+        return BAD_VALUE;
+    }
+#endif
+   return rc;
+}
+
+/*===========================================================================
+ * FUNCTION   : closeNativeHandle
+ *
+ * DESCRIPTION: close video native handle and update cached ptrs
+ *
+ * PARAMETERS :
+ *   @data     : ptr to video frame to be returned
+ *   @metadata : Flag to update metadata mode
  *
  * RETURN     : int32_t type of status
  *              NO_ERROR  -- success
@@ -1621,6 +1654,8 @@ int QCameraVideoMemory::closeNativeHandle(const void *data, bool metadata)
         if ((packet != NULL) && (packet->eType ==
                 kMetadataBufferTypeNativeHandleSource)
                 && (packet->pHandle)) {
+            native_handle_close(packet->pHandle);
+            native_handle_delete(packet->pHandle);
             for (int i = 0; i < mMetaBufCount; i++) {
                 if(mMetadata[i]->data == data) {
                     media_metadata_buffer *mem =
@@ -2300,7 +2335,9 @@ void QCameraGrallocMemory::deallocate()
     LOGD("E ", __FUNCTION__);
 
     for (int cnt = 0; cnt < mMappableBuffers; cnt++) {
-        mCameraMemory[cnt]->release(mCameraMemory[cnt]);
+        if (mCameraMemory[cnt] != NULL) {
+            mCameraMemory[cnt]->release(mCameraMemory[cnt]);
+        }
         struct ion_handle_data ion_handle;
         memset(&ion_handle, 0, sizeof(ion_handle));
         ion_handle.handle = mMemInfo[cnt].handle;
@@ -2309,12 +2346,14 @@ void QCameraGrallocMemory::deallocate()
         }
         close(mMemInfo[cnt].main_ion_fd);
         if(mLocalFlag[cnt] != BUFFER_NOT_OWNED) {
-            if (mWindow) {
+            if (mWindow && (mBufferHandle[cnt] != NULL)
+                && (*mBufferHandle[cnt] != NULL)) {
+                LOGH("cancel_buffer: buffer_handle =%p",  *mBufferHandle[cnt]);
                 mWindow->cancel_buffer(mWindow, mBufferHandle[cnt]);
-                LOGH("cancel_buffer: hdl =%p", (*mBufferHandle[cnt]));
+                mBufferHandle[cnt]= NULL;
             } else {
-                LOGE("Preview window is NULL, cannot cancel_buffer: hdl =%p",
-                      (*mBufferHandle[cnt]));
+                LOGE("Cannot cancel buffer: hdl =%p window = %p local ptr = %p",
+                      (*mBufferHandle[cnt]), mWindow, mBufferHandle[cnt]);
             }
         }
         mLocalFlag[cnt] = BUFFER_NOT_OWNED;
