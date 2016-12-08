@@ -1627,6 +1627,8 @@ int QCameraVideoMemory::closeNativeHandle(const void *data)
         LOGE("Invalid Data. Could not release");
         return BAD_VALUE;
     }
+#else
+    (void) data;
 #endif
    return rc;
 }
