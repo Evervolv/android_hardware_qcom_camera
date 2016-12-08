@@ -2611,10 +2611,16 @@ QCamera3HdrPlusRawSrcChannel::QCamera3HdrPlusRawSrcChannel(uint32_t cam_handle,
                     cam_dimension_t rawDumpSize,
                     cam_padding_info_t *paddingInfo,
                     void *userData,
-                    cam_feature_mask_t postprocess_mask, uint32_t numBuffers) :
+                    cam_feature_mask_t postprocess_mask,
+                    std::shared_ptr<HdrPlusClient> hdrPlusClient,
+                    uint32_t hdrPlusStreamId,
+                    uint32_t numBuffers) :
     QCamera3RawDumpChannel(cam_handle, channel_handle, cam_ops, rawDumpSize, paddingInfo, userData,
-                    postprocess_mask, numBuffers)
+                    postprocess_mask, numBuffers),
+    mHdrPlusClient(hdrPlusClient),
+    mHdrPlusStreamId(hdrPlusStreamId)
 {
+
 }
 
 QCamera3HdrPlusRawSrcChannel::~QCamera3HdrPlusRawSrcChannel()
@@ -2629,10 +2635,32 @@ void QCamera3HdrPlusRawSrcChannel::streamCbRoutine(mm_camera_super_buf_t *super_
         return;
     }
 
-    // TODO: Send RAW buffer to Easel.
+    // Send RAW buffer to HDR+ service
+    sendRawToHdrPlusService(super_frame->bufs[0]);
 
     bufDone(super_frame);
     free(super_frame);
+}
+
+void QCamera3HdrPlusRawSrcChannel::sendRawToHdrPlusService(mm_camera_buf_def_t *frame)
+{
+    QCamera3Stream *stream = getStreamByIndex(0);
+    if (stream == nullptr) {
+        LOGE("%s: Could not find stream.", __FUNCTION__);
+        return;
+    }
+
+    cam_frame_len_offset_t offset = {};
+    stream->getFrameOffset(offset);
+
+    pbcamera::StreamBuffer buffer;
+    buffer.streamId = mHdrPlusStreamId;
+    buffer.data = frame->buffer;
+    buffer.dataSize = offset.frame_len;
+
+    // Use the frame timestamp as mock Easel timestamp.
+    int64_t mockEaselTimestampNs = (int64_t)frame->ts.tv_sec * 1000000000 + frame->ts.tv_nsec;
+    mHdrPlusClient->notifyInputBuffer(buffer, mockEaselTimestampNs);
 }
 
 /*************************************************************************************/
@@ -3438,6 +3466,39 @@ QCamera3PicChannel::~QCamera3PicChannel()
 {
 }
 
+/*===========================================================================
+ * FUNCTION : metadataBufDone
+ *
+ * DESCRIPTION: Buffer done method for a metadata buffer
+ *
+ * PARAMETERS :
+ * @recvd_frame : received metadata frame
+ *
+ * RETURN     : int32_t type of status
+ *              OK  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCamera3PicChannel::metadataBufDone(mm_camera_super_buf_t *recvd_frame)
+{
+    // Check if this is an external metadata
+    if (recvd_frame != nullptr && recvd_frame->num_bufs == 1) {
+        Mutex::Autolock lock(mPendingExternalMetadataLock);
+        auto iter = mPendingExternalMetadata.begin();
+        while (iter != mPendingExternalMetadata.end()) {
+            if (iter->get() == recvd_frame->bufs[0]->buffer) {
+                // Remove the metadata allocated externally.
+                mPendingExternalMetadata.erase(iter);
+                return OK;
+            }
+
+            iter++;
+        }
+    }
+
+    // If this is not an external metadata, return the metadata.
+    return QCamera3ProcessingChannel::metadataBufDone(recvd_frame);
+}
+
 int32_t QCamera3PicChannel::initialize(cam_is_type_t isType)
 {
     int32_t rc = NO_ERROR;
@@ -3886,6 +3947,162 @@ int32_t QCamera3PicChannel::timeoutFrame(uint32_t frameNumber)
     mStreams[0]->timeoutFrame(bufIdx);
 
     return NO_ERROR;
+}
+
+int32_t QCamera3PicChannel::getYuvBufferForRequest(mm_camera_buf_def_t *frame,
+        uint32_t frameNumber)
+{
+    uint32_t bufIdx;
+    status_t rc;
+
+    Mutex::Autolock lock(mFreeBuffersLock);
+
+    // Get an available YUV buffer.
+    if (mFreeBufferList.empty()) {
+        // Allocate a buffer if no one is available.
+        rc = mYuvMemory->allocateOne(mFrameLen);
+        if (rc < 0) {
+            LOGE("Failed to allocate heap buffer. Fatal");
+            return rc;
+        } else {
+            bufIdx = (uint32_t)rc;
+        }
+    } else {
+        List<uint32_t>::iterator it = mFreeBufferList.begin();
+        bufIdx = *it;
+        mFreeBufferList.erase(it);
+    }
+
+    mYuvMemory->markFrameNumber(bufIdx, frameNumber);
+
+    cam_frame_len_offset_t offset = {};
+    mStreams[0]->getFrameOffset(offset);
+
+    // Get a buffer from YUV memory.
+    rc = mYuvMemory->getBufDef(offset, *frame, bufIdx);
+    if (rc != 0) {
+        ALOGE("%s: Getting a frame failed: %s (%d).", __FUNCTION__, strerror(-rc), rc);
+        return rc;
+    }
+
+    // Set the frame's stream ID because it's not set in getBufDef.
+    frame->stream_id = mStreams[0]->getMyHandle();
+    return 0;
+}
+
+int32_t QCamera3PicChannel::returnYuvBuffer(mm_camera_buf_def_t *frame)
+{
+    Mutex::Autolock lock(mFreeBuffersLock);
+    mFreeBufferList.push_back(frame->buf_idx);
+    return 0;
+}
+
+int32_t QCamera3PicChannel::returnYuvBufferAndEncode(mm_camera_buf_def_t *frame,
+        buffer_handle_t *outBuffer, uint32_t frameNumber,
+        std::shared_ptr<metadata_buffer_t> metadata)
+{
+    int32_t rc = OK;
+
+    // Picture stream must have been started before any request comes in.
+    if (!m_bIsActive) {
+        LOGE("Channel not started!!");
+        return NO_INIT;
+    }
+
+    // Set up reprocess configuration
+    reprocess_config_t reproc_cfg = {};
+    cam_dimension_t dim;
+    dim.width = (int32_t)mYuvWidth;
+    dim.height = (int32_t)mYuvHeight;
+    setReprocConfig(reproc_cfg, nullptr, metadata.get(), mStreamFormat, dim);
+
+    // Override reprocess type to just JPEG encoding without reprocessing.
+    reproc_cfg.reprocess_type = REPROCESS_TYPE_NONE;
+
+    // Get the index of the output jpeg buffer.
+    int index = mMemory.getMatchBufIndex((void*)outBuffer);
+    if(index < 0) {
+        rc = registerBuffer(outBuffer, mIsType);
+        if (OK != rc) {
+            LOGE("On-the-fly buffer registration failed %d",
+                     rc);
+            return rc;
+        }
+
+        index = mMemory.getMatchBufIndex((void*)outBuffer);
+        if (index < 0) {
+            LOGE("Could not find object among registered buffers");
+            return DEAD_OBJECT;
+        }
+    }
+
+    rc = mMemory.markFrameNumber((uint32_t)index, frameNumber);
+    if (rc != OK) {
+        ALOGE("%s: Marking frame number (%u) for jpeg buffer (%d) failed: %s (%d)", __FUNCTION__,
+                frameNumber, index, strerror(-rc), rc);
+        return rc;
+    }
+
+    // Start postprocessor
+    startPostProc(reproc_cfg);
+
+    // Queue jpeg settings
+    rc = queueJpegSetting((uint32_t)index, metadata.get());
+    if (rc != OK) {
+        ALOGE("%s: Queueing Jpeg setting for frame number (%u) buffer index (%d) failed: %s (%d)",
+                __FUNCTION__, frameNumber, index, strerror(-rc), rc);
+        return rc;
+    }
+
+    // Allocate a buffer for the YUV input. It will be freed in QCamera3PostProc.
+    mm_camera_super_buf_t *src_frame =
+            (mm_camera_super_buf_t *)calloc(1, sizeof(mm_camera_super_buf_t));
+    if (src_frame == nullptr) {
+        LOGE("%s: No memory for src frame", __FUNCTION__);
+        return NO_MEMORY;
+    }
+    src_frame->camera_handle = m_camHandle;
+    src_frame->ch_id = getMyHandle();
+    src_frame->num_bufs = 1;
+    src_frame->bufs[0] = frame;
+
+    // Start processing the YUV buffer.
+    ALOGD("%s: %d: Post-process started", __FUNCTION__, __LINE__);
+    rc = m_postprocessor.processData(src_frame);
+    if (rc != OK) {
+        ALOGE("%s: Post processing frame (frame number: %u, jpeg buffer: %d) failed: %s (%d)",
+            __FUNCTION__, frameNumber, index, strerror(-rc), rc);
+        return rc;
+    }
+
+    // Allocate a buffer for the metadata. It will be freed in QCamera3PostProc.
+    mm_camera_super_buf_t *metadataBuf =
+            (mm_camera_super_buf_t *)calloc(1, sizeof(mm_camera_super_buf_t));
+    if (metadata == nullptr) {
+        LOGE("%s: No memory for metadata", __FUNCTION__);
+        return NO_MEMORY;
+    }
+    metadataBuf->camera_handle = m_camHandle;
+    metadataBuf->ch_id = getMyHandle();
+    metadataBuf->num_bufs = 1;
+    metadataBuf->bufs[0] = (mm_camera_buf_def_t *)calloc(1, sizeof(mm_camera_buf_def_t));
+    metadataBuf->bufs[0]->buffer = metadata.get();
+
+    // Start processing the metadata
+    rc = m_postprocessor.processPPMetadata(metadataBuf);
+    if (rc != OK) {
+        ALOGE("%s: Post processing metadata (frame number: %u, jpeg buffer: %d) failed: %s (%d)",
+                __FUNCTION__, frameNumber, index, strerror(-rc), rc);
+        return rc;
+    }
+
+    // Queue the external metadata.
+    {
+        Mutex::Autolock lock(mPendingExternalMetadataLock);
+        mPendingExternalMetadata.push_back(metadata);
+    }
+
+    return OK;
 }
 
 /*===========================================================================

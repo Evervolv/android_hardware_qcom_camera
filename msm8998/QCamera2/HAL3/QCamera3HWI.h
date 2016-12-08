@@ -119,6 +119,7 @@ typedef struct {
     // Time when request queued into system
     nsecs_t timestamp;
     List<PendingBufferInfo> mPendingBufferList;
+    bool hdrplus;
 } PendingBuffersInRequest;
 
 class PendingBuffersMap {
@@ -339,7 +340,6 @@ private:
     int validateStreamRotations(camera3_stream_configuration_t *streamList);
     void deriveMinFrameDuration();
     void handleBuffersDuringFlushLock(camera3_stream_buffer_t *buffer);
-    int32_t handlePendingReprocResults(uint32_t frame_number);
     int64_t getMinFrameDuration(const camera3_capture_request_t *request);
     void handleMetadataWithLock(mm_camera_super_buf_t *metadata_buf,
             bool free_and_bufdone_meta_buf,
@@ -349,6 +349,10 @@ private:
     void handleBufferWithLock(camera3_stream_buffer_t *buffer,
             uint32_t frame_number);
     void handleInputBufferWithLock(uint32_t frame_number);
+    // Handle pending results when a new result metadata of a frame is received.
+    // Shutter and metadata callbacks are invoked in the order of frame number.
+    void handlePendingResultsWithLock(uint32_t frameNumber,
+            const camera_metadata_t *resultMetadata);
     void unblockRequestIfNecessary();
     void dumpMetadataToFile(tuning_params_t &meta, uint32_t &dumpFrameCount,
             bool enabled, const char *type, uint32_t frameNumber);
@@ -481,6 +485,7 @@ private:
         nsecs_t timestamp;
         camera3_stream_buffer_t *input_buffer;
         const camera_metadata_t *settings;
+        const camera_metadata_t *resultMetadata; // Result metadata for this request.
         CameraMetadata jpegMetadata;
         uint8_t pipeline_depth;
         uint32_t partial_result_cnt;
@@ -490,17 +495,13 @@ private:
         /* DevCamDebug metadata PendingRequestInfo */
         uint8_t DevCamDebug_meta_enable;
         /* DevCamDebug metadata end */
+
+        bool hdrplus; // If this is an HDR+ request.
     } PendingRequestInfo;
     typedef struct {
         uint32_t frame_number;
         uint32_t stream_ID;
     } PendingFrameDropInfo;
-
-    typedef struct {
-        camera3_notify_msg_t notify_msg;
-        camera3_stream_buffer_t buffer;
-        uint32_t frame_number;
-    } PendingReprocessResult;
 
     class FrameNumberRegistry _orchestrationDb;
     typedef KeyedVector<uint32_t, Vector<PendingBufferInfo> > FlushMap;
@@ -509,7 +510,6 @@ private:
     typedef List<QCamera3HardwareInterface::RequestedBufferInfo>::iterator
             pendingBufferIterator;
 
-    List<PendingReprocessResult> mPendingReprocessResultList;
     List<PendingRequestInfo> mPendingRequestsList;
     List<PendingFrameDropInfo> mPendingFrameDropList;
     /* Use last frame number of the batch as key and first frame number of the
@@ -639,6 +639,23 @@ private:
     const static uint32_t kPbYuvOutputStreamId = 1;
     const static uint32_t kPbRaw16OutputStreamId = 2;
 
+    // Issue an additional RAW for every 10 requests to control RAW capture rate. Requesting RAW
+    // too often will cause frame drops due to latency of sending RAW to HDR+ service.
+    const static uint32_t kHdrPlusRawPeriod = 10;
+
+    // Define a pending HDR+ request submitted to HDR+ service and not yet received by HAL.
+    struct HdrPlusPendingRequest {
+        // YUV buffer from QCamera3PicChannel to be filled by HDR+ client with an HDR+ processed
+        // frame.
+        std::shared_ptr<mm_camera_buf_def_t> yuvBuffer;
+
+        // Output buffers in camera framework's request.
+        std::vector<camera3_stream_buffer_t> frameworkOutputBuffers;
+
+        // Settings in camera framework's request.
+        std::shared_ptr<metadata_buffer_t> settings;
+    };
+
     // Fill pbcamera::StreamConfiguration based on the channel stream.
     status_t fillPbStreamConfig(pbcamera::StreamConfiguration *config, uint32_t pbStreamId,
             int pbStreamFormat, QCamera3Channel *channel, uint32_t streamIndex);
@@ -649,6 +666,10 @@ private:
     void onFailedCaptureResult(pbcamera::CaptureResult *failedResult) override;
 
     std::shared_ptr<HdrPlusClient> mHdrPlusClient;
+
+    // Map from frame number to frame. Must be protected by mHdrPlusPendingRequestsLock.
+    std::map<uint32_t, HdrPlusPendingRequest> mHdrPlusPendingRequests;
+    Mutex mHdrPlusPendingRequestsLock;
 };
 
 }; // namespace qcamera

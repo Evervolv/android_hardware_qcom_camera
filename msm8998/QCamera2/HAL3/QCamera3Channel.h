@@ -46,6 +46,8 @@
 #include "QCamera3Stream.h"
 #include "QCamera3StreamMem.h"
 
+#include "HdrPlusClient.h"
+
 extern "C" {
 #include "mm_camera_interface.h"
 #include "mm_jpeg_interface.h"
@@ -220,7 +222,7 @@ public:
             uint32_t resultFrameNumber);
 
     int32_t queueReprocMetadata(mm_camera_super_buf_t *metadata);
-    int32_t metadataBufDone(mm_camera_super_buf_t *recvd_frame);
+    virtual int32_t metadataBufDone(mm_camera_super_buf_t *recvd_frame);
     int32_t translateStreamTypeAndFormat(camera3_stream_t *stream,
             cam_stream_type_t &streamType,
             cam_format_t &streamFormat);
@@ -425,17 +427,29 @@ private:
 class QCamera3HdrPlusRawSrcChannel : public QCamera3RawDumpChannel
 {
 public:
-    QCamera3HdrPlusRawSrcChannel(uint32_t cam_handle,
+    QCamera3HdrPlusRawSrcChannel(
+                    uint32_t cam_handle,
                     uint32_t channel_handle,
                     mm_camera_ops_t *cam_ops,
                     cam_dimension_t rawDumpSize,
                     cam_padding_info_t *paddingInfo,
                     void *userData,
-                    cam_feature_mask_t postprocess_mask, uint32_t numBuffers = 3U);
+                    cam_feature_mask_t postprocess_mask,
+                    std::shared_ptr<HdrPlusClient> hdrPlusClient,
+                    uint32_t hdrPlusStreamId,   // HDR+ stream ID for RAW input
+                    uint32_t numBuffers = 3U);
     virtual ~QCamera3HdrPlusRawSrcChannel();
 
     virtual void streamCbRoutine(mm_camera_super_buf_t *super_frame,
                             QCamera3Stream *stream) override;
+
+private:
+    // Send a RAW frame to HDR+ service as HDR+ input buffers.
+    void sendRawToHdrPlusService(mm_camera_buf_def_t *frame);
+    std::shared_ptr<HdrPlusClient> mHdrPlusClient;
+    // HDR+ stream ID.
+    uint32_t mHdrPlusStreamId;
+
 };
 
 /* QCamera3YUVChannel is used to handle flexible YUV streams that are directly
@@ -548,6 +562,21 @@ public:
     static void dataNotifyCB(mm_camera_super_buf_t *recvd_frame,
             void *userdata);
 
+    // Reprocessing is done with the metadata. This function frees the metadata or returns the
+    // metadata to the metadata channel.
+    int32_t metadataBufDone(mm_camera_super_buf_t *recvd_frame) override;
+
+    // Get a YUV buffer for a request from camera service.
+    int32_t getYuvBufferForRequest(mm_camera_buf_def_t *frame, uint32_t frameNumber);
+
+    // Return a YUV buffer (from getYuvBufferForRequest) and request jpeg encoding.
+    int32_t returnYuvBufferAndEncode(mm_camera_buf_def_t *frame,
+            buffer_handle_t *outBuffer, uint32_t frameNumber,
+            std::shared_ptr<metadata_buffer_t> metadata);
+
+    // Return a YUV buffer (from getYuvBufferForRequest) without requesting jpeg encoding.
+    int32_t returnYuvBuffer(mm_camera_buf_def_t *frame);
+
 private:
     int32_t queueJpegSetting(uint32_t out_buf_index, metadata_buffer_t *metadata);
 
@@ -564,6 +593,11 @@ private:
     Mutex mFreeBuffersLock;
     List<uint32_t> mFreeBufferList;
     uint32_t mFrameLen;
+
+    // The metadata passed in via returnYuvBufferAndEncode and is allocated externally.
+    // These should not be returned to metadata channel.
+    Mutex mPendingExternalMetadataLock;
+    std::vector<std::shared_ptr<metadata_buffer_t>> mPendingExternalMetadata;
 };
 
 // reprocess channel class

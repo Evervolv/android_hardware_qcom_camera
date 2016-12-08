@@ -739,7 +739,7 @@ int32_t QCamera3PostProcessor::processJpegSettingData(
         LOGE("invalid jpeg settings pointer");
         return -EINVAL;
     }
-    return m_jpegSettingsQ.enqueue((void *)jpeg_settings);
+    return m_jpegSettingsQ.enqueue((void *)jpeg_settings) ? OK : -ENOSYS;
 }
 
 /*===========================================================================
