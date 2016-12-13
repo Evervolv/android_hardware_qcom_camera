@@ -1782,9 +1782,11 @@ uint8_t get_num_of_cameras()
     int num_media_devices = 0;
     int8_t num_cameras = 0;
     char subdev_name[32];
+    char prop[PROPERTY_VALUE_MAX];
+#ifdef DAEMON_PRESENT
     int32_t sd_fd = -1;
     struct sensor_init_cfg_data cfg;
-    char prop[PROPERTY_VALUE_MAX];
+#endif
 
     LOGD("E");
 
@@ -1851,6 +1853,7 @@ uint8_t get_num_of_cameras()
         dev_fd = -1;
     }
 
+#ifdef DAEMON_PRESENT
     /* Open sensor_init subdev */
     sd_fd = open(subdev_name, O_RDWR);
     if (sd_fd < 0) {
@@ -1864,7 +1867,7 @@ uint8_t get_num_of_cameras()
         LOGE("failed");
     }
     close(sd_fd);
-    dev_fd = -1;
+#endif
 
 
     num_media_devices = 0;
