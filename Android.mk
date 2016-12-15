@@ -5,8 +5,8 @@ ifneq ($(TARGET_BOARD_AUTO),true)
       ifneq ($(filter msm8996,$(TARGET_BOARD_PLATFORM)),)
         include $(addsuffix /Android.mk, $(addprefix $(call my-dir)/, mm-image-codec QCamera2))
       endif
-      ifneq ($(filter msmcobalt,$(TARGET_BOARD_PLATFORM)),)
-        include $(call all-makefiles-under,$(call my-dir)/msmcobalt)
+      ifneq ($(filter msm8998,$(TARGET_BOARD_PLATFORM)),)
+        include $(call all-makefiles-under,$(call my-dir)/msm8998)
       endif
     endif
   endif
