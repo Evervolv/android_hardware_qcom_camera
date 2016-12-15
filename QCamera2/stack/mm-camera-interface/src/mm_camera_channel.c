@@ -36,6 +36,7 @@
 #include "mm_camera_dbg.h"
 #include "mm_camera_interface.h"
 #include "mm_camera.h"
+#include "cam_cond.h"
 
 extern mm_camera_obj_t* mm_camera_util_get_camera_by_handler(uint32_t cam_handler);
 extern mm_channel_t * mm_camera_util_get_channel_by_handler(mm_camera_obj_t * cam_obj,
@@ -1297,7 +1298,7 @@ uint32_t mm_channel_add_stream(mm_channel_t *my_obj)
     pthread_mutex_init(&stream_obj->buf_lock, NULL);
     pthread_mutex_init(&stream_obj->cb_lock, NULL);
     pthread_mutex_init(&stream_obj->cmd_lock, NULL);
-    pthread_cond_init(&stream_obj->buf_cond, NULL);
+    PTHREAD_COND_INIT(&stream_obj->buf_cond);
     memset(stream_obj->buf_status, 0,
             sizeof(stream_obj->buf_status));
     stream_obj->state = MM_STREAM_STATE_INITED;
