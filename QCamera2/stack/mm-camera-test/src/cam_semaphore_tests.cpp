@@ -24,12 +24,24 @@
 
 #define NS_PER_S 1000000000
 
+//10 ms is about standard timer resolution for most non-RTOS.
+#define TIME_THRESHOLD_IN_NS  10000000
+
 static inline void timespec_add_ms(timespec& ts, size_t ms) {
     ts.tv_sec  += ms / 1000;
     ts.tv_nsec += (ms % 1000) * 1000000;
     if (ts.tv_nsec >= NS_PER_S) {
         ts.tv_sec++;
         ts.tv_nsec -= NS_PER_S;
+    }
+}
+
+static inline int64_t time_diff(timespec& ts_start, timespec& ts_end) {
+    if (ts_start.tv_sec == ts_end.tv_sec) {
+        return (int64_t)ts_end.tv_nsec - ts_start.tv_nsec;
+    } else {
+        return (int64_t)(ts_end.tv_sec - 1 - ts_start.tv_sec) * NS_PER_S +
+                ts_end.tv_nsec + NS_PER_S - ts_start.tv_nsec;
     }
 }
 
@@ -46,7 +58,13 @@ TEST(cam_semaphore_tests, cam_semaphore_timedwait) {
 
     errno = 0;
     ASSERT_EQ(-1, cam_sem_timedwait(&sem, &ts));
+    timespec ts_end;
+    clock_gettime(CLOCK_MONOTONIC, &ts_end);
+
     ASSERT_EQ(ETIMEDOUT, errno);
+    // Check time after timeout ~= time before call + timeout
+    ASSERT_GE(time_diff(ts, ts_end), 0);
+    ASSERT_LT(time_diff(ts, ts_end), TIME_THRESHOLD_IN_NS);
 
     // Test successful wait
     ASSERT_EQ(0, clock_gettime(CLOCK_MONOTONIC, &ts));
