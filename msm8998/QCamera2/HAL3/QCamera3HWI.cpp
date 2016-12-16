@@ -10062,7 +10062,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
             expCompensation = gCamCapability[mCameraId]->exposure_compensation_min;
         if (expCompensation > gCamCapability[mCameraId]->exposure_compensation_max)
             expCompensation = gCamCapability[mCameraId]->exposure_compensation_max;
-        ALOGE("CAM_DEBUG: Setting compensation:%d", expCompensation);
+        ALOGV("CAM_DEBUG: Setting compensation:%d", expCompensation);
         if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_EXPOSURE_COMPENSATION,
                 expCompensation)) {
             rc = BAD_VALUE;
