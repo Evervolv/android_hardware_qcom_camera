@@ -62,7 +62,8 @@ enum qcamera3_ext_tags qcamera3_ext3_section_bounds[QCAMERA3_SECTIONS_END -
         QCAMERA3_IR_END,
         QCAMERA3_AEC_CONVERGENCE_SPEED_END,
         QCAMERA3_AWB_CONVERGENCE_SPEED_END,
-        QCAMERA3_INSTANT_AEC_END
+        QCAMERA3_INSTANT_AEC_END,
+        NEXUS_EXPERIMENTAL_2016_END,
 };
 
 typedef struct vendor_tag_info {
@@ -91,7 +92,8 @@ const char *qcamera3_ext_section_names[QCAMERA3_SECTIONS_END -
     "org.codeaurora.qcamera3.ir",
     "org.codeaurora.qcamera3.aec_convergence_speed",
     "org.codeaurora.qcamera3.awb_convergence_speed",
-    "org.codeaurora.qcamera3.instant_aec"
+    "org.codeaurora.qcamera3.instant_aec",
+    "com.google.nexus.experimental2016"
 };
 
 vendor_tag_info_t qcamera3_privatedata[QCAMERA3_PRIVATEDATA_END - QCAMERA3_PRIVATEDATA_START] = {
@@ -211,6 +213,11 @@ vendor_tag_info_t
     { "instant_aec_available_modes",   TYPE_INT32 }
 };
 
+vendor_tag_info_t nexus_experimental_2016[NEXUS_EXPERIMENTAL_2016_END -
+        NEXUS_EXPERIMENTAL_2016_START] = {
+   {"3a.hybrid_3a_enable", TYPE_BYTE }
+};
+
 vendor_tag_info_t *qcamera3_tag_info[QCAMERA3_SECTIONS_END -
         VENDOR_SECTION] = {
     qcamera3_privatedata,
@@ -232,7 +239,8 @@ vendor_tag_info_t *qcamera3_tag_info[QCAMERA3_SECTIONS_END -
     qcamera3_ir,
     qcamera3_aec_speed,
     qcamera3_awb_speed,
-    qcamera3_instant_aec
+    qcamera3_instant_aec,
+    nexus_experimental_2016,
 };
 
 uint32_t qcamera3_all_tags[] = {
@@ -309,7 +317,10 @@ uint32_t qcamera3_all_tags[] = {
 
     // QCAMERA3_INSTANT_AEC
     (uint32_t)QCAMERA3_INSTANT_AEC_MODE,
-    (uint32_t)QCAMERA3_INSTANT_AEC_AVAILABLE_MODES
+    (uint32_t)QCAMERA3_INSTANT_AEC_AVAILABLE_MODES,
+
+    //NEXUS_EXPERIMENTAL_2016
+    (uint32_t)NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
 };
 
 const vendor_tag_ops_t* QCamera3VendorTags::Ops = NULL;
