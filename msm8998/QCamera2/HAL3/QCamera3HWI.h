@@ -233,7 +233,11 @@ public:
     camera_metadata_t* translateFromHalMetadata(metadata_buffer_t *metadata,
                             nsecs_t timestamp, int32_t request_id,
                             const CameraMetadata& jpegMetadata, uint8_t pipeline_depth,
-                            uint8_t capture_intent, bool pprocDone, uint8_t fwk_cacMode,
+                            uint8_t capture_intent,
+                            /* DevCamDebug metadata translateFromHalMetadata augment .h */
+                            uint8_t DevCamDebug_meta_enable,
+                            /* DevCamDebug metadata end */
+                            bool pprocDone, uint8_t fwk_cacMode,
                             bool firstMetadataInBatch);
     camera_metadata_t* saveRequestSettings(const CameraMetadata& jpegMetadata,
                             camera3_capture_request_t *request);
@@ -475,6 +479,9 @@ private:
         uint8_t capture_intent;
         uint8_t fwkCacMode;
         bool shutter_notified;
+        /* DevCamDebug metadata PendingRequestInfo */
+        uint8_t DevCamDebug_meta_enable;
+        /* DevCamDebug metadata end */
     } PendingRequestInfo;
     typedef struct {
         uint32_t frame_number;
@@ -527,6 +534,10 @@ private:
 
     uint8_t mCaptureIntent;
     uint8_t mCacMode;
+    // DevCamDebug metadata internal variable
+    uint8_t mDevCamDebugMetaEnable;
+    /* DevCamDebug metadata end */
+
     metadata_buffer_t mReprocMeta; //scratch meta buffer
     /* 0: Not batch, non-zero: Number of image buffers in a batch */
     uint8_t mBatchSize;

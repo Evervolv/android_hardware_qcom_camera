@@ -1107,6 +1107,52 @@ typedef struct {
     INCLUDE(CAM_INTF_META_DC_LOW_POWER_ENABLE,          uint8_t,                     1);
     INCLUDE(CAM_INTF_META_DC_SAC_OUTPUT_INFO,           cam_sac_output_info_t,       1);
     INCLUDE(CAM_INTF_META_HYBRID_AE,                    uint8_t,                     1);
+    /* DevCamDebug metadata CAM_INTF.H */
+    INCLUDE(CAM_INTF_META_DEV_CAM_ENABLE,               uint8_t,                     1);
+    /* DevCamDebug metadata CAM_INTF.H AF */
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_LENS_POSITION,     int32_t,                     1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_TOF_CONFIDENCE,    int32_t,                     1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_TOF_DISTANCE,      int32_t,                     1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_LUMA,                    int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_HAF_STATE,               int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_MONITOR_PDAF_TARGET_POS, int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_MONITOR_PDAF_CONFIDENCE, int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_MONITOR_PDAF_REFOCUS,    int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_MONITOR_TOF_TARGET_POS,  int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_MONITOR_TOF_CONFIDENCE,  int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_MONITOR_TOF_REFOCUS,     int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_MONITOR_TYPE_SELECT,     int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_MONITOR_REFOCUS,         int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_MONITOR_TARGET_POS,      int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_PDAF_TARGET_POS,  int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_PDAF_NEXT_POS,    int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_PDAF_NEAR_POS,    int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_PDAF_FAR_POS,     int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_PDAF_CONFIDENCE,  int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_TOF_TARGET_POS,   int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_TOF_NEXT_POS,     int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_TOF_NEAR_POS,     int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_TOF_FAR_POS,      int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_TOF_CONFIDENCE,   int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_TYPE_SELECT,      int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_NEXT_POS,         int32_t,               1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AF_SEARCH_TARGET_POS,       int32_t,               1);
+    /* DevCamDebug metadata CAM_INTF.H AEC */
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_TARGET_LUMA,      int32_t,                     1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_COMP_LUMA,        int32_t,                     1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_AVG_LUMA,         int32_t,                     1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_CUR_LUMA,         int32_t,                     1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_LINECOUNT,        int32_t,                     1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_REAL_GAIN,        float,                       1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_EXP_INDEX,        int32_t,                     1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_LUX_IDX,          float,                       1);
+    /* DevCamDebug metadata CAM_INTF.H AWB */
+    INCLUDE(CAM_INTF_META_DEV_CAM_AWB_R_GAIN,           float,                       1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AWB_G_GAIN,           float,                       1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AWB_B_GAIN,           float,                       1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AWB_CCT,              int32_t,                     1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AWB_DECISION,         int32_t,                     1);
+    /* DevCamDebug metadata end */
 } metadata_data_t;
 
 /* Update clear_metadata_buffer() function when a new is_xxx_valid is added to
