@@ -216,6 +216,7 @@ vendor_tag_info_t
 vendor_tag_info_t nexus_experimental_2016[NEXUS_EXPERIMENTAL_2016_END -
         NEXUS_EXPERIMENTAL_2016_START] = {
    {"3a.hybrid_3a_enable",                     TYPE_BYTE  },
+   {"control.af_scene_change",                 TYPE_BYTE  },
       // DevCamDebug vendor tag
    { "devcamdebug_meta_enable",                TYPE_BYTE  },
    // DevCamDebug vendor tag AF
@@ -330,6 +331,7 @@ uint32_t qcamera3_all_tags[] = {
     (uint32_t)QCAMERA3_SENSOR_IS_MONO_ONLY,
 
     //NEXUS_EXPERIMENTAL_2016
+    (uint32_t)NEXUS_EXPERIMENTAL_2016_AF_SCENE_CHANGE,
     // DEVCAMDEBUG
     (uint32_t)DEVCAMDEBUG_META_ENABLE,
     // DEVCAMDEBUG AF

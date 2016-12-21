@@ -1107,6 +1107,7 @@ typedef struct {
     INCLUDE(CAM_INTF_META_DC_LOW_POWER_ENABLE,          uint8_t,                     1);
     INCLUDE(CAM_INTF_META_DC_SAC_OUTPUT_INFO,           cam_sac_output_info_t,       1);
     INCLUDE(CAM_INTF_META_HYBRID_AE,                    uint8_t,                     1);
+    INCLUDE(CAM_INTF_META_AF_SCENE_CHANGE,              uint8_t,                     1);
     /* DevCamDebug metadata CAM_INTF.H */
     INCLUDE(CAM_INTF_META_DEV_CAM_ENABLE,               uint8_t,                     1);
     /* DevCamDebug metadata CAM_INTF.H AF */

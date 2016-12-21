@@ -2380,6 +2380,8 @@ typedef enum {
     CAM_INTF_META_DEV_CAM_AWB_CCT,
     CAM_INTF_META_DEV_CAM_AWB_DECISION,
     /* DevCamDebug metadata end */
+    /* AF scene change */
+    CAM_INTF_META_AF_SCENE_CHANGE,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
