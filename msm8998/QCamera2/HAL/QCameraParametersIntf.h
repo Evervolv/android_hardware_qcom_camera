@@ -105,6 +105,7 @@ public:
     bool isZSLMode();
     bool isRdiMode();
     bool isSecureMode();
+    cam_stream_type_t getSecureStreamType();
     bool isNoDisplayMode();
     bool isWNREnabled();
     bool isTNRSnapshotEnabled();
@@ -147,6 +148,7 @@ public:
     bool isFpsDebugEnabled();
     bool isHistogramEnabled();
     bool isSceneSelectionEnabled();
+    bool isSmallJpegSizeEnabled();
     int32_t setSelectedScene(cam_scene_mode_type scene);
     cam_scene_mode_type getSelectedScene();
     bool isFaceDetectionEnabled();
@@ -293,6 +295,7 @@ public:
     int32_t bundleRelatedCameras(bool sync);
     uint8_t fdModeInVideo();
     bool isOEMFeatEnabled();
+    uint8_t isOEMFeatFrameSkipEnabled();
 
     int32_t setZslMode(bool value);
     int32_t updateZSLModeValue(bool value);
@@ -306,14 +309,14 @@ public:
 
     int32_t getAnalysisInfo(
         bool fdVideoEnabled,
-        bool hal3,
         cam_feature_mask_t featureMask,
         cam_analysis_info_t *pAnalysisInfo);
     int32_t updateDtVc(int32_t *dt, int32_t *vc);
     int32_t SetDualCamera(bool value);
     int32_t setCameraControls(int32_t controls);
     int32_t setSwitchCamera();
-
+    int32_t setDeferCamera(cam_dual_camera_defer_cmd_t type);
+    int32_t getDualLedCalibration();
 private:
     QCameraParameters *mImpl;
     mutable Mutex mLock;

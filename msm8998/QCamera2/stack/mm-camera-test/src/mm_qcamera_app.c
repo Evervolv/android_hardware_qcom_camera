@@ -108,7 +108,9 @@ int mm_app_load_hal(mm_camera_app_t *my_cam_app)
         return -MM_CAMERA_E_GENERAL;
     }
 
-    my_cam_app->num_cameras = my_cam_app->hal_lib.get_num_of_cameras();
+    if (my_cam_app->num_cameras == 0) {
+        my_cam_app->num_cameras = my_cam_app->hal_lib.get_num_of_cameras();
+    }
     LOGD("num_cameras = %d\n",  my_cam_app->num_cameras);
 
     return MM_CAMERA_OK;
@@ -411,7 +413,7 @@ int mm_app_stream_initbuf(cam_frame_len_offset_t *frame_offset_info,
                               -1,
                               pBufs[i].fd,
                               (uint32_t)pBufs[i].frame_len,
-                              NULL,
+                              pBufs[i].buffer,
                               CAM_MAPPING_BUF_TYPE_STREAM_BUF, ops_tbl->userdata);
         if (rc != MM_CAMERA_OK) {
             LOGE("mapping buf[%d] err = %d",  i, rc);
@@ -538,7 +540,7 @@ int mm_app_open(mm_camera_app_t *cam_app,
                                      CAM_MAPPING_BUF_TYPE_CAPABILITY,
                                      test_obj->cap_buf.mem_info.fd,
                                      test_obj->cap_buf.mem_info.size,
-                                     NULL);
+                                     test_obj->cap_buf.buf.buffer);
     if (rc != MM_CAMERA_OK) {
         LOGE("map for capability error\n");
         goto error_after_cap_buf_alloc;
@@ -562,7 +564,7 @@ int mm_app_open(mm_camera_app_t *cam_app,
                                      CAM_MAPPING_BUF_TYPE_PARM_BUF,
                                      test_obj->parm_buf.mem_info.fd,
                                      test_obj->parm_buf.mem_info.size,
-                                     NULL);
+                                     test_obj->parm_buf.buf.buffer);
     if (rc != MM_CAMERA_OK) {
         LOGE("map getparm_buf error\n");
         goto error_after_getparm_buf_alloc;
@@ -588,8 +590,14 @@ int mm_app_open(mm_camera_app_t *cam_app,
     memset(&test_obj->jpeg_ops, 0, sizeof(mm_jpeg_ops_t));
     test_obj->mExifParams.debug_params = \
         (mm_jpeg_debug_exif_params_t *) malloc (sizeof(mm_jpeg_debug_exif_params_t));
-    memset(test_obj->mExifParams.debug_params, 0,
-        sizeof(mm_jpeg_debug_exif_params_t));
+    if (test_obj->mExifParams.debug_params != NULL) {
+        memset(test_obj->mExifParams.debug_params, 0,
+           sizeof(mm_jpeg_debug_exif_params_t));
+    } else {
+        LOGE("debug params alloc fail");
+        rc = -MM_CAMERA_E_GENERAL;
+        goto error_after_getparm_buf_map;
+    }
     mm_dimension pic_size;
     memset(&pic_size, 0, sizeof(mm_dimension));
     pic_size.w = 4000;
@@ -784,7 +792,7 @@ mm_camera_stream_t * mm_app_add_stream(mm_camera_test_obj_t *test_obj,
                                             0,
                                             -1,
                                             stream->s_info_buf.mem_info.fd,
-                                            (uint32_t)stream->s_info_buf.mem_info.size, NULL);
+                                            (uint32_t)stream->s_info_buf.mem_info.size, stream->s_info_buf.buf.buffer);
     if (rc != MM_CAMERA_OK) {
         LOGE("map setparm_buf error\n");
         mm_app_deallocate_ion_memory(&stream->s_info_buf);
@@ -1206,6 +1214,45 @@ ERROR:
     return rc;
 }
 
+int setManualWhiteBalance(mm_camera_test_obj_t *test_obj, cam_manual_wb_parm_t *manual_info){
+
+    int rc = MM_CAMERA_OK;
+    cam_manual_wb_parm_t param;
+
+    rc = initBatchUpdate(test_obj);
+    if (rc != MM_CAMERA_OK) {
+        LOGE("Batch camera parameter update failed\n");
+        goto ERROR;
+    }
+
+    memset(&param, 0, sizeof(cam_manual_wb_parm_t));
+    if (manual_info->type == CAM_MANUAL_WB_MODE_GAIN){
+        param.type = CAM_MANUAL_WB_MODE_GAIN;
+        param.gains.r_gain = manual_info->gains.r_gain;
+        param.gains.g_gain = manual_info->gains.g_gain;
+        param.gains.b_gain = manual_info->gains.b_gain;
+    }else {
+        param.type = CAM_MANUAL_WB_MODE_CCT;
+        param.cct = manual_info->cct;
+    }
+
+
+    if (ADD_SET_PARAM_ENTRY_TO_BATCH(test_obj->parm_buf.mem_info.data,
+            CAM_INTF_PARM_WB_MANUAL, param)) {
+        LOGE("Manual White balance parameter not added to batch\n");
+        rc = -1;
+        goto ERROR;
+    }
+
+    rc = commitSetBatch(test_obj);
+    if (rc != MM_CAMERA_OK) {
+        LOGE("Batch parameters commit failed\n");
+        goto ERROR;
+    }
+
+ERROR:
+      return rc;
+}
 int setWhiteBalance(mm_camera_test_obj_t *test_obj, cam_wb_mode_type mode)
 {
     int rc = MM_CAMERA_OK;
@@ -1503,6 +1550,34 @@ ERROR:
     return rc;
 }
 
+int setEffect(mm_camera_test_obj_t *test_obj, cam_effect_mode_type effect)
+{
+    int rc = MM_CAMERA_OK;
+
+    rc = initBatchUpdate(test_obj);
+    if (rc != MM_CAMERA_OK) {
+        LOGE("Batch camera parameter update failed\n");
+        goto ERROR;
+    }
+
+    if (ADD_SET_PARAM_ENTRY_TO_BATCH(test_obj->parm_buf.mem_info.data,
+            CAM_INTF_PARM_EFFECT, effect)) {
+        LOGE("Scene parameter not added to batch\n");
+        rc = -1;
+        goto ERROR;
+    }
+
+    rc = commitSetBatch(test_obj);
+    if (rc != MM_CAMERA_OK) {
+        LOGE("Batch parameters commit failed\n");
+        goto ERROR;
+    }
+
+    LOGE("Scene set to: %d",  (int)effect);
+
+ERROR:
+    return rc;
+}
 int setScene(mm_camera_test_obj_t *test_obj, cam_scene_mode_type scene)
 {
     int rc = MM_CAMERA_OK;
@@ -2059,6 +2134,18 @@ int mm_camera_lib_send_command(mm_camera_lib_handle *handle,
                 }
             }
             break;
+       case MM_CAMERA_LIB_SPL_EFFECT:
+           if (NULL != in_data) {
+               cam_effect_mode_type effect =  *(( int * )in_data);
+               rc = setEffect(&handle->test_obj, effect);
+
+               if (rc != MM_CAMERA_OK) {
+                        LOGE("setEffect() err=%d\n",
+                                    rc);
+                        goto EXIT;
+                }
+           }
+           break;
         case MM_CAMERA_LIB_BESTSHOT:
             if ( NULL != in_data ) {
                 cam_scene_mode_type scene = *(( int * )in_data);
@@ -2158,14 +2245,27 @@ int mm_camera_lib_send_command(mm_camera_lib_handle *handle,
                 }
             }
             break;
+        case MM_CAMERA_LIB_MN_WB:
+            if ( NULL != in_data ) {
+                cam_manual_wb_parm_t *manual_info = (( cam_manual_wb_parm_t* )in_data);
+
+                rc = setManualWhiteBalance(&handle->test_obj, manual_info);
+                if (rc != MM_CAMERA_OK) {
+                      LOGE("etManualWhiteBalance() err=%d\n",
+                                    rc);
+                     goto EXIT;
+                }
+            }
+            break;
         case MM_CAMERA_LIB_WB:
             if ( NULL != in_data ) {
                 cam_wb_mode_type wb = *(( int * )in_data);
+
                 rc = setWhiteBalance(&handle->test_obj, wb);
                 if (rc != MM_CAMERA_OK) {
-                        LOGE("setWhiteBalance() err=%d\n",
+                      LOGE("setWhiteBalance() err=%d\n",
                                     rc);
-                        goto EXIT;
+                     goto EXIT;
                 }
             }
             break;

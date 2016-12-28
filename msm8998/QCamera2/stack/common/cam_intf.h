@@ -98,6 +98,14 @@ typedef enum {
     CAM_PERF_STATS_FPS_CONTROL
 } cam_dual_camera_perf_mode_t;
 
+/*Enum to inform about camera type in dual camera use-cases*/
+typedef enum {
+    CAM_DEFER_DEFAULT,
+    CAM_DEFER_START,
+    CAM_DEFER_PROCESS,
+    CAM_DEFER_FLUSH
+} cam_dual_camera_defer_cmd_t;
+
 /* Payload for sending bundling info to backend */
 typedef struct {
     cam_sync_related_sensors_control_t sync_control;
@@ -136,6 +144,7 @@ typedef struct {
         cam_dual_camera_bundle_info_t  bundle_info;
         cam_dual_camera_master_info_t  mode;
         cam_dual_camera_perf_control_t value;
+        cam_dual_camera_defer_cmd_t defer_cmd;
     };
 } cam_dual_camera_cmd_info_t;
 
@@ -1106,6 +1115,10 @@ typedef struct {
     INCLUDE(CAM_INTF_PARM_HAL_BRACKETING_HDR,           cam_hdr_param_t,             1);
     INCLUDE(CAM_INTF_META_DC_LOW_POWER_ENABLE,          uint8_t,                     1);
     INCLUDE(CAM_INTF_META_DC_SAC_OUTPUT_INFO,           cam_sac_output_info_t,       1);
+    INCLUDE(CAM_INTF_META_DC_IN_SNAPSHOT_PP_ZOOM_RANGE, uint8_t,                     1);
+    INCLUDE(CAM_INTF_META_DC_BOKEH_MODE,                uint8_t,                     1);
+    INCLUDE(CAM_INTF_PARM_FOV_COMP_ENABLE,              int32_t,                     1);
+    INCLUDE(CAM_INTF_META_LED_CALIB_RESULT,             int32_t,                     1);
     INCLUDE(CAM_INTF_META_HYBRID_AE,                    uint8_t,                     1);
     INCLUDE(CAM_INTF_META_AF_SCENE_CHANGE,              uint8_t,                     1);
     /* DevCamDebug metadata CAM_INTF.H */
@@ -1223,6 +1236,13 @@ static inline void clear_metadata_buffer(metadata_buffer_t *meta)
       meta->is_statsdebug_bestats_params_valid = 0;
       meta->is_statsdebug_bhist_params_valid = 0;
       meta->is_statsdebug_3a_tuning_params_valid = 0;
+      /* tuning parameter sizes are never gets zero.
+       * It gets overwritten when it populated
+       * But we can't reply and make decision based on that
+       */
+      meta->tuning_params.tuning_sensor_data_size = 0;
+      meta->tuning_params.tuning_vfe_data_size = 0;
+      meta->tuning_params.tuning_mod1_stats_data_size = 0;
     }
 }
 
