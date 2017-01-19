@@ -411,6 +411,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mRawDumpChannel(NULL),
       mHdrPlusRawSrcChannel(NULL),
       mDummyBatchChannel(NULL),
+      mDepthChannel(NULL),
       mPerfLockMgr(),
       mCommon(),
       mChannelHandle(0),
@@ -652,6 +653,7 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
     }
 
     mPictureChannel = NULL;
+    mDepthChannel = NULL;
 
     if (mMetadataChannel) {
         delete mMetadataChannel;
@@ -1077,6 +1079,10 @@ int QCamera3HardwareInterface::validateStreamDimensions(
 {
     int rc = NO_ERROR;
     size_t count = 0;
+    uint32_t depthWidth =
+            gCamCapability[mCameraId]->active_array_size.width;
+    uint32_t depthHeight =
+            gCamCapability[mCameraId]->active_array_size.height;
 
     camera3_stream_t *inputStream = NULL;
     /*
@@ -1125,6 +1131,15 @@ int QCamera3HardwareInterface::validateStreamDimensions(
             }
             break;
         case HAL_PIXEL_FORMAT_BLOB:
+            if (newStream->data_space == HAL_DATASPACE_DEPTH) {
+                //As per spec. depth cloud should be sample count / 16
+                uint32_t depthSamplesCount = depthWidth * depthHeight / 16;
+                if ((depthSamplesCount == newStream->width) &&
+                        (1 == newStream->height)) {
+                    sizeFound = true;
+                }
+                break;
+            }
             count = MIN(gCamCapability[mCameraId]->picture_sizes_tbl_cnt, MAX_SIZES_CNT);
             /* Verify set size against generated sizes table */
             for (size_t i = 0; i < count; i++) {
@@ -1596,6 +1611,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     m_bTnrEnabled = false;
     m_bVideoHdrEnabled = false;
     bool isZsl = false;
+    bool depthPresent = false;
     uint32_t videoWidth = 0U;
     uint32_t videoHeight = 0U;
     size_t rawStreamCnt = 0;
@@ -1690,7 +1706,8 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
             inputStream = newStream;
         }
 
-        if (newStream->format == HAL_PIXEL_FORMAT_BLOB) {
+        if ((newStream->format == HAL_PIXEL_FORMAT_BLOB) &&
+                (newStream->data_space != HAL_DATASPACE_DEPTH)) {
             isJpeg = true;
             jpegSize.width = newStream->width;
             jpegSize.height = newStream->height;
@@ -1715,6 +1732,10 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                 newStream->stream_type == CAMERA3_STREAM_OUTPUT) {
             switch (newStream->format) {
             case HAL_PIXEL_FORMAT_BLOB:
+                if (newStream->data_space == HAL_DATASPACE_DEPTH) {
+                    depthPresent = true;
+                    break;
+                }
                 stallStreamCnt++;
                 if (isOnEncoder(maxViewfinderSize, newStream->width,
                         newStream->height)) {
@@ -1840,6 +1861,13 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     /* Check if BLOB size is greater than 4k in 4k recording case */
     if (m_bIs4KVideo && bJpegExceeds4K) {
         LOGE("HAL doesn't support Blob size greater than 4k in 4k recording");
+        pthread_mutex_unlock(&mMutex);
+        return -EINVAL;
+    }
+
+    if ((mOpMode == CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE) &&
+            depthPresent) {
+        LOGE("HAL doesn't support depth streams in HFR mode!");
         pthread_mutex_unlock(&mMutex);
         return -EINVAL;
     }
@@ -1987,6 +2015,10 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     if (mDummyBatchChannel) {
         delete mDummyBatchChannel;
         mDummyBatchChannel = NULL;
+    }
+
+    if (mDepthChannel) {
+        mDepthChannel = NULL;
     }
 
     //Create metadata channel and initialize it
@@ -2286,26 +2318,41 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                     newStream->priv = (QCamera3ProcessingChannel*)mRawChannel;
                     break;
                 case HAL_PIXEL_FORMAT_BLOB:
-                    // Max live snapshot inflight buffer is 1. This is to mitigate
-                    // frame drop issues for video snapshot. The more buffers being
-                    // allocated, the more frame drops there are.
-                    mPictureChannel = new QCamera3PicChannel(
-                            mCameraHandle->camera_handle, mChannelHandle,
-                            mCameraHandle->ops, captureResultCb,
-                            setBufferErrorStatus, &padding_info, this, newStream,
-                            mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams],
-                            m_bIs4KVideo, isZsl, mMetadataChannel,
-                            (m_bIsVideo ? 1 : MAX_INFLIGHT_BLOB));
-                    if (mPictureChannel == NULL) {
-                        LOGE("allocation of channel failed");
-                        pthread_mutex_unlock(&mMutex);
-                        return -ENOMEM;
+                    if (newStream->data_space == HAL_DATASPACE_DEPTH) {
+                        mDepthChannel = new QCamera3DepthChannel(
+                                mCameraHandle->camera_handle, mChannelHandle,
+                                mCameraHandle->ops, NULL, NULL, &padding_info,
+                                0, this, MAX_INFLIGHT_REQUESTS, newStream,
+                                mMetadataChannel);
+                        if (NULL == mDepthChannel) {
+                            LOGE("Allocation of depth channel failed");
+                            pthread_mutex_unlock(&mMutex);
+                            return NO_MEMORY;
+                        }
+                        newStream->priv = mDepthChannel;
+                        newStream->max_buffers = MAX_INFLIGHT_REQUESTS;
+                    } else {
+                        // Max live snapshot inflight buffer is 1. This is to mitigate
+                        // frame drop issues for video snapshot. The more buffers being
+                        // allocated, the more frame drops there are.
+                        mPictureChannel = new QCamera3PicChannel(
+                                mCameraHandle->camera_handle, mChannelHandle,
+                                mCameraHandle->ops, captureResultCb,
+                                setBufferErrorStatus, &padding_info, this, newStream,
+                                mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams],
+                                m_bIs4KVideo, isZsl, mMetadataChannel,
+                                (m_bIsVideo ? 1 : MAX_INFLIGHT_BLOB));
+                        if (mPictureChannel == NULL) {
+                            LOGE("allocation of channel failed");
+                            pthread_mutex_unlock(&mMutex);
+                            return -ENOMEM;
+                        }
+                        newStream->priv = (QCamera3ProcessingChannel*)mPictureChannel;
+                        newStream->max_buffers = mPictureChannel->getNumBuffers();
+                        mPictureChannel->overrideYuvSize(
+                                mStreamConfigInfo.stream_sizes[mStreamConfigInfo.num_streams].width,
+                                mStreamConfigInfo.stream_sizes[mStreamConfigInfo.num_streams].height);
                     }
-                    newStream->priv = (QCamera3ProcessingChannel*)mPictureChannel;
-                    newStream->max_buffers = mPictureChannel->getNumBuffers();
-                    mPictureChannel->overrideYuvSize(
-                            mStreamConfigInfo.stream_sizes[mStreamConfigInfo.num_streams].width,
-                            mStreamConfigInfo.stream_sizes[mStreamConfigInfo.num_streams].height);
                     break;
 
                 default:
@@ -2343,11 +2390,13 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         }
         padding_info = gCamCapability[mCameraId]->padding_info;
 
-        /* Do not add entries for input stream in metastream info
+        /* Do not add entries for input&depth stream in metastream info
          * since there is no real stream associated with it
          */
-        if (newStream->stream_type != CAMERA3_STREAM_INPUT)
+        if ((newStream->stream_type != CAMERA3_STREAM_INPUT) &&
+                (newStream->data_space != HAL_DATASPACE_DEPTH)) {
             mStreamConfigInfo.num_streams++;
+        }
     }
 
     // Create analysis stream all the time, even when h/w support is not available
@@ -3215,6 +3264,10 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
     LOGH("valid frame_number = %u, capture_time = %lld",
             frame_number, capture_time);
 
+    if (metadata->is_depth_data_valid) {
+        handleDepthDataLocked(metadata->depth_data, frame_number);
+    }
+
     // Check whether any stream buffer corresponding to this is dropped or not
     // If dropped, then send the ERROR_BUFFER for the corresponding stream
     // OR check if instant AEC is enabled, then need to drop frames untill AEC is settled.
@@ -3374,6 +3427,122 @@ done_metadata:
     }
     LOGD("mPendingLiveRequest = %d", mPendingLiveRequest);
     unblockRequestIfNecessary();
+}
+
+/*===========================================================================
+ * FUNCTION   : handleDepthDataWithLock
+ *
+ * DESCRIPTION: Handles incoming depth data
+ *
+ * PARAMETERS : @depthData  : Depth data
+ *              @frameNumber: Frame number of the incoming depth data
+ *
+ * RETURN     :
+ *
+ *==========================================================================*/
+void QCamera3HardwareInterface::handleDepthDataLocked(
+        const cam_depth_data_t &depthData, uint32_t frameNumber) {
+    uint32_t currentFrameNumber;
+    buffer_handle_t *depthBuffer;
+
+    if (nullptr == mDepthChannel) {
+        LOGE("Depth channel not present!");
+        return;
+    }
+
+    camera3_stream_buffer_t resultBuffer =
+        {.acquire_fence = -1,
+         .release_fence = -1,
+         .status = CAMERA3_BUFFER_STATUS_OK,
+         .buffer = nullptr,
+         .stream = mDepthChannel->getStream()};
+    camera3_capture_result_t result =
+        {.result = nullptr,
+         .num_output_buffers = 1,
+         .output_buffers = &resultBuffer,
+         .partial_result = 0,
+         .frame_number = 0};
+
+    do {
+        depthBuffer = mDepthChannel->getOldestFrame(currentFrameNumber);
+        if (nullptr == depthBuffer) {
+            break;
+        }
+
+        result.frame_number = currentFrameNumber;
+        resultBuffer.buffer = depthBuffer;
+        if (currentFrameNumber == frameNumber) {
+            int32_t rc = mDepthChannel->populateDepthData(depthData,
+                    frameNumber);
+            if (NO_ERROR != rc) {
+                resultBuffer.status = CAMERA3_BUFFER_STATUS_ERROR;
+            } else {
+                resultBuffer.status = CAMERA3_BUFFER_STATUS_OK;
+            }
+        } else if (currentFrameNumber > frameNumber) {
+            break;
+        } else {
+            camera3_notify_msg_t notify_msg = {.type = CAMERA3_MSG_ERROR,
+                    {{currentFrameNumber, mDepthChannel->getStream(),
+                            CAMERA3_MSG_ERROR_BUFFER}}};
+            orchestrateNotify(&notify_msg);
+
+            LOGE("Depth buffer for frame number: %d is missing "
+                    "returning back!", currentFrameNumber);
+            resultBuffer.status = CAMERA3_BUFFER_STATUS_ERROR;
+        }
+        mDepthChannel->unmapBuffer(currentFrameNumber);
+
+        orchestrateResult(&result);
+    } while (currentFrameNumber < frameNumber);
+}
+
+/*===========================================================================
+ * FUNCTION   : notifyErrorFoPendingDepthData
+ *
+ * DESCRIPTION: Returns error for any pending depth buffers
+ *
+ * PARAMETERS : depthCh - depth channel that needs to get flushed
+ *
+ * RETURN     :
+ *
+ *==========================================================================*/
+void QCamera3HardwareInterface::notifyErrorFoPendingDepthData(
+        QCamera3DepthChannel *depthCh) {
+    uint32_t currentFrameNumber;
+    buffer_handle_t *depthBuffer;
+
+    if (nullptr == depthCh) {
+        return;
+    }
+
+    camera3_notify_msg_t notify_msg =
+        {.type = CAMERA3_MSG_ERROR,
+                {{0, depthCh->getStream(), CAMERA3_MSG_ERROR_BUFFER}}};
+    camera3_stream_buffer_t resultBuffer =
+        {.acquire_fence = -1,
+         .release_fence = -1,
+         .buffer = nullptr,
+         .stream = depthCh->getStream(),
+         .status = CAMERA3_BUFFER_STATUS_ERROR};
+    camera3_capture_result_t result =
+        {.result = nullptr,
+         .frame_number = 0,
+         .num_output_buffers = 1,
+         .partial_result = 0,
+         .output_buffers = &resultBuffer};
+
+    while (nullptr !=
+            (depthBuffer = depthCh->getOldestFrame(currentFrameNumber))) {
+        depthCh->unmapBuffer(currentFrameNumber);
+
+        notify_msg.message.error.frame_number = currentFrameNumber;
+        orchestrateNotify(&notify_msg);
+
+        resultBuffer.buffer = depthBuffer;
+        result.frame_number = currentFrameNumber;
+        orchestrateResult(&result);
+    };
 }
 
 /*===========================================================================
@@ -4818,12 +4987,14 @@ no_error:
     // Acquire all request buffers first
     streamsArray.num_streams = 0;
     int blob_request = 0;
+    bool depthRequestPresent = false;
     uint32_t snapshotStreamId = 0;
     for (size_t i = 0; i < request->num_output_buffers; i++) {
         const camera3_stream_buffer_t& output = request->output_buffers[i];
         QCamera3Channel *channel = (QCamera3Channel *)output.stream->priv;
 
-        if (output.stream->format == HAL_PIXEL_FORMAT_BLOB) {
+        if ((output.stream->format == HAL_PIXEL_FORMAT_BLOB) &&
+                (output.stream->data_space != HAL_DATASPACE_DEPTH)) {
             //FIXME??:Call function to store local copy of jpeg data for encode params.
             blob_request = 1;
             snapshotStreamId = channel->getStreamID(channel->getStreamTypeMask());
@@ -4837,6 +5008,11 @@ no_error:
               pthread_mutex_unlock(&mMutex);
               return rc;
            }
+        }
+
+        if (output.stream->data_space == HAL_DATASPACE_DEPTH) {
+            depthRequestPresent = true;
+            continue;
         }
 
         streamsArray.stream_request[streamsArray.num_streams++].streamID =
@@ -4984,7 +5160,8 @@ no_error:
     PendingRequestInfo pendingRequest = {};
     pendingRequestIterator latestRequest;
     pendingRequest.frame_number = frameNumber;
-    pendingRequest.num_buffers = request->num_output_buffers;
+    pendingRequest.num_buffers = depthRequestPresent ?
+            (request->num_output_buffers - 1 ) : request->num_output_buffers;
     pendingRequest.request_id = request_id;
     pendingRequest.blob_request = blob_request;
     pendingRequest.timestamp = 0;
@@ -5046,6 +5223,10 @@ no_error:
     }
 
     for (size_t i = 0; i < request->num_output_buffers; i++) {
+        if (request->output_buffers[i].stream->data_space ==
+                HAL_DATASPACE_DEPTH) {
+            continue;
+        }
         RequestedBufferInfo requestedBuf;
         memset(&requestedBuf, 0, sizeof(requestedBuf));
         requestedBuf.stream = request->output_buffers[i].stream;
@@ -5116,39 +5297,51 @@ no_error:
                         return rc;
                     }
                 } else {
-                    LOGD("snapshot request with buffer %p, frame_number %d",
-                             output.buffer, frameNumber);
-                    if (!request->settings) {
-                        rc = channel->request(output.buffer, frameNumber,
-                                NULL, mPrevParameters, indexUsed);
-                    } else {
-                        rc = channel->request(output.buffer, frameNumber,
-                                NULL, mParameters, indexUsed);
-                    }
-                    if (rc < 0) {
-                        LOGE("Fail to request on picture channel");
-                        pthread_mutex_unlock(&mMutex);
-                        return rc;
-                    }
+                    if (HAL_DATASPACE_DEPTH == output.stream->data_space) {
+                        assert(NULL != mDepthChannel);
+                        assert(mDepthChannel == output.stream->priv);
 
-                    uint32_t streamId = channel->getStreamID(channel->getStreamTypeMask());
-                    uint32_t j = 0;
-                    for (j = 0; j < streamsArray.num_streams; j++) {
-                        if (streamsArray.stream_request[j].streamID == streamId) {
-                          if (mOpMode == CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE)
-                              streamsArray.stream_request[j].buf_index = CAM_FREERUN_IDX;
-                          else
-                              streamsArray.stream_request[j].buf_index = indexUsed;
-                            break;
+                        rc = mDepthChannel->mapBuffer(output.buffer, request->frame_number);
+                        if (rc < 0) {
+                            LOGE("Fail to map on depth buffer");
+                            pthread_mutex_unlock(&mMutex);
+                            return rc;
                         }
-                    }
-                    if (j == streamsArray.num_streams) {
-                        LOGE("Did not find matching stream to update index");
-                        assert(0);
-                    }
+                    } else {
+                        LOGD("snapshot request with buffer %p, frame_number %d",
+                                 output.buffer, frameNumber);
+                        if (!request->settings) {
+                            rc = channel->request(output.buffer, frameNumber,
+                                    NULL, mPrevParameters, indexUsed);
+                        } else {
+                            rc = channel->request(output.buffer, frameNumber,
+                                    NULL, mParameters, indexUsed);
+                        }
+                        if (rc < 0) {
+                            LOGE("Fail to request on picture channel");
+                            pthread_mutex_unlock(&mMutex);
+                            return rc;
+                        }
 
-                    pendingBufferIter->need_metadata = true;
-                    streams_need_metadata++;
+                        uint32_t streamId = channel->getStreamID(channel->getStreamTypeMask());
+                        uint32_t j = 0;
+                        for (j = 0; j < streamsArray.num_streams; j++) {
+                            if (streamsArray.stream_request[j].streamID == streamId) {
+                                if (mOpMode == CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE)
+                                    streamsArray.stream_request[j].buf_index = CAM_FREERUN_IDX;
+                                else
+                                    streamsArray.stream_request[j].buf_index = indexUsed;
+                                break;
+                            }
+                        }
+                        if (j == streamsArray.num_streams) {
+                            LOGE("Did not find matching stream to update index");
+                            assert(0);
+                        }
+
+                        pendingBufferIter->need_metadata = true;
+                        streams_need_metadata++;
+                    }
                 }
             } else if (output.stream->format == HAL_PIXEL_FORMAT_YCbCr_420_888) {
                 bool needMetadata = false;
@@ -5302,6 +5495,13 @@ no_error:
             return -EINVAL;
         }
 
+        int32_t pdafEnable = depthRequestPresent ? 1 : 0;
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
+                CAM_INTF_META_PDAF_DATA_ENABLE, pdafEnable)) {
+            LOGE("%s: Failed to enable PDAF data in parameters!", __func__);
+            pthread_mutex_unlock(&mMutex);
+            return BAD_VALUE;
+        }
         if (request->input_buffer == NULL) {
             /* Set the parameters to backend:
              * - For every request in NORMAL MODE
@@ -8588,6 +8788,37 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     staticInfo.update(QCAMERA3_STATS_BSGC_AVAILABLE,
             &face_bsgc, 1);
 
+#ifdef SUPPORT_DEPTH_DATA
+    //TODO: Update depth size accordingly, currently we use active array
+    //      as reference.
+    int32_t depthWidth = gCamCapability[cameraId]->active_array_size.width;
+    int32_t depthHeight = gCamCapability[cameraId]->active_array_size.height;
+    //As per spec. depth cloud should be sample count / 16
+    int32_t depthSamplesCount = depthWidth * depthHeight / 16;
+    assert(0 < depthSamplesCount);
+    staticInfo.update(ANDROID_DEPTH_MAX_DEPTH_SAMPLES, &depthSamplesCount, 1);
+
+    int32_t depthConfigs[] = {HAL_PIXEL_FORMAT_BLOB, depthSamplesCount, 1,
+            ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT };
+    staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_STREAM_CONFIGURATIONS,
+            depthConfigs, sizeof(depthConfigs)/sizeof(depthConfigs[0]));
+
+    int64_t depthMinDuration[] = {HAL_PIXEL_FORMAT_BLOB, depthSamplesCount,
+            1, 1 };
+    staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_MIN_FRAME_DURATIONS,
+            depthMinDuration,
+            sizeof(depthMinDuration) / sizeof(depthMinDuration[0]));
+
+    int64_t depthStallDuration[] = {HAL_PIXEL_FORMAT_BLOB, depthSamplesCount,
+            1, 0 };
+    staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_STALL_DURATIONS,
+            depthStallDuration,
+            sizeof(depthStallDuration) / sizeof(depthStallDuration[0]));
+
+    uint8_t depthExclusive = ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE_FALSE;
+    staticInfo.update(ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE, &depthExclusive, 1);
+#endif
+
     int32_t exposureCompensationRange[] = {
             gCamCapability[cameraId]->exposure_compensation_min,
             gCamCapability[cameraId]->exposure_compensation_max};
@@ -9366,6 +9597,13 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_INFO_AVAILABLE_LENS_SHADING_MAP_MODES,
        ANDROID_SHADING_AVAILABLE_MODES,
        ANDROID_INFO_SUPPORTED_HARDWARE_LEVEL,
+#ifdef SUPPORT_DEPTH_DATA
+       ANDROID_DEPTH_MAX_DEPTH_SAMPLES,
+       ANDROID_DEPTH_AVAILABLE_DEPTH_STREAM_CONFIGURATIONS,
+       ANDROID_DEPTH_AVAILABLE_DEPTH_MIN_FRAME_DURATIONS,
+       ANDROID_DEPTH_AVAILABLE_DEPTH_STALL_DURATIONS,
+       ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE,
+#endif
 #ifndef USE_HAL_3_3
        ANDROID_SENSOR_OPAQUE_RAW_SIZE,
        ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST_RANGE,
@@ -12930,6 +13168,8 @@ int32_t QCamera3HardwareInterface::notifyErrorForPendingRequests()
 
     LOGH("Oldest frame num on mPendingRequestsList = %u",
        frameNum);
+
+    notifyErrorFoPendingDepthData(mDepthChannel);
 
     for (auto req = mPendingBuffersMap.mPendingBuffersInRequest.begin();
             req != mPendingBuffersMap.mPendingBuffersInRequest.end(); ) {

@@ -357,6 +357,9 @@ private:
     // Shutter and metadata callbacks are invoked in the order of frame number.
     void handlePendingResultsWithLock(uint32_t frameNumber,
             const camera_metadata_t *resultMetadata);
+    void handleDepthDataLocked(const cam_depth_data_t &depthData,
+            uint32_t frameNumber);
+    void notifyErrorFoPendingDepthData(QCamera3DepthChannel *depthCh);
     void unblockRequestIfNecessary();
     void dumpMetadataToFile(tuning_params_t &meta, uint32_t &dumpFrameCount,
             bool enabled, const char *type, uint32_t frameNumber);
@@ -433,6 +436,7 @@ private:
     QCamera3RawDumpChannel *mRawDumpChannel;
     QCamera3HdrPlusRawSrcChannel *mHdrPlusRawSrcChannel;
     QCamera3RegularChannel *mDummyBatchChannel;
+    QCamera3DepthChannel *mDepthChannel;
     QCameraPerfLockMgr mPerfLockMgr;
     QCameraCommon   mCommon;
 

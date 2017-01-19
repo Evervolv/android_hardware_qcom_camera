@@ -1185,6 +1185,7 @@ typedef struct {
     INCLUDE(CAM_INTF_PARM_DC_USERZOOM,                  int32_t,                     1);
     INCLUDE(CAM_INTF_META_BINNING_CORRECTION_MODE,      cam_binning_correction_mode_t,  1);
     INCLUDE(CAM_INTF_META_OIS_READ_DATA,                cam_ois_data_t,              1);
+    INCLUDE(CAM_INTF_META_PDAF_DATA_ENABLE,             int32_t,                     1);
 } metadata_data_t;
 
 /* Update clear_metadata_buffer() function when a new is_xxx_valid is added to
@@ -1230,6 +1231,9 @@ typedef struct {
 
     uint8_t is_statsdebug_3a_tuning_params_valid;
     cam_q3a_tuning_info_t statsdebug_3a_tuning_data;
+
+    uint8_t is_depth_data_valid;
+    cam_depth_data_t depth_data;
 } metadata_buffer_t;
 
 typedef metadata_buffer_t parm_buffer_t;
@@ -1246,6 +1250,7 @@ static inline void clear_metadata_buffer(metadata_buffer_t *meta)
       memset(meta->is_valid, 0, CAM_INTF_PARM_MAX);
       meta->is_tuning_params_valid = 0;
       meta->is_mobicat_aec_params_valid = 0;
+      meta->is_depth_data_valid = 0;
       meta->is_statsdebug_ae_params_valid = 0;
       meta->is_statsdebug_awb_params_valid = 0;
       meta->is_statsdebug_af_params_valid = 0;

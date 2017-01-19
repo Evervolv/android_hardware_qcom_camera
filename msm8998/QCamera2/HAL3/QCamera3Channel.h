@@ -96,7 +96,7 @@ public:
     virtual int32_t queueBatchBuf();
     virtual int32_t setPerFrameMapUnmap(bool enable);
     int32_t bufDone(mm_camera_super_buf_t *recvd_frame);
-    int32_t setBundleInfo(const cam_bundle_config_t &bundleInfo);
+    virtual int32_t setBundleInfo(const cam_bundle_config_t &bundleInfo);
 
     virtual uint32_t getStreamTypeMask();
     uint32_t getStreamID(uint32_t streamMask);
@@ -712,6 +712,60 @@ private:
     cam_dimension_t mDim;
     cam_stream_type_t mStreamType;
     cam_format_t mStreamFormat;
+};
+
+class QCamera3DepthChannel : public QCamera3ProcessingChannel {
+public:
+
+    QCamera3DepthChannel(QCamera3DepthChannel const&) = delete;
+    QCamera3DepthChannel& operator=(QCamera3DepthChannel const&) = delete;
+
+    QCamera3DepthChannel(uint32_t cam_handle,
+            uint32_t channel_handle,
+            mm_camera_ops_t *cam_ops,
+            channel_cb_routine cb_routine,
+            channel_cb_buffer_err cb_buf_err,
+            cam_padding_info_t *paddingInfo,
+            cam_feature_mask_t postprocess_mask,
+            void *userData, uint32_t numBuffers,
+            camera3_stream_t *stream,
+            QCamera3Channel *metadataChannel) :
+                QCamera3ProcessingChannel(cam_handle, channel_handle, cam_ops,
+                        cb_routine, cb_buf_err, paddingInfo, userData, stream,
+                        CAM_STREAM_TYPE_DEFAULT, postprocess_mask,
+                        metadataChannel, numBuffers),
+                        mStream(stream), mGrallocMem(0) {}
+    ~QCamera3DepthChannel();
+
+    int32_t mapBuffer(buffer_handle_t *buffer, uint32_t frameNumber);
+    int32_t populateDepthData(const cam_depth_data_t &data,
+            uint32_t frameNumber);
+    buffer_handle_t *getOldestFrame(uint32_t &frameNumber);
+    int32_t unmapBuffer(uint32_t frameNumber);
+    int32_t unmapAllBuffers();
+    camera3_stream_t *getStream() { return mStream; }
+
+    int32_t start() override { return NO_ERROR; };
+    int32_t stop() override { return NO_ERROR; };
+    int32_t setBatchSize(uint32_t) override { return NO_ERROR; }
+    int32_t queueBatchBuf() override { return NO_ERROR; }
+    int32_t setPerFrameMapUnmap(bool) override { return NO_ERROR; }
+    uint32_t getStreamTypeMask() override { return 0; };
+    int32_t initialize(cam_is_type_t) { return NO_ERROR; }
+    void streamCbRoutine(mm_camera_super_buf_t *, QCamera3Stream *) override {}
+    int32_t registerBuffer(buffer_handle_t *, cam_is_type_t) override
+            { return NO_ERROR; }
+    QCamera3StreamMem *getStreamBufs(uint32_t) override { return NULL; }
+    void putStreamBufs() override {}
+    int32_t timeoutFrame(uint32_t) override { return NO_ERROR; }
+    int32_t flush() override { return NO_ERROR; }
+    reprocess_type_t getReprocessType() override { return REPROCESS_TYPE_NONE; }
+    int32_t setBundleInfo(const cam_bundle_config_t &) override
+            { return NO_ERROR; }
+
+private:
+    camera3_stream_t *mStream;
+    QCamera3GrallocMemory mGrallocMem;
 };
 
 }; // namespace qcamera

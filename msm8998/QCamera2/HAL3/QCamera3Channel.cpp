@@ -5325,4 +5325,188 @@ void QCamera3SupportChannel::putStreamBufs()
     mMemory = NULL;
 }
 
+QCamera3DepthChannel::~QCamera3DepthChannel() {
+    unmapAllBuffers();
+}
+
+/*===========================================================================
+ * FUNCTION   : mapBuffer
+ *
+ * DESCRIPTION: Maps stream depth buffer
+ *
+ * PARAMETERS :
+ *   @buffer       : Depth buffer
+ *   @frameNumber  : Frame number
+ *
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCamera3DepthChannel::mapBuffer(buffer_handle_t *buffer,
+        uint32_t frameNumber) {
+    int32_t rc = NO_ERROR;
+
+    int32_t index = mGrallocMem.getMatchBufIndex((void*)buffer);
+    if (0 > index) {
+        rc = mGrallocMem.registerBuffer(buffer, CAM_STREAM_TYPE_DEFAULT);
+        if (NO_ERROR != rc) {
+            LOGE("Buffer registration failed %d", rc);
+            return rc;
+        }
+
+        index = mGrallocMem.getMatchBufIndex((void*)buffer);
+        if (index < 0) {
+            LOGE("Could not find object among registered buffers");
+            return DEAD_OBJECT;
+        }
+    } else {
+        LOGE("Buffer: %p is already present at index: %d!", buffer, index);
+        return ALREADY_EXISTS;
+    }
+
+    rc = mGrallocMem.markFrameNumber((uint32_t)index, frameNumber);
+
+    return rc;
+}
+
+/*===========================================================================
+ * FUNCTION   : populateDepthData
+ *
+ * DESCRIPTION: Copies the incoming depth data in the respective depth buffer
+ *
+ * PARAMETERS :
+ *   @data         : Incoming Depth data
+ *   @frameNumber  : Frame number of incoming depth data
+ *
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCamera3DepthChannel::populateDepthData(const cam_depth_data_t &data,
+        uint32_t frameNumber) {
+    if (nullptr == mStream) {
+        LOGE("Invalid depth stream!");
+        return BAD_VALUE;
+    }
+    if (0 == data.length) {
+        LOGE("Empty depth buffer");
+        return BAD_VALUE;
+    }
+
+    ssize_t length = data.length;
+    int32_t index = mGrallocMem.getBufferIndex(frameNumber);
+    if (0 > index) {
+        LOGE("Frame number: %u not present!");
+        return BAD_VALUE;
+    }
+
+    void *dst = mGrallocMem.getPtr(index);
+    if (nullptr == dst) {
+        LOGE("Invalid mapped buffer");
+        return BAD_VALUE;
+    }
+
+    camera3_jpeg_blob_t jpegHeader;
+    ssize_t headerSize = sizeof jpegHeader;
+    buffer_handle_t *blobBufferHandle = static_cast<buffer_handle_t *>
+            (mGrallocMem.getBufferHandle(index));
+    ssize_t maxBlobSize;
+    if (nullptr != blobBufferHandle) {
+        maxBlobSize = ((private_handle_t*)(*blobBufferHandle))->width;
+    } else {
+        LOGE("Couldn't query buffer handle!");
+        return BAD_VALUE;
+    }
+
+    if ((length + headerSize) > maxBlobSize) {
+        LOGE("Depth buffer size mismatch expected: %d actual: %d",
+                (length + headerSize), maxBlobSize);
+        return BAD_VALUE;
+    }
+    memcpy(dst, data.depth_data, length);
+
+    memset(&jpegHeader, 0, headerSize);
+    jpegHeader.jpeg_blob_id = CAMERA3_JPEG_BLOB_ID;
+    jpegHeader.jpeg_size = length;
+    size_t jpeg_eof_offset = static_cast<size_t> (maxBlobSize - headerSize);
+    uint8_t *jpegBuffer = static_cast<uint8_t *> (dst);
+    uint8_t *jpegEOF = &jpegBuffer[jpeg_eof_offset];
+    memcpy(jpegEOF, &jpegHeader, headerSize);
+
+    return NO_ERROR;
+}
+
+/*===========================================================================
+ * FUNCTION   : getOldestFrame
+ *
+ * DESCRIPTION: Return oldest mapped buffer
+ *
+ * PARAMETERS :
+ *   @frameNumber         : Sets oldest frame number if present
+ *
+ *
+ * RETURN     : buffer_handle_t pointer
+ *              NULL in case of error
+ *==========================================================================*/
+buffer_handle_t *QCamera3DepthChannel::getOldestFrame(uint32_t &frameNumber) {
+    uint32_t oldestIndex = UINT32_MAX;
+    int32_t frameNumberResult = mGrallocMem.getOldestFrameNumber(oldestIndex);
+    if (0 > frameNumberResult) {
+        LOGD("Invalid frame number!");
+        return nullptr;
+    }
+    frameNumber = static_cast<uint32_t> (frameNumberResult);
+
+    buffer_handle_t *ret = static_cast<buffer_handle_t *>
+            (mGrallocMem.getBufferHandle(oldestIndex));
+    if (nullptr == ret) {
+        LOGE("Invalid buffer handle!");
+        return nullptr;
+    }
+
+    return ret;
+}
+
+/*===========================================================================
+ * FUNCTION   : unmapBuffer
+ *
+ * DESCRIPTION: Unmap a single buffer
+ *
+ * PARAMETERS :
+ *   @frameNumber         : Frame number of buffer that should get unmapped
+ *
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCamera3DepthChannel::unmapBuffer(uint32_t frameNumber) {
+    int32_t index = mGrallocMem.getBufferIndex(frameNumber);
+    if (0 > index) {
+        LOGE("Frame number: %u not present!", frameNumber);
+        return BAD_VALUE;
+    }
+
+    return mGrallocMem.unregisterBuffer(index);
+}
+
+/*===========================================================================
+ * FUNCTION   : unmapAllBuffers
+ *
+ * DESCRIPTION: This will unmap all buffers
+ *
+ * PARAMETERS :
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCamera3DepthChannel::unmapAllBuffers() {
+    mGrallocMem.unregisterBuffers();
+
+    return NO_ERROR;
+}
+
 }; // namespace qcamera

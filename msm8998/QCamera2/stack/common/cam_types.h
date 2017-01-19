@@ -46,6 +46,15 @@
 #define TUNING_INFO_DEBUG_DATA_SIZE       (4)
 #define OIS_DATA_MAX_SIZE                 (32)
 
+#ifndef SUPPORT_DEPTH_DATA
+#define SUPPORT_DEPTH_DATA
+#endif
+#ifdef SUPPORT_DEPTH_DATA
+#define MAX_DEPTH_DATA_SIZE               (4032*2*756)
+#else
+#define MAX_DEPTH_DATA_SIZE               (1)
+#endif
+
 #define CEILING64(X) (((X) + 0x0003F) & 0xFFFFFFC0)
 #define CEILING32(X) (((X) + 0x0001F) & 0xFFFFFFE0)
 #define CEILING16(X) (((X) + 0x000F) & 0xFFF0)
@@ -1740,6 +1749,11 @@ typedef struct {
    uint32_t max_buffers;
 } cam_buffer_info_t;
 
+typedef struct {
+    uint32_t frame_id;
+    size_t length;
+    uint8_t depth_data[MAX_DEPTH_DATA_SIZE];
+} cam_depth_data_t;
 
 typedef enum {
     /* cmd to bundle cameras*/
@@ -2464,6 +2478,7 @@ typedef enum {
     CAM_INTF_META_BINNING_CORRECTION_MODE,
     /* Read Sensor OIS data */
     CAM_INTF_META_OIS_READ_DATA,
+    CAM_INTF_META_PDAF_DATA_ENABLE,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
