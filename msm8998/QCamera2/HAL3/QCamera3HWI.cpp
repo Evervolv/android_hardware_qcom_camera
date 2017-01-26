@@ -9784,6 +9784,12 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     bool fastModeEntryAvailable = FALSE;
     vsMode = ANDROID_CONTROL_VIDEO_STABILIZATION_MODE_OFF;
     optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
+
+    char videoHdrProp[PROPERTY_VALUE_MAX];
+    memset(videoHdrProp, 0, sizeof(videoHdrProp));
+    property_get("persist.camera.hdr.video", videoHdrProp, "0");
+    uint8_t hdr_mode = (uint8_t)atoi(videoHdrProp);
+
     switch (type) {
       case CAMERA3_TEMPLATE_PREVIEW:
         controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_PREVIEW;
@@ -9828,6 +9834,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
         if (forceVideoOis)
             optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_ON;
+        settings.update(QCAMERA3_VIDEO_HDR_MODE, &hdr_mode, 1);
         break;
       case CAMERA3_TEMPLATE_VIDEO_SNAPSHOT:
         controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_VIDEO_SNAPSHOT;
@@ -9839,6 +9846,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
         if (forceVideoOis)
             optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_ON;
+        settings.update(QCAMERA3_VIDEO_HDR_MODE, &hdr_mode, 1);
         break;
       case CAMERA3_TEMPLATE_ZERO_SHUTTER_LAG:
         controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_ZERO_SHUTTER_LAG;
