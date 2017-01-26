@@ -1551,6 +1551,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     m_bIsVideo = false;
     m_bEisSupportedSize = false;
     m_bTnrEnabled = false;
+    m_bVideoHdrEnabled = false;
     bool isZsl = false;
     uint32_t videoWidth = 0U;
     uint32_t videoHeight = 0U;
@@ -1745,6 +1746,18 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
             (videoWidth == 1280 && videoHeight == 720)) &&
             (mOpMode != CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE))
         m_bTnrEnabled = true;
+
+    char videoHdrProp[PROPERTY_VALUE_MAX];
+    memset(videoHdrProp, 0, sizeof(videoHdrProp));
+    property_get("persist.camera.hdr.video", videoHdrProp, "0");
+    uint8_t hdr_mode_prop = (uint8_t)atoi(videoHdrProp);
+
+    if (hdr_mode_prop == 1 && m_bIsVideo &&
+            mOpMode != CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE)
+        m_bVideoHdrEnabled = true;
+    else
+        m_bVideoHdrEnabled = false;
+
 
     /* Check if num_streams is sane */
     if (stallStreamCnt > MAX_STALLING_STREAMS ||
@@ -9687,11 +9700,6 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     vsMode = ANDROID_CONTROL_VIDEO_STABILIZATION_MODE_OFF;
     optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
 
-    char videoHdrProp[PROPERTY_VALUE_MAX];
-    memset(videoHdrProp, 0, sizeof(videoHdrProp));
-    property_get("persist.camera.hdr.video", videoHdrProp, "0");
-    uint8_t hdr_mode = (uint8_t)atoi(videoHdrProp);
-
     switch (type) {
       case CAMERA3_TEMPLATE_PREVIEW:
         controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_PREVIEW;
@@ -9736,7 +9744,6 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
         if (forceVideoOis)
             optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_ON;
-        settings.update(QCAMERA3_VIDEO_HDR_MODE, &hdr_mode, 1);
         break;
       case CAMERA3_TEMPLATE_VIDEO_SNAPSHOT:
         controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_VIDEO_SNAPSHOT;
@@ -9748,7 +9755,6 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
         if (forceVideoOis)
             optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_ON;
-        settings.update(QCAMERA3_VIDEO_HDR_MODE, &hdr_mode, 1);
         break;
       case CAMERA3_TEMPLATE_ZERO_SHUTTER_LAG:
         controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_ZERO_SHUTTER_LAG;
@@ -11206,13 +11212,16 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
     }
 
     // Video HDR
+    cam_video_hdr_mode_t vhdr = CAM_VIDEO_HDR_MODE_OFF;
     if (frame_settings.exists(QCAMERA3_VIDEO_HDR_MODE)) {
-        cam_video_hdr_mode_t vhdr = (cam_video_hdr_mode_t)
-                frame_settings.find(QCAMERA3_VIDEO_HDR_MODE).data.i32[0];
-        rc = setVideoHdrMode(mParameters, vhdr);
-        if (rc != NO_ERROR) {
-            LOGE("setVideoHDR is failed");
-        }
+        vhdr = (cam_video_hdr_mode_t) frame_settings.find(QCAMERA3_VIDEO_HDR_MODE).data.i32[0];
+    }
+    if (m_bVideoHdrEnabled)
+        vhdr = CAM_VIDEO_HDR_MODE_ON;
+
+    rc = setVideoHdrMode(mParameters, vhdr);
+    if (rc != NO_ERROR) {
+        LOGE("setVideoHDR is failed");
     }
 
     //IR
