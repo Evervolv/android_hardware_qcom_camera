@@ -4500,73 +4500,11 @@ int QCamera3HardwareInterface::processCaptureRequest(
             }
         }
 
+        // Configure stream for HDR+.
         if (mHdrPlusClient != nullptr) {
-            pbcamera::InputConfiguration inputConfig;
-            std::vector<pbcamera::StreamConfiguration> outputStreamConfigs;
-
-            // Configure HDR+ client streams.
-            // Get input config.
-            if (mHdrPlusRawSrcChannel) {
-                // HDR+ input buffers will be provided by HAL.
-                rc = fillPbStreamConfig(&inputConfig.streamConfig, kPbRaw10InputStreamId,
-                        HAL_PIXEL_FORMAT_RAW10, mHdrPlusRawSrcChannel, /*stream index*/0);
-                if (rc != OK) {
-                    LOGE("%s: Failed to get fill stream config for HDR+ raw src stream.",
-                        __FUNCTION__);
-                    pthread_mutex_unlock(&mMutex);
-                    goto error_exit;
-                }
-
-                inputConfig.isSensorInput = false;
-            } else {
-                // Sensor MIPI will send data to Easel.
-                inputConfig.isSensorInput = true;
-                inputConfig.sensorMode.pixelArrayWidth =
-                    sensor_mode_info.pixel_array_size.width;
-                inputConfig.sensorMode.pixelArrayHeight =
-                    sensor_mode_info.pixel_array_size.height;
-                inputConfig.sensorMode.activeArrayWidth =
-                    sensor_mode_info.active_array_size.width;
-                inputConfig.sensorMode.activeArrayHeight =
-                    sensor_mode_info.active_array_size.height;
-                inputConfig.sensorMode.outputPixelClkHz =
-                    sensor_mode_info.op_pixel_clk;
-            }
-
-            // Get output configurations.
-            // Easel may need to output RAW16 buffers if mRawChannel was created.
-            if (mRawChannel != nullptr) {
-                pbcamera::StreamConfiguration outputConfig;
-                rc = fillPbStreamConfig(&outputConfig, kPbRaw16OutputStreamId,
-                        HAL_PIXEL_FORMAT_RAW16, mRawChannel, /*stream index*/0);
-                if (rc != OK) {
-                    LOGE("%s: Failed to get fill stream config for raw stream.", __FUNCTION__);
-                    pthread_mutex_unlock(&mMutex);
-                    goto error_exit;
-                }
-                outputStreamConfigs.push_back(outputConfig);
-            }
-
-            // Easel may need to output YUV output buffers if mPictureChannel was created.
-            if (mPictureChannel != nullptr) {
-                pbcamera::StreamConfiguration outputConfig;
-                rc = fillPbStreamConfig(&outputConfig, kPbYuvOutputStreamId,
-                        HAL_PIXEL_FORMAT_YCrCb_420_SP, mPictureChannel, /*stream index*/0);
-                if (rc != OK) {
-                    LOGE("%s: Failed to get fill stream config for YUV stream.", __FUNCTION__);
-                    pthread_mutex_unlock(&mMutex);
-                    goto error_exit;
-                }
-
-                outputStreamConfigs.push_back(outputConfig);
-            }
-
-            // TODO: consider other channels for YUV output buffers.
-
-            rc = mHdrPlusClient->configureStreams(inputConfig, outputStreamConfigs);
+            rc = configureHdrPlusStreamsLocked(sensor_mode_info);
             if (rc != OK) {
-                LOGE("%d: Failed to configure streams with HDR+ client: %s (%d)", __FUNCTION__,
-                    strerror(-rc), rc);
+                LOGE("%s: Failed to configure HDR+ streams.", __FUNCTION__);
                 pthread_mutex_unlock(&mMutex);
                 goto error_exit;
             }
@@ -4876,67 +4814,10 @@ no_error:
     bool hdrPlusRequest = false;
     HdrPlusPendingRequest pendingHdrPlusRequest = {};
 
-    // Decide if this is an HDR+ capture request.
+    // If this request has a still capture intent, try to submit an HDR+ request.
     if (mHdrPlusClient != nullptr &&
-        mCaptureIntent == ANDROID_CONTROL_CAPTURE_INTENT_STILL_CAPTURE) {
-        bool highQualityPostProcessing = true;
-
-        // Check noise reduction mode is high quality.
-        if (!meta.exists(ANDROID_NOISE_REDUCTION_MODE) ||
-             meta.find(ANDROID_NOISE_REDUCTION_MODE).data.u8[0] !=
-                ANDROID_NOISE_REDUCTION_MODE_HIGH_QUALITY) {
-            highQualityPostProcessing = false;
-        }
-
-        // Check edge mode is high quality.
-        if (!meta.exists(ANDROID_EDGE_MODE) ||
-             meta.find(ANDROID_EDGE_MODE).data.u8[0] !=
-                ANDROID_EDGE_MODE_HIGH_QUALITY) {
-            highQualityPostProcessing = false;
-        }
-
-        // If all post processing is high quality, this still capture request is an HDR+ request.
-        // TODO: support more than a single JPEG output buffer.
-        if (highQualityPostProcessing && request->num_output_buffers == 1 &&
-                request->output_buffers[0].stream->format == HAL_PIXEL_FORMAT_BLOB) {
-            auto frame = std::make_shared<mm_camera_buf_def_t>();
-
-            // Get a YUV buffer from pic channel.
-            QCamera3PicChannel *picChannel =
-                    (QCamera3PicChannel*)request->output_buffers[0].stream->priv;
-            rc = picChannel->getYuvBufferForRequest(frame.get(), frameNumber);
-            if (rc != OK) {
-                ALOGE("%s: Getting an available YUV buffer from pic channel failed: %s (%d)",
-                        __FUNCTION__, strerror(-rc), rc);
-                pthread_mutex_unlock(&mMutex);
-                return rc;
-            }
-
-            pbcamera::StreamBuffer buffer;
-            buffer.streamId = kPbYuvOutputStreamId;
-            buffer.data = frame->buffer;
-            buffer.dataSize = frame->frame_len;
-
-            pbcamera::CaptureRequest pbRequest;
-            pbRequest.id = frameNumber;
-            pbRequest.outputBuffers.push_back(buffer);
-
-            // Submit an HDR+ capture request to HDR+ service.
-            rc = mHdrPlusClient->submitCaptureRequest(&pbRequest);
-            if (rc != OK) {
-                ALOGE("%s: %d: Submitting a capture request failed: %s (%d)", __FUNCTION__,
-                    __LINE__, strerror(-rc), rc);
-            }
-
-            hdrPlusRequest = true;
-
-            pendingHdrPlusRequest.yuvBuffer = frame;
-            pendingHdrPlusRequest.frameworkOutputBuffers.push_back(request->output_buffers[0]);
-        } else {
-            ALOGD("%s: Fall back to non HDR+ capture request. high quality: %d, number of "
-                    "output buffers: %d", __FUNCTION__, highQualityPostProcessing,
-                    request->num_output_buffers);
-        }
+            mCaptureIntent == ANDROID_CONTROL_CAPTURE_INTENT_STILL_CAPTURE) {
+        hdrPlusRequest = trySubmittingHdrPlusRequest(&pendingHdrPlusRequest, *request, meta);
     }
 
     if (hdrPlusRequest) {
@@ -13150,6 +13031,136 @@ void QCamera3HardwareInterface::updateHdrPlusResultMetadata(
         uint8_t fwk_intent = intent[0];
         resultMetadata.update(ANDROID_CONTROL_CAPTURE_INTENT, &fwk_intent, 1);
     }
+}
+
+bool QCamera3HardwareInterface::trySubmittingHdrPlusRequest(HdrPlusPendingRequest *hdrPlusRequest,
+        const camera3_capture_request_t &request, const CameraMetadata &metadata)
+{
+    if (hdrPlusRequest == nullptr) return false;
+
+    // Check noise reduction mode is high quality.
+    if (!metadata.exists(ANDROID_NOISE_REDUCTION_MODE) ||
+         metadata.find(ANDROID_NOISE_REDUCTION_MODE).data.u8[0] !=
+            ANDROID_NOISE_REDUCTION_MODE_HIGH_QUALITY) {
+        ALOGD("%s: Not an HDR+ request: ANDROID_NOISE_REDUCTION_MODE is not HQ.", __FUNCTION__);
+        return false;
+    }
+
+    // Check edge mode is high quality.
+    if (!metadata.exists(ANDROID_EDGE_MODE) ||
+         metadata.find(ANDROID_EDGE_MODE).data.u8[0] != ANDROID_EDGE_MODE_HIGH_QUALITY) {
+        ALOGD("%s: Not an HDR+ request: ANDROID_EDGE_MODE is not HQ.", __FUNCTION__);
+        return false;
+    }
+
+    if (request.num_output_buffers != 1 ||
+            request.output_buffers[0].stream->format != HAL_PIXEL_FORMAT_BLOB) {
+        ALOGD("%s: Not an HDR+ request: Only Jpeg output is supported.", __FUNCTION__);
+        return false;
+    }
+
+    // Get a YUV buffer from pic channel.
+    QCamera3PicChannel *picChannel = (QCamera3PicChannel*)request.output_buffers[0].stream->priv;
+    auto yuvBuffer = std::make_shared<mm_camera_buf_def_t>();
+    status_t res = picChannel->getYuvBufferForRequest(yuvBuffer.get(), request.frame_number);
+    if (res != OK) {
+        ALOGE("%s: Getting an available YUV buffer from pic channel failed: %s (%d)",
+                __FUNCTION__, strerror(-res), res);
+        return false;
+    }
+
+    pbcamera::StreamBuffer buffer;
+    buffer.streamId = kPbYuvOutputStreamId;
+    buffer.data = yuvBuffer->buffer;
+    buffer.dataSize = yuvBuffer->frame_len;
+
+    pbcamera::CaptureRequest pbRequest;
+    pbRequest.id = request.frame_number;
+    pbRequest.outputBuffers.push_back(buffer);
+
+    // Submit an HDR+ capture request to HDR+ service.
+    res = mHdrPlusClient->submitCaptureRequest(&pbRequest);
+    if (res != OK) {
+        ALOGE("%s: %d: Submitting a capture request failed: %s (%d)", __FUNCTION__, __LINE__,
+                strerror(-res), res);
+        return false;
+    }
+
+    hdrPlusRequest->yuvBuffer = yuvBuffer;
+    hdrPlusRequest->frameworkOutputBuffers.push_back(request.output_buffers[0]);
+
+    return true;
+}
+
+status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked(
+        const cam_sensor_mode_info_t &sensor_mode_info)
+{
+    pbcamera::InputConfiguration inputConfig;
+    std::vector<pbcamera::StreamConfiguration> outputStreamConfigs;
+    status_t res = OK;
+
+    // Configure HDR+ client streams.
+    // Get input config.
+    if (mHdrPlusRawSrcChannel) {
+        // HDR+ input buffers will be provided by HAL.
+        res = fillPbStreamConfig(&inputConfig.streamConfig, kPbRaw10InputStreamId,
+                HAL_PIXEL_FORMAT_RAW10, mHdrPlusRawSrcChannel, /*stream index*/0);
+        if (res != OK) {
+            LOGE("%s: Failed to get fill stream config for HDR+ raw src stream: %s (%d)",
+                __FUNCTION__, strerror(-res), res);
+            return res;
+        }
+
+        inputConfig.isSensorInput = false;
+    } else {
+        // Sensor MIPI will send data to Easel.
+        inputConfig.isSensorInput = true;
+        inputConfig.sensorMode.pixelArrayWidth = sensor_mode_info.pixel_array_size.width;
+        inputConfig.sensorMode.pixelArrayHeight = sensor_mode_info.pixel_array_size.height;
+        inputConfig.sensorMode.activeArrayWidth = sensor_mode_info.active_array_size.width;
+        inputConfig.sensorMode.activeArrayHeight = sensor_mode_info.active_array_size.height;
+        inputConfig.sensorMode.outputPixelClkHz = sensor_mode_info.op_pixel_clk;
+    }
+
+    // Get output configurations.
+    // Easel may need to output RAW16 buffers if mRawChannel was created.
+    if (mRawChannel != nullptr) {
+        pbcamera::StreamConfiguration outputConfig;
+        res = fillPbStreamConfig(&outputConfig, kPbRaw16OutputStreamId,
+                HAL_PIXEL_FORMAT_RAW16, mRawChannel, /*stream index*/0);
+        if (res != OK) {
+            LOGE("%s: Failed to get fill stream config for raw stream: %s (%d)",
+                    __FUNCTION__, strerror(-res), res);
+            return res;
+        }
+        outputStreamConfigs.push_back(outputConfig);
+    }
+
+    // Easel may need to output YUV output buffers if mPictureChannel was created.
+    pbcamera::StreamConfiguration yuvOutputConfig;
+    if (mPictureChannel != nullptr) {
+        res = fillPbStreamConfig(&yuvOutputConfig, kPbYuvOutputStreamId,
+                HAL_PIXEL_FORMAT_YCrCb_420_SP, mPictureChannel, /*stream index*/0);
+        if (res != OK) {
+            LOGE("%s: Failed to get fill stream config for YUV stream: %s (%d)",
+                __FUNCTION__, strerror(-res), res);
+
+            return res;
+        }
+
+        outputStreamConfigs.push_back(yuvOutputConfig);
+    }
+
+    // TODO: consider other channels for YUV output buffers.
+
+    res = mHdrPlusClient->configureStreams(inputConfig, outputStreamConfigs);
+    if (res != OK) {
+        LOGE("%d: Failed to configure streams with HDR+ client: %s (%d)", __FUNCTION__,
+            strerror(-res), res);
+        return res;
+    }
+
+    return OK;
 }
 
 void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
