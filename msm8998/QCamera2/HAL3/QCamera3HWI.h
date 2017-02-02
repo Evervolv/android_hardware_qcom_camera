@@ -201,7 +201,7 @@ public:
             size_t processedSizesCnt, size_t maxCount, cam_rect_t active_array_size,
             uint8_t downscale_factor);
     static void convertToRegions(cam_rect_t rect, int32_t* region, int weight);
-    static void convertFromRegions(cam_area_t &roi, const camera_metadata_t *settings,
+    static void convertFromRegions(cam_area_t &roi, const CameraMetadata &frame_settings,
                                    uint32_t tag);
     static bool resetIfNeededROI(cam_area_t* roi, const cam_crop_region_t* scalerCropRegion);
     static int32_t getSensorSensitivity(int32_t iso_mode);
@@ -231,6 +231,8 @@ public:
             metadata_buffer_t *reprocParam, uint32_t snapshotStreamId);
     int translateToHalMetadata(const camera3_capture_request_t *request,
             metadata_buffer_t *parm, uint32_t snapshotStreamId);
+    int translateFwkMetadataToHalMetadata(const camera_metadata_t *frameworkMetadata,
+            metadata_buffer_t *hal_metadata, uint32_t snapshotStreamId, int64_t minFrameDuration);
     camera_metadata_t* translateCbUrgentMetadataToResultMetadata (
                              metadata_buffer_t *metadata);
     camera_metadata_t* translateFromHalMetadata(metadata_buffer_t *metadata,
@@ -661,6 +663,18 @@ private:
     // Fill pbcamera::StreamConfiguration based on the channel stream.
     status_t fillPbStreamConfig(pbcamera::StreamConfiguration *config, uint32_t pbStreamId,
             int pbStreamFormat, QCamera3Channel *channel, uint32_t streamIndex);
+
+    // Configure streams for HDR+.
+    status_t configureHdrPlusStreamsLocked(const cam_sensor_mode_info_t &sensor_mode_info);
+
+    // Try to submit an HDR+ request. Returning true if an HDR+ request was submitted. Returning
+    // false if it is not an HDR+ request or submitting an HDR+ request failed.
+    bool trySubmittingHdrPlusRequest(HdrPlusPendingRequest *hdrPlusRequest,
+        const camera3_capture_request_t &request, const CameraMetadata &metadata);
+
+    // Update HDR+ result metadata with the still capture's request settings.
+    void updateHdrPlusResultMetadata(CameraMetadata &resultMetadata,
+            std::shared_ptr<metadata_buffer_t> settings);
 
     // HDR+ client callbacks.
     void onCaptureResult(pbcamera::CaptureResult *result,
