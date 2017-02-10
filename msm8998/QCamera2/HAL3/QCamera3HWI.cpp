@@ -462,6 +462,9 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mLinkedCameraId(0),
       m_pDualCamCmdHeap(NULL),
       m_pDualCamCmdPtr(NULL),
+      mHdrPlusModeEnabled(false),
+      mIsApInputUsedForHdrPlus(false),
+      mFirstPreviewIntentSeen(false),
       m_bSensorHDREnabled(false)
 {
     getLogLevel();
@@ -932,6 +935,20 @@ int QCamera3HardwareInterface::openCamera()
 
     LOGH("mCameraId=%d",mCameraId);
 
+    // Create an HDR+ client instance.
+    // TODO: detect if Easel exists instead of property.
+    bool enableHdrPlus = property_get_bool("persist.camera.hdrplus.enable",
+            false);
+    ALOGD("%s: HDR+ in Camera HAL %s.", __FUNCTION__, enableHdrPlus ?
+            "enabled" : "disabled");
+    if (enableHdrPlus) {
+        mHdrPlusClient = std::make_shared<HdrPlusClient>();
+        mIsApInputUsedForHdrPlus =
+                property_get_bool("persist.camera.hdrplus.apinput", false);
+        ALOGD("%s: HDR+ input is provided by %s.", __FUNCTION__,
+                mIsApInputUsedForHdrPlus ? "AP" : "Easel");
+    }
+
     return NO_ERROR;
 }
 
@@ -968,11 +985,7 @@ int QCamera3HardwareInterface::closeCamera()
     rc = mCameraHandle->ops->close_camera(mCameraHandle->camera_handle);
     mCameraHandle = NULL;
 
-    // Disconnect from HDR+ client.
-    if (mHdrPlusClient != nullptr) {
-        mHdrPlusClient->disconnect();
-        mHdrPlusClient = nullptr;
-    }
+    mHdrPlusClient = nullptr;
 
     //reset session id to some invalid id
     pthread_mutex_lock(&gCamLock);
@@ -1295,10 +1308,11 @@ int32_t QCamera3HardwareInterface::getSensorModeInfo(cam_sensor_mode_info_t &sen
     }
 
     READ_PARAM_ENTRY(mParameters, CAM_INTF_PARM_SENSOR_MODE_INFO, sensorModeInfo);
-    LOGH("%s: active array size %dx%d, pixel array size %dx%d, output pixel clock %u", __FUNCTION__,
-        sensorModeInfo.active_array_size.width, sensorModeInfo.active_array_size.height,
-        sensorModeInfo.pixel_array_size.width, sensorModeInfo.pixel_array_size.height,
-        sensorModeInfo.op_pixel_clk);
+    LOGH("%s: active array size %dx%d, pixel array size %dx%d, output pixel clock %u, "
+            "raw bits: %d", __FUNCTION__, sensorModeInfo.active_array_size.width,
+            sensorModeInfo.active_array_size.height, sensorModeInfo.pixel_array_size.width,
+            sensorModeInfo.pixel_array_size.height, sensorModeInfo.op_pixel_clk,
+            sensorModeInfo.num_raw_bits);
 
     return rc;
 }
@@ -1555,41 +1569,6 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     }
 
     pthread_mutex_lock(&mMutex);
-
-    // Check if HDR+ is enabled.
-    char hdrp_prop[PROPERTY_VALUE_MAX];
-    property_get("persist.camera.hdrplus", hdrp_prop, "0");
-    bool enableHdrPlus = atoi(hdrp_prop);
-    if (enableHdrPlus) {
-        ALOGD("%s: HDR+ in Camera HAL enabled.", __FUNCTION__);
-        // Connect to HDR+ client if not yet.
-        if (mHdrPlusClient == nullptr) {
-            mHdrPlusClient = std::make_shared<HdrPlusClient>();
-            rc = mHdrPlusClient->connect(this);
-            if (rc < 0) {
-                LOGE("%s: Failed to connect to HDR+ client: %s (%d).", __FUNCTION__,
-                    strerror(-rc), rc);
-                pthread_mutex_unlock(&mMutex);
-                return -ENODEV;
-            }
-
-            // Set static metadata.
-            rc = mHdrPlusClient->setStaticMetadata(*gStaticMetadata[mCameraId]);
-            if (rc < 0) {
-                LOGE("%s: Failed set static metadata in HDR+ client: %s (%d).", __FUNCTION__,
-                    strerror(-rc), rc);
-                pthread_mutex_unlock(&mMutex);
-                return -ENODEV;
-            }
-        }
-    } else {
-        ALOGD("%s: HDR+ in Camera HAL disabled.", __FUNCTION__);
-        // Disconnect from HDR+ client if HDR+ is not enabled.
-        if (mHdrPlusClient != nullptr) {
-            mHdrPlusClient->disconnect();
-            mHdrPlusClient = nullptr;
-        }
-    }
 
     // Check state
     switch (mState) {
@@ -2459,13 +2438,12 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         }
     }
 
-    // Initialize HDR+ Raw Source channel.
-    if (mHdrPlusClient != nullptr) {
+    // Initialize HDR+ Raw Source channel if AP is providing RAW input to Easel.
+    if (mHdrPlusClient != nullptr && mIsApInputUsedForHdrPlus) {
         if (isRawStreamRequested || mRawDumpChannel) {
-            ALOGE("%s: Enabling HDR+ while RAW output stream is configured is not supported.",
-                __FUNCTION__);
-            mHdrPlusClient->disconnect();
-            mHdrPlusClient = nullptr;
+            ALOGE("%s: Enabling HDR+ while RAW output stream is configured is not supported. "
+                    "HDR+ RAW source channel is not created.",
+                    __FUNCTION__);
         } else {
             cam_dimension_t rawSize = getMaxRawSize(mCameraId);
             cam_feature_mask_t hdrPlusRawFeatureMask = CAM_QCOM_FEATURE_NONE;
@@ -2487,7 +2465,6 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
             }
         }
     }
-
 
     if (mAnalysisChannel) {
         cam_analysis_info_t analysisInfo;
@@ -2647,6 +2624,11 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     mCurJpegMeta.clear();
     //Get min frame duration for this streams configuration
     deriveMinFrameDuration();
+
+    mFirstPreviewIntentSeen = false;
+
+    // Disable HRD+ if it's enabled;
+    disableHdrPlusModeLocked();
 
     // Update state
     mState = CONFIGURED;
@@ -3233,7 +3215,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                 result.output_buffers = NULL;
                 result.partial_result = i->partial_result_cnt;
 
-                if (mHdrPlusClient != nullptr) {
+                if (mHdrPlusClient != nullptr && mHdrPlusModeEnabled) {
                     // Notify HDR+ client about the partial metadata.
                     mHdrPlusClient->notifyFrameMetadata(result.frame_number, *result.result,
                             result.partial_result == PARTIAL_RESULT_COUNT);
@@ -3800,7 +3782,7 @@ void QCamera3HardwareInterface::handlePendingResultsWithLock(uint32_t frameNumbe
         mPendingLiveRequest--;
 
         // For a live request, send the metadata to HDR+ client.
-        if (mHdrPlusClient != nullptr) {
+        if (mHdrPlusClient != nullptr && mHdrPlusModeEnabled) {
             mHdrPlusClient->notifyFrameMetadata(frameNumber, *resultMetadata,
                 requestIter->partial_result_cnt == PARTIAL_RESULT_COUNT);
         }
@@ -4649,9 +4631,8 @@ int QCamera3HardwareInterface::processCaptureRequest(
             LOGE("set_parms failed for hal version, stream info");
         }
 
-        cam_sensor_mode_info_t sensor_mode_info;
-        memset(&sensor_mode_info, 0, sizeof(sensor_mode_info));
-        rc = getSensorModeInfo(sensor_mode_info);
+        memset(&mSensorModeInfo, 0, sizeof(mSensorModeInfo));
+        rc = getSensorModeInfo(mSensorModeInfo);
         if (rc != NO_ERROR) {
             LOGE("Failed to get sensor output size");
             pthread_mutex_unlock(&mMutex);
@@ -4660,8 +4641,8 @@ int QCamera3HardwareInterface::processCaptureRequest(
 
         mCropRegionMapper.update(gCamCapability[mCameraId]->active_array_size.width,
                 gCamCapability[mCameraId]->active_array_size.height,
-                sensor_mode_info.active_array_size.width,
-                sensor_mode_info.active_array_size.height);
+                mSensorModeInfo.active_array_size.width,
+                mSensorModeInfo.active_array_size.height);
 
         /* Set batchmode before initializing channel. Since registerBuffer
          * internally initializes some of the channels, better set batchmode
@@ -4748,16 +4729,6 @@ int QCamera3HardwareInterface::processCaptureRequest(
             rc = mDummyBatchChannel->initialize(IS_TYPE_NONE);
             if (rc < 0) {
                 LOGE("mDummyBatchChannel initialization failed");
-                pthread_mutex_unlock(&mMutex);
-                goto error_exit;
-            }
-        }
-
-        // Configure stream for HDR+.
-        if (mHdrPlusClient != nullptr) {
-            rc = configureHdrPlusStreamsLocked(sensor_mode_info);
-            if (rc != OK) {
-                LOGE("%s: Failed to configure HDR+ streams.", __FUNCTION__);
                 pthread_mutex_unlock(&mMutex);
                 goto error_exit;
             }
@@ -4908,33 +4879,6 @@ int QCamera3HardwareInterface::processCaptureRequest(
             }
         }
 
-        if (mHdrPlusRawSrcChannel) {
-            LOGD("Starting HDR+ RAW stream");
-            rc = mHdrPlusRawSrcChannel->start();
-            if (rc != NO_ERROR) {
-                LOGE("Error Starting HDR+ RAW Channel");
-                for (List<stream_info_t *>::iterator it = mStreamInfo.begin();
-                      it != mStreamInfo.end(); it++) {
-                    QCamera3Channel *channel =
-                        (QCamera3Channel *)(*it)->stream->priv;
-                    LOGH("Stopping Processing Channel mask=%d",
-                        channel->getStreamTypeMask());
-                    channel->stop();
-                }
-                if (mSupportChannel)
-                    mSupportChannel->stop();
-                if (mAnalysisChannel) {
-                    mAnalysisChannel->stop();
-                }
-                if (mRawDumpChannel) {
-                    mRawDumpChannel->stop();
-                }
-                mMetadataChannel->stop();
-                pthread_mutex_unlock(&mMutex);
-                goto error_exit;
-            }
-        }
-
         if (mChannelHandle) {
 
             rc = mCameraHandle->ops->start_channel(mCameraHandle->camera_handle,
@@ -4954,6 +4898,30 @@ no_error:
         mWokenUpByDaemon = false;
         mPendingLiveRequest = 0;
         mFirstConfiguration = false;
+    }
+
+    // Enable HDR+ mode for the first PREVIEW_INTENT request.
+    if (mHdrPlusClient != nullptr && !mFirstPreviewIntentSeen &&
+            meta.exists(ANDROID_CONTROL_CAPTURE_INTENT) &&
+            meta.find(ANDROID_CONTROL_CAPTURE_INTENT).data.u8[0] ==
+            ANDROID_CONTROL_CAPTURE_INTENT_PREVIEW) {
+        rc = enableHdrPlusModeLocked();
+        if (rc != OK) {
+            LOGE("%s: Failed to configure HDR+ streams.", __FUNCTION__);
+            pthread_mutex_unlock(&mMutex);
+            return rc;
+        }
+
+        // Start HDR+ RAW source channel if AP provides RAW input buffers.
+        if (mHdrPlusRawSrcChannel) {
+            rc = mHdrPlusRawSrcChannel->start();
+            if (rc != OK) {
+                LOGE("Error Starting HDR+ RAW Channel");
+                pthread_mutex_unlock(&mMutex);
+                return rc;
+            }
+        }
+        mFirstPreviewIntentSeen = true;
     }
 
     uint32_t frameNumber = request->frame_number;
@@ -5075,7 +5043,7 @@ no_error:
     HdrPlusPendingRequest pendingHdrPlusRequest = {};
 
     // If this request has a still capture intent, try to submit an HDR+ request.
-    if (mHdrPlusClient != nullptr &&
+    if (mHdrPlusClient != nullptr && mHdrPlusModeEnabled &&
             mCaptureIntent == ANDROID_CONTROL_CAPTURE_INTENT_STILL_CAPTURE) {
         hdrPlusRequest = trySubmittingHdrPlusRequest(&pendingHdrPlusRequest, *request, meta);
     }
@@ -13672,7 +13640,8 @@ bool QCamera3HardwareInterface::trySubmittingHdrPlusRequest(HdrPlusPendingReques
     if (!metadata.exists(ANDROID_NOISE_REDUCTION_MODE) ||
          metadata.find(ANDROID_NOISE_REDUCTION_MODE).data.u8[0] !=
             ANDROID_NOISE_REDUCTION_MODE_HIGH_QUALITY) {
-        ALOGD("%s: Not an HDR+ request: ANDROID_NOISE_REDUCTION_MODE is not HQ.", __FUNCTION__);
+        ALOGD("%s: Not an HDR+ request: ANDROID_NOISE_REDUCTION_MODE is not HQ: %d", __FUNCTION__,
+                metadata.find(ANDROID_NOISE_REDUCTION_MODE).data.u8[0]);
         return false;
     }
 
@@ -13686,6 +13655,12 @@ bool QCamera3HardwareInterface::trySubmittingHdrPlusRequest(HdrPlusPendingReques
     if (request.num_output_buffers != 1 ||
             request.output_buffers[0].stream->format != HAL_PIXEL_FORMAT_BLOB) {
         ALOGD("%s: Not an HDR+ request: Only Jpeg output is supported.", __FUNCTION__);
+        for (uint32_t i = 0; i < request.num_output_buffers; i++) {
+            ALOGD("%s: output_buffers[%u]: %dx%d format %d", __FUNCTION__, i,
+                    request.output_buffers[0].stream->width,
+                    request.output_buffers[0].stream->height,
+                    request.output_buffers[0].stream->format);
+        }
         return false;
     }
 
@@ -13722,8 +13697,56 @@ bool QCamera3HardwareInterface::trySubmittingHdrPlusRequest(HdrPlusPendingReques
     return true;
 }
 
-status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked(
-        const cam_sensor_mode_info_t &sensor_mode_info)
+status_t QCamera3HardwareInterface::enableHdrPlusModeLocked()
+{
+    if (mHdrPlusClient == nullptr) {
+        ALOGD("%s: HDR+ client is not created.", __FUNCTION__);
+        return -ENODEV;
+    }
+
+    // Connect to HDR+ service
+    status_t res = mHdrPlusClient->connect(this);
+    if (res != OK) {
+        LOGE("%s: Failed to connect to HDR+ client: %s (%d).", __FUNCTION__,
+            strerror(-res), res);
+        return res;
+    }
+
+    // Set static metadata.
+    res = mHdrPlusClient->setStaticMetadata(*gStaticMetadata[mCameraId]);
+    if (res != OK) {
+        LOGE("%s: Failed set static metadata in HDR+ client: %s (%d).", __FUNCTION__,
+            strerror(-res), res);
+        mHdrPlusClient->disconnect();
+        return res;
+    }
+
+    // Configure stream for HDR+.
+    res = configureHdrPlusStreamsLocked();
+    if (res != OK) {
+        LOGE("%s: Failed to configure HDR+ streams: %s (%d)", __FUNCTION__, strerror(-res), res);
+        mHdrPlusClient->disconnect();
+        return res;
+    }
+
+    mHdrPlusModeEnabled = true;
+    ALOGD("%s: HDR+ mode enabled", __FUNCTION__);
+
+    return OK;
+}
+
+void QCamera3HardwareInterface::disableHdrPlusModeLocked()
+{
+    // Disconnect from HDR+ service.
+    if (mHdrPlusClient != nullptr && mHdrPlusModeEnabled) {
+        mHdrPlusClient->disconnect();
+    }
+
+    mHdrPlusModeEnabled = false;
+    ALOGD("%s: HDR+ mode disabled", __FUNCTION__);
+}
+
+status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked()
 {
     pbcamera::InputConfiguration inputConfig;
     std::vector<pbcamera::StreamConfiguration> outputStreamConfigs;
@@ -13745,26 +13768,23 @@ status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked(
     } else {
         // Sensor MIPI will send data to Easel.
         inputConfig.isSensorInput = true;
-        inputConfig.sensorMode.pixelArrayWidth = sensor_mode_info.pixel_array_size.width;
-        inputConfig.sensorMode.pixelArrayHeight = sensor_mode_info.pixel_array_size.height;
-        inputConfig.sensorMode.activeArrayWidth = sensor_mode_info.active_array_size.width;
-        inputConfig.sensorMode.activeArrayHeight = sensor_mode_info.active_array_size.height;
-        inputConfig.sensorMode.outputPixelClkHz = sensor_mode_info.op_pixel_clk;
+        inputConfig.sensorMode.pixelArrayWidth = mSensorModeInfo.pixel_array_size.width;
+        inputConfig.sensorMode.pixelArrayHeight = mSensorModeInfo.pixel_array_size.height;
+        inputConfig.sensorMode.activeArrayWidth = mSensorModeInfo.active_array_size.width;
+        inputConfig.sensorMode.activeArrayHeight = mSensorModeInfo.active_array_size.height;
+        inputConfig.sensorMode.outputPixelClkHz = mSensorModeInfo.op_pixel_clk;
+        if (mSensorModeInfo.num_raw_bits != 10) {
+            ALOGE("%s: Only RAW10 is supported but this sensor mode has %d raw bits.", __FUNCTION__,
+                    mSensorModeInfo.num_raw_bits);
+            return BAD_VALUE;
+        }
+
+        inputConfig.sensorMode.format = HAL_PIXEL_FORMAT_RAW10;
     }
 
     // Get output configurations.
     // Easel may need to output RAW16 buffers if mRawChannel was created.
-    if (mRawChannel != nullptr) {
-        pbcamera::StreamConfiguration outputConfig;
-        res = fillPbStreamConfig(&outputConfig, kPbRaw16OutputStreamId,
-                HAL_PIXEL_FORMAT_RAW16, mRawChannel, /*stream index*/0);
-        if (res != OK) {
-            LOGE("%s: Failed to get fill stream config for raw stream: %s (%d)",
-                    __FUNCTION__, strerror(-res), res);
-            return res;
-        }
-        outputStreamConfigs.push_back(outputConfig);
-    }
+    // TODO: handle RAW16 outputs.
 
     // Easel may need to output YUV output buffers if mPictureChannel was created.
     pbcamera::StreamConfiguration yuvOutputConfig;

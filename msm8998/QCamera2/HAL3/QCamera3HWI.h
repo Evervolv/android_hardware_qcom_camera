@@ -682,8 +682,14 @@ private:
     status_t fillPbStreamConfig(pbcamera::StreamConfiguration *config, uint32_t pbStreamId,
             int pbStreamFormat, QCamera3Channel *channel, uint32_t streamIndex);
 
+    // Enable HDR+ mode. Easel will start capturing ZSL buffers.
+    status_t enableHdrPlusModeLocked();
+
+    // Disable HDR+ mode. Easel will stop capturing ZSL buffers.
+    void disableHdrPlusModeLocked();
+
     // Configure streams for HDR+.
-    status_t configureHdrPlusStreamsLocked(const cam_sensor_mode_info_t &sensor_mode_info);
+    status_t configureHdrPlusStreamsLocked();
 
     // Try to submit an HDR+ request. Returning true if an HDR+ request was submitted. Returning
     // false if it is not an HDR+ request or submitting an HDR+ request failed.
@@ -699,11 +705,25 @@ private:
             const camera_metadata_t &resultMetadata) override;
     void onFailedCaptureResult(pbcamera::CaptureResult *failedResult) override;
 
+    // HDR+ client instance. If null, Easel was not detected on this device.
     std::shared_ptr<HdrPlusClient> mHdrPlusClient;
 
     // Map from frame number to frame. Must be protected by mHdrPlusPendingRequestsLock.
     std::map<uint32_t, HdrPlusPendingRequest> mHdrPlusPendingRequests;
     Mutex mHdrPlusPendingRequestsLock;
+
+    // If HDR+ mode is enabled i.e. if Easel is capturing ZSL buffers.
+    bool mHdrPlusModeEnabled;
+
+    // If HAL provides RAW input buffers to Easel. This is just for prototyping.
+    bool mIsApInputUsedForHdrPlus;
+
+    // Current sensor mode information.
+    cam_sensor_mode_info_t mSensorModeInfo;
+
+    // If there is a capture request with preview intent since stream configuration.
+    bool mFirstPreviewIntentSeen;
+
     bool m_bSensorHDREnabled;
 };
 

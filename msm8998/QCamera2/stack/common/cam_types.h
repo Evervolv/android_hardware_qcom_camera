@@ -608,6 +608,7 @@ typedef struct {
     cam_dimension_t active_array_size; // Size of the active array.
     cam_dimension_t pixel_array_size;  // Size of the pixel array.
     uint32_t op_pixel_clk;             // Sensor output rate.
+    uint32_t num_raw_bits;             // Number of bits for RAW. 0 if not RAW.
 } cam_sensor_mode_info_t;
 
 typedef struct {
