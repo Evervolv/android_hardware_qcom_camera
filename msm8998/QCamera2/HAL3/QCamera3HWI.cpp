@@ -401,6 +401,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mCallbacks(callbacks),
       mCaptureIntent(0),
       mCacMode(0),
+      mHybridAeEnable(0),
       /* DevCamDebug metadata internal m control*/
       mDevCamDebugMetaEnable(0),
       /* DevCamDebug metadata end */
@@ -3248,6 +3249,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                     pendingRequest.timestamp, pendingRequest.request_id,
                     pendingRequest.jpegMetadata, pendingRequest.pipeline_depth,
                     pendingRequest.capture_intent,
+                    pendingRequest.hybrid_ae_enable,
                      /* DevCamDebug metadata translateFromHalMetadata function call*/
                     pendingRequest.DevCamDebug_meta_enable,
                     /* DevCamDebug metadata end */
@@ -4922,6 +4924,11 @@ no_error:
     pendingRequest.settings = saveRequestSettings(mCurJpegMeta, request);
     pendingRequest.shutter_notified = false;
     pendingRequest.capture_intent = mCaptureIntent;
+    if (meta.exists(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE)) {
+        mHybridAeEnable =
+                meta.find(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE).data.u8[0];
+    }
+    pendingRequest.hybrid_ae_enable = mHybridAeEnable;
     /* DevCamDebug metadata processCaptureRequest */
     if (meta.exists(DEVCAMDEBUG_META_ENABLE)) {
         mDevCamDebugMetaEnable =
@@ -5851,6 +5858,7 @@ template <class mapType> cam_cds_mode_type_t lookupProp(const mapType *arr,
  *   @timestamp: metadata buffer timestamp
  *   @request_id: request id
  *   @jpegMetadata: additional jpeg metadata
+ *   @hybrid_ae_enable: whether hybrid ae is enabled
  *   @DevCamDebug_meta_enable: enable DevCamDebug meta
  *   // DevCamDebug metadata end
  *   @pprocDone: whether internal offline postprocsesing is done
@@ -5866,6 +5874,7 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                                  const CameraMetadata& jpegMetadata,
                                  uint8_t pipeline_depth,
                                  uint8_t capture_intent,
+                                 uint8_t hybrid_ae_enable,
                                  /* DevCamDebug metadata translateFromHalMetadata argument */
                                  uint8_t DevCamDebug_meta_enable,
                                  /* DevCamDebug metadata end */
@@ -5890,6 +5899,7 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     camMetadata.update(ANDROID_REQUEST_ID, &request_id, 1);
     camMetadata.update(ANDROID_REQUEST_PIPELINE_DEPTH, &pipeline_depth, 1);
     camMetadata.update(ANDROID_CONTROL_CAPTURE_INTENT, &capture_intent, 1);
+    camMetadata.update(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE, &hybrid_ae_enable, 1);
     if (mBatchSize == 0) {
         // DevCamDebug metadata translateFromHalMetadata. Only update this one for non-HFR mode
         camMetadata.update(DEVCAMDEBUG_META_ENABLE, &DevCamDebug_meta_enable, 1);
@@ -8968,7 +8978,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_HISTOGRAM_MODE, ANDROID_STATISTICS_SHARPNESS_MAP_MODE,
        ANDROID_STATISTICS_LENS_SHADING_MAP_MODE, ANDROID_TONEMAP_CURVE_BLUE,
        ANDROID_TONEMAP_CURVE_GREEN, ANDROID_TONEMAP_CURVE_RED, ANDROID_TONEMAP_MODE,
-       ANDROID_BLACK_LEVEL_LOCK,
+       ANDROID_BLACK_LEVEL_LOCK, NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
        /* DevCamDebug metadata request_keys_basic */
        DEVCAMDEBUG_META_ENABLE,
        /* DevCamDebug metadata end */
@@ -9010,6 +9020,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
 #ifndef USE_HAL_3_3
        ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST,
 #endif
+       NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
        NEXUS_EXPERIMENTAL_2016_AF_SCENE_CHANGE,
        // DevCamDebug metadata result_keys_basic
        DEVCAMDEBUG_META_ENABLE,

@@ -239,6 +239,7 @@ public:
                             nsecs_t timestamp, int32_t request_id,
                             const CameraMetadata& jpegMetadata, uint8_t pipeline_depth,
                             uint8_t capture_intent,
+                            uint8_t hybrid_ae_enable,
                             /* DevCamDebug metadata translateFromHalMetadata augment .h */
                             uint8_t DevCamDebug_meta_enable,
                             /* DevCamDebug metadata end */
@@ -496,6 +497,7 @@ private:
         uint8_t capture_intent;
         uint8_t fwkCacMode;
         bool shutter_notified;
+        uint8_t hybrid_ae_enable;
         /* DevCamDebug metadata PendingRequestInfo */
         uint8_t DevCamDebug_meta_enable;
         /* DevCamDebug metadata end */
@@ -546,6 +548,7 @@ private:
 
     uint8_t mCaptureIntent;
     uint8_t mCacMode;
+    uint8_t mHybridAeEnable;
     // DevCamDebug metadata internal variable
     uint8_t mDevCamDebugMetaEnable;
     /* DevCamDebug metadata end */
