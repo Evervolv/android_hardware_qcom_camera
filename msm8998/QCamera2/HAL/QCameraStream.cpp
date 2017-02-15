@@ -2810,6 +2810,8 @@ int32_t QCameraStream::processCameraControl(uint32_t camState)
             mActiveHandle = get_main_camera_handle(mHandle);
         } else if (camState == MM_CAMERA_TYPE_AUX) {
             mActiveHandle = get_aux_camera_handle(mHandle);
+        } else {
+            mActiveHandle = mHandle;
         }
         mActiveCamera = camState;
     }
@@ -2866,9 +2868,10 @@ bool QCameraStream::needCbSwitch()
         return false;
     }
 
-    if ((mStreamInfo->pp_config.feature_mask == CAM_QTI_FEATURE_SAT)
+    if ((mStreamInfo->pp_config.feature_mask & CAM_QTI_FEATURE_SAT)
             || (needFrameSync())
-            || (getMyType() == CAM_STREAM_TYPE_SNAPSHOT)) {
+            || (getMyType() == CAM_STREAM_TYPE_SNAPSHOT)
+            || (getMyType() == CAM_STREAM_TYPE_METADATA)) {
         return false;
     } else {
         return true;
@@ -2893,9 +2896,6 @@ bool QCameraStream::needFrameSync()
     }
 
     switch (getMyType()) {
-    case CAM_STREAM_TYPE_METADATA:
-        return true;
-        break;
     default:
         return false;
         break;

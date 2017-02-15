@@ -717,7 +717,7 @@ static uint32_t mm_camera_intf_add_channel(uint32_t camera_handle,
             pthread_mutex_unlock(&g_intf_lock);
         }
     }
-    LOGH("camera_handle = %u ch_id = %u X", ch_id);
+    LOGH("camera_handle = %u ch_id = %u X", camera_handle, ch_id);
     return ch_id;
 }
 
@@ -2635,9 +2635,11 @@ uint8_t get_num_of_cameras()
     int num_media_devices = 0;
     int8_t num_cameras = 0;
     char subdev_name[32];
+    char prop[PROPERTY_VALUE_MAX];
+#ifdef DAEMON_PRESENT
     int32_t sd_fd = -1;
     struct sensor_init_cfg_data cfg;
-    char prop[PROPERTY_VALUE_MAX];
+#endif
 
     LOGD("E");
 
@@ -2704,6 +2706,7 @@ uint8_t get_num_of_cameras()
         dev_fd = -1;
     }
 
+#ifdef DAEMON_PRESENT
     /* Open sensor_init subdev */
     sd_fd = open(subdev_name, O_RDWR);
     if (sd_fd < 0) {
@@ -2717,7 +2720,7 @@ uint8_t get_num_of_cameras()
         LOGE("failed");
     }
     close(sd_fd);
-    dev_fd = -1;
+#endif
 
     num_media_devices = 0;
     while (1) {
@@ -3132,7 +3135,8 @@ int32_t camera_open(uint8_t camera_idx, mm_camera_vtbl_t **camera_vtbl)
         LOGH("Dual Camera: Main ID = %d Aux ID = %d", cam_idx, aux_idx);
     }
 
-    if (cam_idx >= (uint32_t)g_cam_ctrl.num_cam) {
+    if (cam_idx >= (uint32_t)g_cam_ctrl.num_cam || cam_idx >=
+        MM_CAMERA_MAX_NUM_SENSORS || aux_idx >= MM_CAMERA_MAX_NUM_SENSORS) {
         LOGE("Invalid camera_idx (%d)", cam_idx);
         return -EINVAL;
     }
@@ -3196,17 +3200,19 @@ int32_t camera_open(uint8_t camera_idx, mm_camera_vtbl_t **camera_vtbl)
             rc = mm_camera_muxer_camera_open(aux_idx, cam_obj);
         }
         if (rc != 0) {
+            int32_t temp_rc = 0;
             LOGE("muxer open err = %d", rc);
             pthread_mutex_lock(&g_intf_lock);
             g_cam_ctrl.cam_obj[cam_idx] = NULL;
             pthread_mutex_lock(&cam_obj->cam_lock);
             pthread_mutex_unlock(&g_intf_lock);
-            rc = mm_camera_close(cam_obj);
+            temp_rc = mm_camera_close(cam_obj);
             pthread_mutex_destroy(&cam_obj->cam_lock);
             pthread_mutex_destroy(&cam_obj->muxer_lock);
             free(cam_obj);
             cam_obj = NULL;
             *camera_vtbl = NULL;
+            // Propagate the original error to caller
             return rc;
         }
     }

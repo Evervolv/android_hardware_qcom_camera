@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -205,20 +205,22 @@ typedef struct {
     /* AEC sync OTP data */
     /* AEC sync brightness ration. Fixed Point Q10*/
     int16_t    brightness_ratio;
-    /* Reference mono gain value obtained from setup stage and used during calibration stage */
+    /* Reference aux gain value obtained from setup stage and used during calibration stage */
     /* Fixed Point Q10 */
-    int16_t    ref_mono_gain;
-    /* Reference mono line count obtained from setup stage and used during calibration stage */
-    uint16_t   ref_mono_linecount;
-    /* Reference bayer gain value obtained from setup stage and used during calibration stage */
+    int16_t    ref_aux_gain;
+    /* Reference aux line count obtained from setup stage and used during calibration stage */
+    uint16_t   ref_aux_linecount;
+    /* Reference master gain value obtained from setup stage and used during calibration stage */
     /* Fixed Point Q10 */
-    int16_t    ref_bayer_gain;
-    /* Reference bayer line count obtained from setup stage and used during calibration stage */
-    uint16_t   ref_bayer_linecount;
-    /* Reference bayer color temperature */
-    uint16_t   ref_bayer_color_temperature;
+    int16_t    ref_master_gain;
+    /* Reference master line count obtained from setup stage and used during calibration stage */
+    uint16_t   ref_master_linecount;
+    /* Reference master color temperature */
+    uint16_t   ref_master_color_temperature;
     /* Reserved for future use */
     float      reserved[RELCAM_CALIB_RESERVED_MAX];
+    void       *dc_otp_params;
+    int        dc_otp_size; /* in bytes */
 } cam_related_system_calibration_data_t;
 #pragma pack()
 
@@ -480,6 +482,7 @@ typedef struct cam_capability{
     cam_format_t supported_scalar_fmts[CAM_FORMAT_MAX];
 
     uint32_t max_face_detection_count;
+    uint8_t face_bsgc;
 
     uint8_t histogram_supported;
     /* Number of histogram buckets supported */
@@ -628,6 +631,10 @@ typedef struct cam_capability{
     size_t supported_ir_mode_cnt;
     cam_ir_mode_type_t supported_ir_modes[CAM_IR_MODE_MAX];
 
+    /* Supported binning correction Mode */
+    size_t supported_binning_correction_mode_cnt;
+    cam_binning_correction_mode_t supported_binning_modes[CAM_BINNING_CORRECTION_MODE_MAX];
+
     /*camera index*/
     uint32_t camera_index;
 
@@ -669,6 +676,7 @@ typedef struct {
     /* opaque metadata required for reprocessing */
     int32_t private_data[MAX_METADATA_PRIVATE_PAYLOAD_SIZE_IN_BYTES];
     cam_rect_t crop_rect;
+    uint8_t is_uv_subsampled;
 } cam_reprocess_param;
 
 typedef struct {
@@ -921,6 +929,7 @@ typedef struct {
     INCLUDE(CAM_INTF_PARM_FOCUS_MODE,                   uint32_t,                    1);
     INCLUDE(CAM_INTF_PARM_MANUAL_FOCUS_POS,             cam_manual_focus_parm_t,     1);
     INCLUDE(CAM_INTF_META_AF_ROI,                       cam_area_t,                  1);
+    INCLUDE(CAM_INTF_META_AF_DEFAULT_ROI,               cam_rect_t,                  1);
     INCLUDE(CAM_INTF_META_AF_STATE,                     uint32_t,                    1);
     INCLUDE(CAM_INTF_PARM_WHITE_BALANCE,                int32_t,                     1);
     INCLUDE(CAM_INTF_META_AWB_REGIONS,                  cam_area_t,                  1);
@@ -1000,6 +1009,8 @@ typedef struct {
     INCLUDE(CAM_INTF_META_SNAP_CROP_INFO_ISP,           cam_stream_crop_info_t,   1);
     INCLUDE(CAM_INTF_META_SNAP_CROP_INFO_CPP,           cam_stream_crop_info_t,   1);
     INCLUDE(CAM_INTF_META_DCRF,                         cam_dcrf_result_t,        1);
+    INCLUDE(CAM_INTF_PARM_SYNC_DC_PARAMETERS,           uint32_t,                  1);
+    INCLUDE(CAM_INTF_META_AF_FOCUS_POS,                 cam_af_focus_pos_t, 1);
 
     /* HAL1 specific */
     /* read only */
@@ -1171,6 +1182,9 @@ typedef struct {
     INCLUDE(CAM_INTF_META_DEV_CAM_AWB_DECISION,         int32_t,                     1);
     /* DevCamDebug metadata end */
     INCLUDE(CAM_INTF_META_ISP_POST_STATS_SENSITIVITY,   float,                       1);
+    INCLUDE(CAM_INTF_PARM_DC_USERZOOM,                  int32_t,                     1);
+    INCLUDE(CAM_INTF_META_BINNING_CORRECTION_MODE,      cam_binning_correction_mode_t,  1);
+    INCLUDE(CAM_INTF_META_OIS_READ_DATA,                cam_ois_data_t,              1);
 } metadata_data_t;
 
 /* Update clear_metadata_buffer() function when a new is_xxx_valid is added to

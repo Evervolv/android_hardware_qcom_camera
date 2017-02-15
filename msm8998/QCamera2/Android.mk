@@ -59,7 +59,9 @@ LOCAL_SRC_FILES += \
         HAL/QCameraParameters.cpp \
         HAL/QCameraParametersIntf.cpp \
         HAL/QCameraThermalAdapter.cpp \
-        util/QCameraFOVControl.cpp
+        util/QCameraFOVControl.cpp \
+        util/QCameraHALPP.cpp \
+        util/QCameraDualFOVPP.cpp
 endif
 
 # System header file path prefix
@@ -101,7 +103,7 @@ LOCAL_C_INCLUDES := \
 
 #HAL 1.0 Include paths
 LOCAL_C_INCLUDES += \
-        hardware/qcom/camera/QCamera2/HAL
+        $(LOCAL_PATH)/HAL
 
 ifeq ($(TARGET_COMPILE_WITH_MSM_KERNEL),true)
 LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
@@ -111,11 +113,11 @@ ifeq ($(TARGET_TS_MAKEUP),true)
 LOCAL_CFLAGS += -DTARGET_TS_MAKEUP
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/HAL/tsMakeuplib/include
 endif
-ifneq (,$(filter msm8974 msm8916 msm8226 msm8610 msm8916 apq8084 msm8084 msm8994 msm8992 msm8952 msm8937 msm8953 msm8996 msmcobalt msmfalcon msm8998, $(TARGET_BOARD_PLATFORM)))
+ifneq (,$(filter msm8974 msm8916 msm8226 msm8610 msm8916 apq8084 msm8084 msm8994 msm8992 msm8952 msm8937 msm8953 msm8996 msmcobalt sdm660 msm8998, $(TARGET_BOARD_PLATFORM)))
     LOCAL_CFLAGS += -DVENUS_PRESENT
 endif
 
-ifneq (,$(filter msm8996 msmcobalt msmfalcon msm8998,$(TARGET_BOARD_PLATFORM)))
+ifneq (,$(filter msm8996 msmcobalt sdm660 msm8998,$(TARGET_BOARD_PLATFORM)))
     LOCAL_CFLAGS += -DUBWC_PRESENT
 endif
 
@@ -128,7 +130,7 @@ LOCAL_C_INCLUDES += \
         $(TARGET_OUT_HEADERS)/mm-core/omxcore \
         $(TARGET_OUT_HEADERS)/qcom/display
 LOCAL_C_INCLUDES += \
-        hardware/qcom/display/libqservice
+        $(SRC_DISPLAY_HAL_DIR)/libqservice
 LOCAL_SHARED_LIBRARIES := libcamera_client liblog libhardware libutils libcutils libdl libsync libgui
 LOCAL_SHARED_LIBRARIES += libmmcamera_interface libmmjpeg_interface libui libcamera_metadata
 LOCAL_SHARED_LIBRARIES += libqdMetaData libqservice libbinder

@@ -346,7 +346,8 @@ private:
     int64_t getMinFrameDuration(const camera3_capture_request_t *request);
     void handleMetadataWithLock(mm_camera_super_buf_t *metadata_buf,
             bool free_and_bufdone_meta_buf,
-            bool firstMetadataInBatch);
+            bool firstMetadataInBatch,
+            bool *p_is_metabuf_queued);
     void handleBatchMetadata(mm_camera_super_buf_t *metadata_buf,
             bool free_and_bufdone_meta_buf);
     void handleBufferWithLock(camera3_stream_buffer_t *buffer,
@@ -470,6 +471,7 @@ private:
     uint8_t m_bTnrVideo;
     uint8_t m_debug_avtimer;
     uint8_t m_bVideoHdrEnabled;
+    uint8_t m_cacModeDisabled;
 
     /* Data structure to store pending request */
     typedef struct {
@@ -563,6 +565,7 @@ private:
     float mHFRVideoFps;
 public:
     uint8_t mOpMode;
+    bool mStreamConfig;
 private:
     uint32_t mFirstFrameNumberInBatch;
     camera3_stream_t mDummyBatchStream;
@@ -583,6 +586,7 @@ private:
     /* sensor output size with current stream configuration */
     QCamera3CropRegionMapper mCropRegionMapper;
 
+    cam_feature_mask_t mCurrFeatureState;
     /* Ldaf calibration data */
     bool mLdafCalibExist;
     uint32_t mLdafCalib[2];
@@ -623,6 +627,12 @@ private:
             cam_ir_mode_type_t> IR_MODES_MAP[];
     static const QCameraMap<qcamera3_ext_instant_aec_mode_t,
             cam_aec_convergence_type> INSTANT_AEC_MODES_MAP[];
+    static const QCameraMap<camera_metadata_enum_android_binning_correction_mode_t,
+            cam_binning_correction_mode_t> BINNING_CORRECTION_MODES_MAP[];
+    static const QCameraMap<qcamera3_ext_exposure_meter_mode_t,
+            cam_auto_exposure_mode_type> AEC_MODES_MAP[];
+    static const QCameraMap<qcamera3_ext_iso_mode_t,
+            cam_iso_mode_type> ISO_MODES_MAP[];
     static const QCameraPropMap CDS_MAP[];
 
     pendingRequestIterator erasePendingRequest(pendingRequestIterator i);

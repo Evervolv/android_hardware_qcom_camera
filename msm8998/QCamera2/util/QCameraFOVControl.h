@@ -54,10 +54,16 @@ typedef enum {
 
 typedef enum {
     STATE_WIDE,
-    STATE_TRANSITION_WIDE_TO_TELE,
-    STATE_TELE,
-    STATE_TRANSITION_TELE_TO_WIDE
+    STATE_TRANSITION,
+    STATE_TELE
 } dual_cam_state;
+
+typedef enum {
+    ZOOM_STABLE,
+    ZOOM_IN,
+    ZOOM_OUT
+} dual_cam_zoom_dir;
+
 
 
 typedef struct {
@@ -81,29 +87,43 @@ typedef struct {
 } dual_cam_3A_status_t;
 
 typedef struct {
-    uint8_t         status;
-    uint32_t        shiftHorz;
-    uint32_t        shiftVert;
-    uint32_t        activeCamState;
-    uint8_t         camMasterPreview;
-    uint8_t         camMaster3A;
+    uint32_t shiftHorz;
+    uint32_t shiftVert;
+} spatial_align_shift_t;
+
+typedef struct {
+    uint8_t               readyStatus;
+    uint8_t               camMasterHint;
+    uint8_t               camMasterPreview;
+    uint8_t               camMaster3A;
+    uint32_t              activeCameras;
+    spatial_align_shift_t shiftWide;
+    spatial_align_shift_t shiftTele;
 } spatial_align_result_t;
 
 typedef struct {
     float    cropRatio;
     float    cutOverFactor;
-    float    cutOverMainToAux;
-    float    cutOverAuxToMain;
+    float    cutOverWideToTele;
+    float    cutOverTeleToWide;
     float    transitionHigh;
     float    transitionLow;
     uint32_t waitTimeForHandoffMs;
 } dual_cam_transition_params_t;
 
 typedef struct {
+    bool                         configCompleted;
     uint32_t                     zoomMain;
     uint32_t                     zoomAux;
+    uint32_t                     zoomWide;
+    uint32_t                     zoomTele;
+    uint32_t                     zoomWidePrev;
+    uint32_t                     zoomMainPrev;
     uint32_t                    *zoomRatioTable;
     uint32_t                     zoomRatioTableCount;
+    uint32_t                     zoomStableCount;
+    uint32_t                     zoomStableCountThreshold;
+    dual_cam_zoom_dir            zoomDirection;
     cam_sync_type_t              camWide;
     cam_sync_type_t              camTele;
     dual_cam_state               camState;
@@ -111,21 +131,43 @@ typedef struct {
     cam_dimension_t              previewSize;
     spatial_align_result_t       spatialAlignResult;
     uint32_t                     availableSpatialAlignSolns;
-    uint32_t                     shiftHorzAdjMain;
+    uint32_t                     shiftHorzAdjusted;
+    uint32_t                     shiftVertAdjusted;
     float                        camMainWidthMargin;
     float                        camMainHeightMargin;
     float                        camAuxWidthMargin;
     float                        camAuxHeightMargin;
     bool                         camcorderMode;
+    bool                         wideCamStreaming;
+    bool                         teleCamStreaming;
+    bool                         fallbackEnabled;
+    bool                         fallbackToWide;
     float                        basicFovRatio;
+    uint32_t                     brightnessStableCount;
+    uint32_t                     brightnessStableCountThreshold;
+    uint32_t                     focusDistStableCount;
+    uint32_t                     focusDistStableCountThreshold;
     dual_cam_transition_params_t transitionParams;
+    uint32_t                     afStatusMain;
+    uint32_t                     afStatusAux;
 } fov_control_data_t;
+
+typedef struct {
+    bool     enablePostProcess;
+    float    zoomMin;
+    float    zoomMax;
+    uint16_t luxMin;
+    uint16_t focusDistanceMin;
+} snapshot_pp_config_t;
 
 typedef struct {
     float    percentMarginHysterisis;
     float    percentMarginAux;
     float    percentMarginMain;
     uint32_t waitTimeForHandoffMs;
+    uint16_t auxSwitchBrightnessMin;
+    uint16_t auxSwitchFocusDistCmMin;
+    snapshot_pp_config_t snapshotPPConfig;
 } fov_control_config_t;
 
 typedef struct{
@@ -147,10 +189,12 @@ typedef struct {
 } dual_cam_params_t;
 
 typedef struct {
+    bool            isValid;
     cam_sync_type_t camMasterPreview;
     cam_sync_type_t camMaster3A;
-    uint32_t        activeCamState;
+    uint32_t        activeCameras;
     bool            snapshotPostProcess;
+    bool            snapshotPostProcessZoomRange;
 } fov_control_result_t;
 
 
@@ -165,6 +209,7 @@ public:
     metadata_buffer_t* processResultMetadata(metadata_buffer_t* metaMainCam,
             metadata_buffer_t* metaAuxCam);
     fov_control_result_t getFovControlResult();
+    cam_frame_margins_t getFrameMargins(int8_t masterCamera);
 
 private:
     QCameraFOVControl();
@@ -173,15 +218,19 @@ private:
     bool calculateBasicFovRatio();
     bool combineFovAdjustment();
     void  calculateDualCamTransitionParams();
-    void convertUserZoomToMainAndAux(uint32_t zoom);
-    uint32_t readjustZoomForAux(uint32_t zoomMain);
-    uint32_t readjustZoomForMain(uint32_t zoomAux);
+    void convertUserZoomToWideAndTele(uint32_t zoom);
+    uint32_t readjustZoomForTele(uint32_t zoomWide);
+    uint32_t readjustZoomForWide(uint32_t zoomTele);
     uint32_t findZoomRatio(uint32_t zoom);
     inline uint32_t findZoomValue(uint32_t zoomRatio);
     cam_face_detection_data_t translateRoiFD(cam_face_detection_data_t faceDetectionInfo);
     cam_roi_info_t translateFocusAreas(cam_roi_info_t roiAfMain);
     cam_set_aec_roi_t translateMeteringAreas(cam_set_aec_roi_t roiAecMain);
     void convertDisparityForInputParams();
+    void generateFovControlResult();
+    bool isMainCamFovWider();
+    bool isSpatialAlignmentReady();
+    void resetVars();
 
     Mutex                           mMutex;
     fov_control_config_t            mFovControlConfig;
