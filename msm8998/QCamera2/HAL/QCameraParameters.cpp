@@ -10293,7 +10293,7 @@ int32_t QCameraParameters::getStreamFormat(cam_stream_type_t streamType,
             getStreamDimension(CAM_STREAM_TYPE_VIDEO , video);
             getStreamDimension(CAM_STREAM_TYPE_PREVIEW, preview);
             /* Disable UBWC for preview, though supported, to take advantage of CPP duplication*/
-            if (getRecordingHintValue() == true && (!mCommon.isVideoUBWCEnabled()) &&
+            if (getRecordingHintValue() == true && (!QCameraCommon::isVideoUBWCEnabled()) &&
                 (video.width == preview.width) &&
                 (video.height == preview.height)) {
 #if VENUS_PRESENT
@@ -10354,7 +10354,7 @@ int32_t QCameraParameters::getStreamFormat(cam_stream_type_t streamType,
         break;
     case CAM_STREAM_TYPE_VIDEO:
         if (isUBWCEnabled()) {
-            if (mCommon.isVideoUBWCEnabled()) {
+            if (QCameraCommon::isVideoUBWCEnabled()) {
                 format = CAM_FORMAT_YUV_420_NV12_UBWC;
             } else {
                 format = CAM_FORMAT_YUV_420_NV21_VENUS;

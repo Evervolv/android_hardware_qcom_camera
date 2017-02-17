@@ -130,10 +130,10 @@ public:
                 QCamera3Stream *stream, void *userdata);
     void dumpYUV(mm_camera_buf_def_t *frame, cam_dimension_t dim,
             cam_frame_len_offset_t offset, uint8_t name);
-    bool isUBWCEnabled();
+    static bool isUBWCEnabled();
     void setUBWCEnabled(bool val);
-    cam_format_t getStreamDefaultFormat(cam_stream_type_t type,
-            uint32_t width, uint32_t height);
+    static cam_format_t getStreamDefaultFormat(cam_stream_type_t type,
+            uint32_t width, uint32_t height, bool forcePreviewUBWC);
     virtual int32_t timeoutFrame(__unused uint32_t frameNumber) = 0;
 
     void *mUserData;

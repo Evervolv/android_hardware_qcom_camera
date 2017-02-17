@@ -343,6 +343,8 @@ private:
                                List<InternalRequest> &internallyRequestedStreams);
     int validateStreamDimensions(camera3_stream_configuration_t *streamList);
     int validateStreamRotations(camera3_stream_configuration_t *streamList);
+    int validateUsageFlags(const camera3_stream_configuration_t *streamList);
+    int validateUsageFlagsForEis(const camera3_stream_configuration_t *streamList);
     void deriveMinFrameDuration();
     void handleBuffersDuringFlushLock(camera3_stream_buffer_t *buffer);
     int64_t getMinFrameDuration(const camera3_capture_request_t *request);
