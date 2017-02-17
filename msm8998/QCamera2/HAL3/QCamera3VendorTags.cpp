@@ -97,7 +97,7 @@ const char *qcamera3_ext_section_names[QCAMERA3_SECTIONS_END -
     "org.codeaurora.qcamera3.aec_convergence_speed",
     "org.codeaurora.qcamera3.awb_convergence_speed",
     "org.codeaurora.qcamera3.instant_aec",
-    "com.google.nexus.experimental2016"
+    "com.google.nexus.experimental2016",
     "org.codeaurora.qcamera3.sharpness",
     "org.codeaurora.qcamera3.histogram",
     "org.codeaurora.qcamera3.binning_correction",
