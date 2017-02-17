@@ -6370,6 +6370,73 @@ QCamera3HardwareInterface::translateFromHalMetadata(
             float fwk_DevCamDebug_aec_lux_idx = *DevCamDebug_aec_lux_idx;
             camMetadata.update(DEVCAMDEBUG_AEC_LUX_IDX, &fwk_DevCamDebug_aec_lux_idx, 1);
         }
+        // DevCamDebug metadata translateFromHalMetadata zzHDR
+        IF_META_AVAILABLE(float, DevCamDebug_aec_l_real_gain,
+                CAM_INTF_META_DEV_CAM_AEC_L_REAL_GAIN, metadata) {
+            float fwk_DevCamDebug_aec_l_real_gain = *DevCamDebug_aec_l_real_gain;
+            camMetadata.update(DEVCAMDEBUG_AEC_L_REAL_GAIN, &fwk_DevCamDebug_aec_l_real_gain, 1);
+        }
+        IF_META_AVAILABLE(int32_t, DevCamDebug_aec_l_linecount,
+                CAM_INTF_META_DEV_CAM_AEC_L_LINECOUNT, metadata) {
+            float fwk_DevCamDebug_aec_l_linecount = *DevCamDebug_aec_l_linecount;
+            camMetadata.update(DEVCAMDEBUG_AEC_L_LINECOUNT, &fwk_DevCamDebug_aec_l_linecount, 1);
+        }
+        IF_META_AVAILABLE(float, DevCamDebug_aec_s_real_gain,
+                CAM_INTF_META_DEV_CAM_AEC_S_REAL_GAIN, metadata) {
+            float fwk_DevCamDebug_aec_s_real_gain = *DevCamDebug_aec_s_real_gain;
+            camMetadata.update(DEVCAMDEBUG_AEC_S_REAL_GAIN, &fwk_DevCamDebug_aec_s_real_gain, 1);
+        }
+        IF_META_AVAILABLE(int32_t, DevCamDebug_aec_s_linecount,
+                CAM_INTF_META_DEV_CAM_AEC_S_LINECOUNT, metadata) {
+            float fwk_DevCamDebug_aec_s_linecount = *DevCamDebug_aec_s_linecount;
+            camMetadata.update(DEVCAMDEBUG_AEC_S_LINECOUNT, &fwk_DevCamDebug_aec_s_linecount, 1);
+        }
+        IF_META_AVAILABLE(float, DevCamDebug_aec_hdr_sensitivity_ratio,
+                CAM_INTF_META_DEV_CAM_AEC_HDR_SENSITIVITY_RATIO, metadata) {
+            float fwk_DevCamDebug_aec_hdr_sensitivity_ratio =
+                *DevCamDebug_aec_hdr_sensitivity_ratio;
+            camMetadata.update(DEVCAMDEBUG_AEC_HDR_SENSITIVITY_RATIO,
+                               &fwk_DevCamDebug_aec_hdr_sensitivity_ratio, 1);
+        }
+        IF_META_AVAILABLE(float, DevCamDebug_aec_hdr_exp_time_ratio,
+                CAM_INTF_META_DEV_CAM_AEC_HDR_EXP_TIME_RATIO, metadata) {
+            float fwk_DevCamDebug_aec_hdr_exp_time_ratio = *DevCamDebug_aec_hdr_exp_time_ratio;
+            camMetadata.update(DEVCAMDEBUG_AEC_HDR_EXP_TIME_RATIO,
+                               &fwk_DevCamDebug_aec_hdr_exp_time_ratio, 1);
+        }
+        // DevCamDebug metadata translateFromHalMetadata ADRC
+        IF_META_AVAILABLE(float, DevCamDebug_aec_total_drc_gain,
+                CAM_INTF_META_DEV_CAM_AEC_TOTAL_DRC_GAIN, metadata) {
+            float fwk_DevCamDebug_aec_total_drc_gain = *DevCamDebug_aec_total_drc_gain;
+            camMetadata.update(DEVCAMDEBUG_AEC_TOTAL_DRC_GAIN,
+                               &fwk_DevCamDebug_aec_total_drc_gain, 1);
+        }
+        IF_META_AVAILABLE(float, DevCamDebug_aec_color_drc_gain,
+                CAM_INTF_META_DEV_CAM_AEC_COLOR_DRC_GAIN, metadata) {
+            float fwk_DevCamDebug_aec_color_drc_gain = *DevCamDebug_aec_color_drc_gain;
+            camMetadata.update(DEVCAMDEBUG_AEC_COLOR_DRC_GAIN,
+                               &fwk_DevCamDebug_aec_color_drc_gain, 1);
+        }
+        IF_META_AVAILABLE(float, DevCamDebug_aec_gtm_ratio,
+                CAM_INTF_META_DEV_CAM_AEC_GTM_RATIO, metadata) {
+            float fwk_DevCamDebug_aec_gtm_ratio = *DevCamDebug_aec_gtm_ratio;
+            camMetadata.update(DEVCAMDEBUG_AEC_GTM_RATIO, &fwk_DevCamDebug_aec_gtm_ratio, 1);
+        }
+        IF_META_AVAILABLE(float, DevCamDebug_aec_ltm_ratio,
+                CAM_INTF_META_DEV_CAM_AEC_LTM_RATIO, metadata) {
+            float fwk_DevCamDebug_aec_ltm_ratio = *DevCamDebug_aec_ltm_ratio;
+            camMetadata.update(DEVCAMDEBUG_AEC_LTM_RATIO, &fwk_DevCamDebug_aec_ltm_ratio, 1);
+        }
+        IF_META_AVAILABLE(float, DevCamDebug_aec_la_ratio,
+                CAM_INTF_META_DEV_CAM_AEC_LA_RATIO, metadata) {
+            float fwk_DevCamDebug_aec_la_ratio = *DevCamDebug_aec_la_ratio;
+            camMetadata.update(DEVCAMDEBUG_AEC_LA_RATIO, &fwk_DevCamDebug_aec_la_ratio, 1);
+        }
+        IF_META_AVAILABLE(float, DevCamDebug_aec_gamma_ratio,
+                CAM_INTF_META_DEV_CAM_AEC_GAMMA_RATIO, metadata) {
+            float fwk_DevCamDebug_aec_gamma_ratio = *DevCamDebug_aec_gamma_ratio;
+            camMetadata.update(DEVCAMDEBUG_AEC_GAMMA_RATIO, &fwk_DevCamDebug_aec_gamma_ratio, 1);
+        }
         // DevCamDebug metadata translateFromHalMetadata AWB
         IF_META_AVAILABLE(float, DevCamDebug_awb_r_gain,
                 CAM_INTF_META_DEV_CAM_AWB_R_GAIN, metadata) {
@@ -9473,6 +9540,20 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        DEVCAMDEBUG_AEC_REAL_GAIN,
        DEVCAMDEBUG_AEC_EXP_INDEX,
        DEVCAMDEBUG_AEC_LUX_IDX,
+       // DevCamDebug metadata result_keys zzHDR
+       DEVCAMDEBUG_AEC_L_REAL_GAIN,
+       DEVCAMDEBUG_AEC_L_LINECOUNT,
+       DEVCAMDEBUG_AEC_S_REAL_GAIN,
+       DEVCAMDEBUG_AEC_S_LINECOUNT,
+       DEVCAMDEBUG_AEC_HDR_SENSITIVITY_RATIO,
+       DEVCAMDEBUG_AEC_HDR_EXP_TIME_RATIO,
+       // DevCamDebug metadata result_keys ADRC
+       DEVCAMDEBUG_AEC_TOTAL_DRC_GAIN,
+       DEVCAMDEBUG_AEC_COLOR_DRC_GAIN,
+       DEVCAMDEBUG_AEC_GTM_RATIO,
+       DEVCAMDEBUG_AEC_LTM_RATIO,
+       DEVCAMDEBUG_AEC_LA_RATIO,
+       DEVCAMDEBUG_AEC_GAMMA_RATIO,
        // DevCamDebug metadata result_keys AWB
        DEVCAMDEBUG_AWB_R_GAIN,
        DEVCAMDEBUG_AWB_G_GAIN,

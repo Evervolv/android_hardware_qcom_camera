@@ -269,6 +269,20 @@ vendor_tag_info_t nexus_experimental_2016[NEXUS_EXPERIMENTAL_2016_END -
    { "devcamdebug_aec_real_gain",              TYPE_FLOAT },
    { "devcamdebug_aec_exp_index",              TYPE_INT32 },
    { "devcamdebug_aec_lux_idx",                TYPE_FLOAT },
+   // DevCamDebug vendor tag zzHDR
+   { "devcamdebug_aec_l_real_gain",            TYPE_FLOAT },
+   { "devcamdebug_aec_l_linecount",            TYPE_INT32 },
+   { "devcamdebug_aec_s_real_gain",            TYPE_FLOAT },
+   { "devcamdebug_aec_s_linecount",            TYPE_INT32 },
+   { "devcamdebug_aec_hdr_sensitivity_ratio",  TYPE_FLOAT },
+   { "devcamdebug_aec_hdr_exp_time_ratio",     TYPE_FLOAT },
+   // DevCamDebug vendor tag ADRC
+   { "devcamdebug_aec_total_drc_gain",         TYPE_FLOAT },
+   { "devcamdebug_aec_color_drc_gain",         TYPE_FLOAT },
+   { "devcamdebug_aec_gtm_ratio",              TYPE_FLOAT },
+   { "devcamdebug_aec_ltm_ratio",              TYPE_FLOAT },
+   { "devcamdebug_aec_la_ratio",               TYPE_FLOAT },
+   { "devcamdebug_aec_gamma_ratio",            TYPE_FLOAT },
    // DevCamDebug vendor tag AWB
    { "devcamdebug_awb_r_gain",                 TYPE_FLOAT },
    { "devcamdebug_awb_g_gain",                 TYPE_FLOAT },
@@ -428,6 +442,20 @@ uint32_t qcamera3_all_tags[] = {
     (uint32_t)DEVCAMDEBUG_AEC_REAL_GAIN,
     (uint32_t)DEVCAMDEBUG_AEC_EXP_INDEX,
     (uint32_t)DEVCAMDEBUG_AEC_LUX_IDX,
+    // DEVCAMDEBUG zzHDR
+    (uint32_t)DEVCAMDEBUG_AEC_L_REAL_GAIN,
+    (uint32_t)DEVCAMDEBUG_AEC_L_LINECOUNT,
+    (uint32_t)DEVCAMDEBUG_AEC_S_REAL_GAIN,
+    (uint32_t)DEVCAMDEBUG_AEC_S_LINECOUNT,
+    (uint32_t)DEVCAMDEBUG_AEC_HDR_SENSITIVITY_RATIO,
+    (uint32_t)DEVCAMDEBUG_AEC_HDR_EXP_TIME_RATIO,
+    // DEVCAMDEBUG ADRC
+    (uint32_t)DEVCAMDEBUG_AEC_TOTAL_DRC_GAIN,
+    (uint32_t)DEVCAMDEBUG_AEC_COLOR_DRC_GAIN,
+    (uint32_t)DEVCAMDEBUG_AEC_GTM_RATIO,
+    (uint32_t)DEVCAMDEBUG_AEC_LTM_RATIO,
+    (uint32_t)DEVCAMDEBUG_AEC_LA_RATIO,
+    (uint32_t)DEVCAMDEBUG_AEC_GAMMA_RATIO,
     // DEVCAMDEBUG AWB
     (uint32_t)DEVCAMDEBUG_AWB_R_GAIN,
     (uint32_t)DEVCAMDEBUG_AWB_G_GAIN,

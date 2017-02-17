@@ -1174,6 +1174,20 @@ typedef struct {
     INCLUDE(CAM_INTF_META_DEV_CAM_AEC_REAL_GAIN,        float,                       1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AEC_EXP_INDEX,        int32_t,                     1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AEC_LUX_IDX,          float,                       1);
+    /* DevCamDebug metadata CAM_INTF.H zzHDR */
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_L_REAL_GAIN,           float,                  1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_L_LINECOUNT,           int32_t,                1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_S_REAL_GAIN,           float,                  1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_S_LINECOUNT,           int32_t,                1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_HDR_SENSITIVITY_RATIO, float,                  1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_HDR_EXP_TIME_RATIO,    float,                  1);
+    /* DevCamDebug metadata CAM_INTF.H ADRC */
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_TOTAL_DRC_GAIN,        float,                  1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_COLOR_DRC_GAIN,        float,                  1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_GTM_RATIO,             float,                  1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_LTM_RATIO,             float,                  1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_LA_RATIO,              float,                  1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_GAMMA_RATIO,           float,                  1);
     /* DevCamDebug metadata CAM_INTF.H AWB */
     INCLUDE(CAM_INTF_META_DEV_CAM_AWB_R_GAIN,           float,                       1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AWB_G_GAIN,           float,                       1);
