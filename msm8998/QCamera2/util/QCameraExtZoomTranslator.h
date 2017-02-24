@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -27,39 +27,54 @@
  *
  */
 
-#ifndef __QCAMERA_COMMON_H__
-#define __QCAMERA_COMMON_H__
+#ifndef __QCAMERAEXTZOOMTRANSLATOR_H__
+#define __QCAMERAEXTZOOMTRANSLATOR_H__
 
-// Camera dependencies
-#include "cam_types.h"
 #include "cam_intf.h"
+
+using namespace android;
 
 namespace qcamera {
 
-#define ALIGN(a, b) (((a) + (b)) & ~(b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
+typedef enum {
+    MODE_CAMERA,
+    MODE_CAMCORDER,
+    MODE_RTB
+} dual_cam_mode;
 
-class QCameraCommon {
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+} dimension_t;
+
+typedef struct {
+    dual_cam_mode mode;
+    void*         calibData;
+    uint32_t      calibDataSize;
+    dimension_t   previewDimension;
+    dimension_t   ispOutDimension;
+    dimension_t   sensorOutDimensionMain;
+    dimension_t   sensorOutDimensionAux;
+    uint32_t     *zoomRatioTable;
+    uint32_t      zoomRatioTableCount;
+} zoom_trans_init_data;
+
+class QCameraExtZoomTranslator {
 public:
-    QCameraCommon();
-    ~QCameraCommon();
-
-    int32_t init(cam_capability_t *cap);
-
-    int32_t getAnalysisInfo(
-        bool fdVideoEnabled, cam_feature_mask_t featureMask,
-        cam_analysis_info_t *pAnalysisInfo);
-    static uint32_t calculateLCM(int32_t num1, int32_t num2);
-    cam_dimension_t getMatchingDimension(
-            cam_dimension_t exp_dim,
-            cam_dimension_t cur_dim);
-    bool isVideoUBWCEnabled();
-
+    ~QCameraExtZoomTranslator();
+    static QCameraExtZoomTranslator* create();
+    int32_t init(zoom_trans_init_data initData);
+    int32_t deInit();
+    int32_t getZoomValues(uint32_t userZoom, uint32_t *wideZoom, uint32_t *teleZoom);
+    bool isInitialized();
 private:
-    cam_capability_t *m_pCapability;
+    QCameraExtZoomTranslator();
 
+    void                   *mLibHandle;
+    bool                    mInitSuccess;
+    zoom_trans_init_data    mInitData;
 };
 
 }; // namespace qcamera
-#endif /* __QCAMERA_COMMON_H__ */
 
+#endif /* __QCAMERAEXTZOOMTRANSLATOR_H__ */

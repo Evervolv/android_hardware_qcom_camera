@@ -45,6 +45,7 @@
 #include "QCameraPerf.h"
 #include "QCameraCommon.h"
 #include "QCamera3VendorTags.h"
+#include "QCameraDualCamSettings.h"
 
 #include "HdrPlusClient.h"
 
@@ -438,7 +439,6 @@ private:
     QCamera3RegularChannel *mDummyBatchChannel;
     QCamera3DepthChannel *mDepthChannel;
     QCameraPerfLockMgr mPerfLockMgr;
-    QCameraCommon   mCommon;
 
     uint32_t mChannelHandle;
 
@@ -459,6 +459,7 @@ private:
     bool m_bIs4KVideo;
     bool m_bEisSupportedSize;
     bool m_bEisEnable;
+    bool m_bEis3PropertyEnabled;
     bool m_bEisSupported;
     typedef struct {
         cam_dimension_t dim;
@@ -568,8 +569,9 @@ private:
     // Fixed video fps
     float mHFRVideoFps;
 public:
-    uint8_t mOpMode;
+    uint32_t mOpMode;
     bool mStreamConfig;
+    QCameraCommon   mCommon;
 private:
     uint32_t mFirstFrameNumberInBatch;
     camera3_stream_t mDummyBatchStream;
