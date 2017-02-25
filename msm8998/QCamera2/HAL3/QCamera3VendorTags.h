@@ -503,6 +503,10 @@ typedef enum nexus_experimental_2017_tracking_af_trigger {
     NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER_STOP,
 } nexus_experimental_2017_tracking_af_trigger_t;
 
+typedef enum com_google_nexus_experimental_2016_control_ae_mode {
+    NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH = 5
+} com_google_nexus_experimental_2016_control_ae_mode_t;
+
 class QCamera3VendorTags {
 
 public:

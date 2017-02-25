@@ -719,6 +719,7 @@ typedef enum {
 typedef enum {
     CAM_AE_MODE_OFF,
     CAM_AE_MODE_ON,
+    CAM_AE_MODE_ON_EXTERNAL_FLASH,
     CAM_AE_MODE_MAX
 } cam_ae_mode_type;
 
