@@ -1851,6 +1851,7 @@ bool QCameraVideoMemory::needPerfEvent(const void *opaque, bool metadata)
                     CAM_META_BUFFER_EVENT_PERF) ? TRUE : FALSE;
         }
 #else
+#if 0   // Update to 07.01.01.253.071
         for (int i = 0; i < mMetaBufCount; i++) {
             if(mMetadata[i]->data == opaque) {
                 isPerf = (MetaBufferUtil::getIntAt(nh, 0, VIDEO_META_EVENT) ==
@@ -1858,6 +1859,9 @@ bool QCameraVideoMemory::needPerfEvent(const void *opaque, bool metadata)
                 break;
             }
         }
+#else
+        (void) opaque;
+#endif
 #endif
     }
     return isPerf;

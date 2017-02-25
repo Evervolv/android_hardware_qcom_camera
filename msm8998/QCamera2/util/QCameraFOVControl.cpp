@@ -487,6 +487,7 @@ int32_t QCameraFOVControl::updateConfigSettings(
             }
         }
 
+#if 0 // Update to 07.01.01.253.071
         // Get the sensor out dimensions
         cam_dimension_t sensorDimMain = {0,0};
         cam_dimension_t sensorDimAux  = {0,0};
@@ -496,6 +497,7 @@ int32_t QCameraFOVControl::updateConfigSettings(
         if (paramsAuxCam->is_valid[CAM_INTF_PARM_RAW_DIMENSION]) {
             READ_PARAM_ENTRY(paramsAuxCam, CAM_INTF_PARM_RAW_DIMENSION, sensorDimAux);
         }
+#endif // Update to 07.01.01.253.071
 
         // Reset the internal variables
         resetVars();
@@ -530,6 +532,7 @@ int32_t QCameraFOVControl::updateConfigSettings(
                 }
             }
 
+#if 0 // Update to 07.01.01.253.071
             // Initialize the zoom translation lib
             if (mZoomTranslator) {
                 // Set the initialization data
@@ -564,6 +567,7 @@ int32_t QCameraFOVControl::updateConfigSettings(
                     mZoomTranslator = NULL;
                 }
             }
+#endif // Update to 07.01.01.253.071
 
             // FOV-control config is complete for the current use case
             mFovControlData.configCompleted = true;

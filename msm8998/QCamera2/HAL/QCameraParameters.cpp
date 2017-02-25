@@ -11889,11 +11889,15 @@ int32_t QCameraParameters::getSensorOutputSize(cam_dimension_t max_dim,
     READ_PARAM_ENTRY(m_pParamBuf, CAM_INTF_PARM_SENSOR_MODE_INFO, modeInfo);
     sensor_dim = modeInfo.active_array_size;
 
+#if 0 // Update to 07.01.01.253.071
     if (cam_type == MM_CAMERA_TYPE_AUX) {
         READ_PARAM_ENTRY(m_pParamBufAux, CAM_INTF_PARM_RAW_DIMENSION, sensor_dim);
     } else {
         READ_PARAM_ENTRY(m_pParamBuf, CAM_INTF_PARM_RAW_DIMENSION, sensor_dim);
     }
+#else
+    (void) cam_type;
+#endif // Update to 07.01.01.253.071
 
     LOGH("RAW Dimension = %d X %d",sensor_dim.width,sensor_dim.height);
     if (sensor_dim.width == 0 || sensor_dim.height == 0) {
@@ -13645,6 +13649,7 @@ bool QCameraParameters::sendStreamConfigInfo(cam_stream_size_info_t &stream_conf
     }
 
     if (isDualCamera()) {
+#if 0 // Update to 07.01.01.253.071
         if (ADD_SET_PARAM_ENTRY_TO_BATCH(m_pParamBuf,
                 CAM_INTF_PARM_RAW_DIMENSION, sensor_dim_main) ||
                 ADD_SET_PARAM_ENTRY_TO_BATCH(m_pParamBufAux,
@@ -13652,6 +13657,7 @@ bool QCameraParameters::sendStreamConfigInfo(cam_stream_size_info_t &stream_conf
             LOGE("Failed to update table for CAM_INTF_PARM_RAW_DIMENSION");
             return BAD_VALUE;
         }
+#endif // Update to 07.01.01.253.071
 
         // Update FOV-control config settings due to the change in the configuration
         rc = m_pFovControl->updateConfigSettings(m_pParamBuf, m_pParamBufAux);
