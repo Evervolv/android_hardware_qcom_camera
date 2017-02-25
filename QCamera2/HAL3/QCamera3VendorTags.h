@@ -207,6 +207,10 @@ typedef enum qcamera3_ext_opaque_raw_format {
     QCAMERA3_OPAQUE_RAW_FORMAT_MIPI
 } qcamera3_ext_opaque_raw_format_t;
 
+typedef enum com_google_nexus_experimental_2016_control_ae_mode {
+    NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH = 5
+} com_google_nexus_experimental_2016_control_ae_mode_t;
+
 class QCamera3VendorTags {
 
 public:

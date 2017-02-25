@@ -6234,6 +6234,9 @@ QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
     } else if (aeMode == CAM_AE_MODE_OFF) {
         fwk_aeMode = ANDROID_CONTROL_AE_MODE_OFF;
         camMetadata.update(ANDROID_CONTROL_AE_MODE, &fwk_aeMode, 1);
+    } else if (aeMode == CAM_AE_MODE_ON_EXTERNAL_FLASH) {
+        fwk_aeMode = NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH;
+        camMetadata.update(ANDROID_CONTROL_AE_MODE, &fwk_aeMode, 1);
     } else {
         LOGE("Not enough info to deduce ANDROID_CONTROL_AE_MODE redeye:%d, "
               "flashMode:%d, aeMode:%u!!!",
@@ -7524,7 +7527,11 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     count = CAM_AE_MODE_MAX;
     count = MIN(gCamCapability[cameraId]->supported_ae_modes_cnt, count);
     for (size_t i = 0; i < count; i++) {
-        avail_ae_modes.add(gCamCapability[cameraId]->supported_ae_modes[i]);
+        uint8_t aeMode = gCamCapability[cameraId]->supported_ae_modes[i];
+        if (aeMode == CAM_AE_MODE_ON_EXTERNAL_FLASH) {
+            aeMode = NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH;
+        }
+        avail_ae_modes.add(aeMode);
     }
     if (flashAvailable) {
         avail_ae_modes.add(ANDROID_CONTROL_AE_MODE_ON_AUTO_FLASH);
@@ -9181,6 +9188,8 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
         if (fwk_aeMode == ANDROID_CONTROL_AE_MODE_OFF ) {
             aeMode = CAM_AE_MODE_OFF;
+        } if (fwk_aeMode == NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH) {
+            aeMode = CAM_AE_MODE_ON_EXTERNAL_FLASH;
         } else {
             aeMode = CAM_AE_MODE_ON;
         }
@@ -9444,7 +9453,9 @@ int QCamera3HardwareInterface::translateToHalMetadata
         if (frame_settings.exists(ANDROID_CONTROL_AE_MODE)) {
             uint8_t fwk_aeMode =
                 frame_settings.find(ANDROID_CONTROL_AE_MODE).data.u8[0];
-            if (fwk_aeMode > ANDROID_CONTROL_AE_MODE_ON) {
+            if (fwk_aeMode == ANDROID_CONTROL_AE_MODE_ON_AUTO_FLASH ||
+                    fwk_aeMode == ANDROID_CONTROL_AE_MODE_ON_ALWAYS_FLASH ||
+                    fwk_aeMode == ANDROID_CONTROL_AE_MODE_ON_AUTO_FLASH_REDEYE) {
                 respectFlashMode = 0;
                 LOGH("AE Mode controls flash, ignore android.flash.mode");
             }
