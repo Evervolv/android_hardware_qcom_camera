@@ -35,7 +35,7 @@
 #include <media/msmb_camera.h>
 
 #define CAM_MAX_NUM_BUFS_PER_STREAM 64
-#define MAX_METADATA_PRIVATE_PAYLOAD_SIZE_IN_BYTES 12256
+#define MAX_METADATA_PRIVATE_PAYLOAD_SIZE_IN_BYTES 11212
 #define AWB_DEBUG_DATA_SIZE               (45000)
 #define AEC_DEBUG_DATA_SIZE               (5000)
 #define AF_DEBUG_DATA_SIZE                (60000)
@@ -2619,7 +2619,7 @@ typedef struct {
 #define CAM_MAX_MAP_WIDTH         6
 #define CAM_MAX_SHADING_MAP_WIDTH 17
 #define CAM_MAX_SHADING_MAP_HEIGHT 13
-#define CAM_MAX_TONEMAP_CURVE_SIZE    512
+#define CAM_MAX_TONEMAP_CURVE_SIZE 64
 #define CAM_MAX_FLASH_BRACKETING    5
 
 typedef struct {
