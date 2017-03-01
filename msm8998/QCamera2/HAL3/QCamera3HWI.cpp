@@ -13946,6 +13946,7 @@ status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked()
     } else {
         // Sensor MIPI will send data to Easel.
         inputConfig.isSensorInput = true;
+        inputConfig.sensorMode.cameraId = mCameraId;
         inputConfig.sensorMode.pixelArrayWidth = mSensorModeInfo.pixel_array_size.width;
         inputConfig.sensorMode.pixelArrayHeight = mSensorModeInfo.pixel_array_size.height;
         inputConfig.sensorMode.activeArrayWidth = mSensorModeInfo.active_array_size.width;
