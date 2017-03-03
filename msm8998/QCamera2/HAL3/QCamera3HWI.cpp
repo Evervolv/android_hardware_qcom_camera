@@ -2438,8 +2438,6 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     // Create analysis stream all the time, even when h/w support is not available
     if (!onlyRaw) {
         cam_feature_mask_t analysisFeatureMask = CAM_QCOM_FEATURE_PP_SUPERSET_HAL3;
-        setPAAFSupport(analysisFeatureMask, CAM_STREAM_TYPE_ANALYSIS,
-                gCamCapability[mCameraId]->color_arrangement);
         cam_analysis_info_t analysisInfo;
         int32_t ret = NO_ERROR;
         ret = mCommon.getAnalysisInfo(
@@ -2447,6 +2445,12 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                 analysisFeatureMask,
                 &analysisInfo);
         if (ret == NO_ERROR) {
+            cam_color_filter_arrangement_t analysis_color_arrangement =
+                    (analysisInfo.analysis_format == CAM_FORMAT_Y_ONLY ?
+                    CAM_FILTER_ARRANGEMENT_Y :
+                    gCamCapability[mCameraId]->color_arrangement);
+            setPAAFSupport(analysisFeatureMask, CAM_STREAM_TYPE_ANALYSIS,
+                                               analysis_color_arrangement);
             cam_dimension_t analysisDim;
             analysisDim = mCommon.getMatchingDimension(previewSize,
                     analysisInfo.analysis_recommended_res);
@@ -2530,9 +2534,6 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                 CAM_STREAM_TYPE_ANALYSIS;
         mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams] =
                 CAM_QCOM_FEATURE_PP_SUPERSET_HAL3;
-        setPAAFSupport(mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams],
-                mStreamConfigInfo.type[mStreamConfigInfo.num_streams],
-                gCamCapability[mCameraId]->color_arrangement);
         rc = mCommon.getAnalysisInfo(FALSE,
                 mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams],
                 &analysisInfo);
@@ -2541,6 +2542,14 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
             pthread_mutex_unlock(&mMutex);
             return rc;
         }
+        cam_color_filter_arrangement_t analysis_color_arrangement =
+                (analysisInfo.analysis_format == CAM_FORMAT_Y_ONLY ?
+                CAM_FILTER_ARRANGEMENT_Y :
+                gCamCapability[mCameraId]->color_arrangement);
+        setPAAFSupport(mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams],
+                mStreamConfigInfo.type[mStreamConfigInfo.num_streams],
+                analysis_color_arrangement);
+
         mStreamConfigInfo.stream_sizes[mStreamConfigInfo.num_streams] =
                 mCommon.getMatchingDimension(previewSize,
                 analysisInfo.analysis_recommended_res);
@@ -13635,9 +13644,6 @@ void QCamera3HardwareInterface::setPAAFSupport(
         cam_stream_type_t stream_type,
         cam_color_filter_arrangement_t filter_arrangement)
 {
-    LOGD("feature_mask=0x%llx; stream_type=%d, filter_arrangement=%d",
-            feature_mask, stream_type, filter_arrangement);
-
     switch (filter_arrangement) {
     case CAM_FILTER_ARRANGEMENT_RGGB:
     case CAM_FILTER_ARRANGEMENT_GRBG:
@@ -13658,6 +13664,10 @@ void QCamera3HardwareInterface::setPAAFSupport(
     default:
         break;
     }
+    LOGD("feature_mask=0x%llx; stream_type=%d, filter_arrangement=%d",
+            feature_mask, stream_type, filter_arrangement);
+
+
 }
 
 /*===========================================================================
