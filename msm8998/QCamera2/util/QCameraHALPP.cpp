@@ -30,6 +30,7 @@
 #define LOG_TAG "QCameraHALPP"
 
 // Camera dependencies
+#include <sys/stat.h>
 #include "QCameraTrace.h"
 #include "QCameraHALPP.h"
 #include "QCameraQueue.h"
