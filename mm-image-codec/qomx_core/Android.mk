@@ -22,7 +22,5 @@ LOCAL_MODULE           := libqomx_core
 LOCAL_PRELINK_MODULE   := false
 LOCAL_SHARED_LIBRARIES := liblog libcutils libdl
 
-LOCAL_HEADER_LIBRARIES := OmxCore_headers
-
 LOCAL_32_BIT_ONLY := true
 include $(BUILD_SHARED_LIBRARY)
