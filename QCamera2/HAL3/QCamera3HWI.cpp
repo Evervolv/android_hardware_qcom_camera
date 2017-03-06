@@ -9188,7 +9188,7 @@ int QCamera3HardwareInterface::translateToHalMetadata
 
         if (fwk_aeMode == ANDROID_CONTROL_AE_MODE_OFF ) {
             aeMode = CAM_AE_MODE_OFF;
-        } if (fwk_aeMode == NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH) {
+        } else if (fwk_aeMode == NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH) {
             aeMode = CAM_AE_MODE_ON_EXTERNAL_FLASH;
         } else {
             aeMode = CAM_AE_MODE_ON;
