@@ -191,6 +191,7 @@ public:
             uint32_t cam_handle);
     static int initCapabilities(uint32_t cameraId);
     static int initStaticMetadata(uint32_t cameraId);
+    static int initHdrPlusClientLocked();
     static void makeTable(cam_dimension_t *dimTable, size_t size,
             size_t max_size, int32_t *sizeTable);
     static void makeFPSTable(cam_fps_range_t *fpsTable, size_t size,
@@ -706,9 +707,6 @@ private:
     void onCaptureResult(pbcamera::CaptureResult *result,
             const camera_metadata_t &resultMetadata) override;
     void onFailedCaptureResult(pbcamera::CaptureResult *failedResult) override;
-
-    // HDR+ client instance. If null, Easel was not detected on this device.
-    std::shared_ptr<HdrPlusClient> mHdrPlusClient;
 
     // Map from frame number to frame. Must be protected by mHdrPlusPendingRequestsLock.
     std::map<uint32_t, HdrPlusPendingRequest> mHdrPlusPendingRequests;
