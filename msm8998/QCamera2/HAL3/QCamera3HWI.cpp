@@ -8901,34 +8901,38 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
             &face_bsgc, 1);
 
 #ifdef SUPPORT_DEPTH_DATA
-    //TODO: Update depth size accordingly, currently we use active array
-    //      as reference.
-    int32_t depthWidth = gCamCapability[cameraId]->active_array_size.width;
-    int32_t depthHeight = gCamCapability[cameraId]->active_array_size.height;
-    //As per spec. depth cloud should be sample count / 16
-    int32_t depthSamplesCount = depthWidth * depthHeight / 16;
-    assert(0 < depthSamplesCount);
-    staticInfo.update(ANDROID_DEPTH_MAX_DEPTH_SAMPLES, &depthSamplesCount, 1);
+    if (gCamCapability[cameraId]->supported_focus_modes_cnt > 1) {
+        //TODO: Update depth size accordingly, currently we use active array
+        //      as reference.
+        int32_t depthWidth = gCamCapability[cameraId]->active_array_size.width;
+        int32_t depthHeight =
+                gCamCapability[cameraId]->active_array_size.height;
+        //As per spec. depth cloud should be sample count / 16
+        int32_t depthSamplesCount = depthWidth * depthHeight / 16;
+        assert(0 < depthSamplesCount);
+        staticInfo.update(ANDROID_DEPTH_MAX_DEPTH_SAMPLES,
+                &depthSamplesCount, 1);
 
-    int32_t depthConfigs[] = {HAL_PIXEL_FORMAT_BLOB, depthSamplesCount, 1,
-            ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT };
-    staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_STREAM_CONFIGURATIONS,
-            depthConfigs, sizeof(depthConfigs)/sizeof(depthConfigs[0]));
+        int32_t depthConfigs[] = {HAL_PIXEL_FORMAT_BLOB, depthSamplesCount, 1,
+                ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT };
+        staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_STREAM_CONFIGURATIONS,
+                depthConfigs, sizeof(depthConfigs)/sizeof(depthConfigs[0]));
 
-    int64_t depthMinDuration[] = {HAL_PIXEL_FORMAT_BLOB, depthSamplesCount,
-            1, 1 };
-    staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_MIN_FRAME_DURATIONS,
-            depthMinDuration,
-            sizeof(depthMinDuration) / sizeof(depthMinDuration[0]));
+        int64_t depthMinDuration[] = {HAL_PIXEL_FORMAT_BLOB, depthSamplesCount,
+                1, 1 };
+        staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_MIN_FRAME_DURATIONS,
+                depthMinDuration,
+                sizeof(depthMinDuration) / sizeof(depthMinDuration[0]));
 
-    int64_t depthStallDuration[] = {HAL_PIXEL_FORMAT_BLOB, depthSamplesCount,
-            1, 0 };
-    staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_STALL_DURATIONS,
-            depthStallDuration,
-            sizeof(depthStallDuration) / sizeof(depthStallDuration[0]));
+        int64_t depthStallDuration[] = {HAL_PIXEL_FORMAT_BLOB,
+                depthSamplesCount, 1, 0 };
+        staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_STALL_DURATIONS,
+                depthStallDuration,
+                sizeof(depthStallDuration) / sizeof(depthStallDuration[0]));
 
-    uint8_t depthExclusive = ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE_FALSE;
-    staticInfo.update(ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE, &depthExclusive, 1);
+        uint8_t depthExclusive = ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE_FALSE;
+        staticInfo.update(ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE, &depthExclusive, 1);
+    }
 #endif
 
     int32_t exposureCompensationRange[] = {
