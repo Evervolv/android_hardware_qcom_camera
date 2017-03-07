@@ -18,8 +18,10 @@ endif
 # System header file path prefix
 LOCAL_CFLAGS += -DSYSTEM_HEADER_PREFIX=sys
 
+LOCAL_HAL_TOP := $(LOCAL_PATH)/../../../..
+
 OMX_HEADER_DIR := frameworks/native/include/media/openmax
-OMX_CORE_DIR := hardware/qcom/camera/mm-image-codec
+OMX_CORE_DIR := $(LOCAL_HAL_TOP)/mm-image-codec
 
 LOCAL_C_INCLUDES := $(MM_JPEG_TEST_PATH)
 LOCAL_C_INCLUDES += $(MM_JPEG_TEST_PATH)/../inc
@@ -62,7 +64,7 @@ endif
 LOCAL_CFLAGS += -DSYSTEM_HEADER_PREFIX=sys
 
 OMX_HEADER_DIR := frameworks/native/include/media/openmax
-OMX_CORE_DIR := hardware/qcom/camera/mm-image-codec
+OMX_CORE_DIR := $(LOCAL_HAL_TOP)/mm-image-codec
 
 LOCAL_C_INCLUDES := $(MM_JPEG_TEST_PATH)
 LOCAL_C_INCLUDES += $(MM_JPEG_TEST_PATH)/../inc
