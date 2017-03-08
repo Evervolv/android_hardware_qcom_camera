@@ -1641,7 +1641,7 @@ int32_t QCameraVideoMemory::updateNativeHandle(native_handle_t *nh,
 /*===========================================================================
  * FUNCTION   : closeNativeHandle
  *
- * DESCRIPTION: static function to close video native handle.
+ * DESCRIPTION: close video native handle and update cached ptrs
  *
  * PARAMETERS :
  *   @data  : ptr to video frame to be returned
@@ -1667,7 +1667,7 @@ int QCameraVideoMemory::closeNativeHandle(const void *data)
         return BAD_VALUE;
     }
 #else
-    (void) data;
+   (void)data;  // unused
 #endif
    return rc;
 }
@@ -1678,7 +1678,7 @@ int QCameraVideoMemory::closeNativeHandle(const void *data)
  * DESCRIPTION: close video native handle and update cached ptrs
  *
  * PARAMETERS :
- *   @data     : ptr to video frame to be returned
+ *   @data  : ptr to video frame to be returned
  *   @metadata : Flag to update metadata mode
  *
  * RETURN     : int32_t type of status
@@ -1713,8 +1713,8 @@ int QCameraVideoMemory::closeNativeHandle(const void *data, bool metadata)
         LOGW("Warning: Not of type video meta buffer");
     }
 #else
-    (void) data;
-    (void) metadata;
+   (void)data;  // unused
+   (void)metadata;  // unused
 #endif
     return rc;
 }
@@ -1755,7 +1755,7 @@ int QCameraVideoMemory::getMatchBufIndex(const void *opaque,
             }
         }
 #else
-        for (int i = 0; i < mMetaBufCount; i++) {
+	    for (int i = 0; i < mMetaBufCount; i++) {
             if(mMetadata[i]->data == opaque) {
                 index = i;
                 break;
@@ -1839,19 +1839,23 @@ bool QCameraVideoMemory::needPerfEvent(const void *opaque, bool metadata)
 {
     bool isPerf = FALSE;
     if (metadata) {
-#ifdef USE_MEDIA_EXTENSIONS
         const media_metadata_buffer *packet =
                 (const media_metadata_buffer *)opaque;
         native_handle_t *nh = NULL;
+#ifdef USE_MEDIA_EXTENSIONS
         if ((packet != NULL) && (packet->eType ==
                 kMetadataBufferTypeNativeHandleSource)
                 && (packet->pHandle)) {
             nh = (native_handle_t *)packet->pHandle;
-            isPerf = (MetaBufferUtil::getIntAt(nh, 0, VIDEO_META_EVENT) ==
-                    CAM_META_BUFFER_EVENT_PERF) ? TRUE : FALSE;
         }
+        isPerf = (MetaBufferUtil::getIntAt(nh, 0, VIDEO_META_EVENT) ==
+                CAM_META_BUFFER_EVENT_PERF) ? TRUE : FALSE;
 #else
-#if 0   // Update to 07.01.01.253.071
+		if ((packet != NULL) && (packet->buffer_type ==
+                kMetadataBufferTypeNativeHandleSource)
+                && (packet->meta_handle)) {
+            nh = (native_handle_t *)packet->meta_handle;
+        }
         for (int i = 0; i < mMetaBufCount; i++) {
             if(mMetadata[i]->data == opaque) {
                 isPerf = (MetaBufferUtil::getIntAt(nh, 0, VIDEO_META_EVENT) ==
@@ -1859,9 +1863,6 @@ bool QCameraVideoMemory::needPerfEvent(const void *opaque, bool metadata)
                 break;
             }
         }
-#else
-        (void) opaque;
-#endif
 #endif
     }
     return isPerf;
