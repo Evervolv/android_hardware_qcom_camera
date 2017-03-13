@@ -3905,7 +3905,7 @@ int32_t QCamera3PicChannel::queueJpegSetting(uint32_t index, metadata_buffer_t *
         settings->image_desc_valid = true;
         if (eepromVersion && strlen(eepromVersion)) {
             len = snprintf(settings->image_desc, sizeof(settings->image_desc),
-                    "M:%s ", eepromVersion);
+                    "%s ", eepromVersion);
         }
         if (ldafCalib) {
             snprintf(settings->image_desc + len,
