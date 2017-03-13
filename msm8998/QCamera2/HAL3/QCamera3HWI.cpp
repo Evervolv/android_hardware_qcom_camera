@@ -132,6 +132,8 @@ extern uint8_t gNumCameraSessions;
 std::shared_ptr<HdrPlusClient> gHdrPlusClient = nullptr;
 // If Easel is in bypass only mode. If true, Easel HDR+ won't be enabled.
 bool gEaselBypassOnly;
+// If Easel is connected.
+bool gEaselConnected;
 
 const QCamera3HardwareInterface::QCameraPropMap QCamera3HardwareInterface::CDS_MAP [] = {
     {"On",  CAM_CDS_MODE_ON},
@@ -828,10 +830,12 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
         mState = OPENED;
     }
 
-    mIsApInputUsedForHdrPlus =
-            property_get_bool("persist.camera.hdrplus.apinput", false);
-    ALOGD("%s: HDR+ input is provided by %s.", __FUNCTION__,
-            mIsApInputUsedForHdrPlus ? "AP" : "Easel");
+    if (gHdrPlusClient != nullptr) {
+        mIsApInputUsedForHdrPlus =
+                property_get_bool("persist.camera.hdrplus.apinput", false);
+        ALOGD("%s: HDR+ input is provided by %s.", __FUNCTION__,
+                mIsApInputUsedForHdrPlus ? "AP" : "Easel");
+    }
 
     return rc;
 }
@@ -1023,6 +1027,16 @@ int QCamera3HardwareInterface::closeCamera()
          mCameraId, rc);
 
     if (gHdrPlusClient != nullptr) {
+        // Disable HDR+ mode.
+        disableHdrPlusModeLocked();
+        // Disconnect Easel if it's connected.
+        pthread_mutex_lock(&gCamLock);
+        if (gEaselConnected) {
+            gHdrPlusClient->disconnect();
+            gEaselConnected = false;
+        }
+        pthread_mutex_unlock(&gCamLock);
+
         rc = gHdrPlusClient->suspendEasel();
         if (rc != 0) {
             ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
@@ -13956,28 +13970,44 @@ status_t QCamera3HardwareInterface::enableHdrPlusModeLocked()
         return -ENODEV;
     }
 
-    // Connect to HDR+ service
-    status_t res = gHdrPlusClient->connect(this);
-    if (res != OK) {
-        LOGE("%s: Failed to connect to HDR+ client: %s (%d).", __FUNCTION__,
-            strerror(-res), res);
-        return res;
-    }
+    status_t res;
 
-    // Set static metadata.
-    res = gHdrPlusClient->setStaticMetadata(*gStaticMetadata[mCameraId]);
-    if (res != OK) {
-        LOGE("%s: Failed set static metadata in HDR+ client: %s (%d).", __FUNCTION__,
-            strerror(-res), res);
-        gHdrPlusClient->disconnect();
-        return res;
+    // Connect to HDR+ service if it's not connected yet.
+    pthread_mutex_lock(&gCamLock);
+    if (!gEaselConnected) {
+        // Connect to HDR+ service
+        res = gHdrPlusClient->connect(this);
+        if (res != OK) {
+            LOGE("%s: Failed to connect to HDR+ client: %s (%d).", __FUNCTION__,
+                strerror(-res), res);
+            pthread_mutex_unlock(&gCamLock);
+            return res;
+        }
+
+        // Set static metadata.
+        res = gHdrPlusClient->setStaticMetadata(*gStaticMetadata[mCameraId]);
+        if (res != OK) {
+            LOGE("%s: Failed set static metadata in HDR+ client: %s (%d).", __FUNCTION__,
+                strerror(-res), res);
+            gHdrPlusClient->disconnect();
+            pthread_mutex_unlock(&gCamLock);
+            return res;
+        }
+        gEaselConnected = true;
     }
+    pthread_mutex_unlock(&gCamLock);
 
     // Configure stream for HDR+.
     res = configureHdrPlusStreamsLocked();
     if (res != OK) {
         LOGE("%s: Failed to configure HDR+ streams: %s (%d)", __FUNCTION__, strerror(-res), res);
-        gHdrPlusClient->disconnect();
+        return res;
+    }
+
+    // Enable HDR+ mode so Easel will start capturing ZSL raw buffers.
+    res = gHdrPlusClient->setZslHdrPlusMode(true);
+    if (res != OK) {
+        LOGE("%s: Failed to enable HDR+ mode: %s (%d)", __FUNCTION__, strerror(-res), res);
         return res;
     }
 
@@ -13989,9 +14019,12 @@ status_t QCamera3HardwareInterface::enableHdrPlusModeLocked()
 
 void QCamera3HardwareInterface::disableHdrPlusModeLocked()
 {
-    // Disconnect from HDR+ service.
+    // Disable HDR+ mode.
     if (gHdrPlusClient != nullptr && mHdrPlusModeEnabled) {
-        gHdrPlusClient->disconnect();
+        status_t res = gHdrPlusClient->setZslHdrPlusMode(false);
+        if (res != OK) {
+            ALOGE("%s: Failed to disable HDR+ mode: %s (%d)", __FUNCTION__, strerror(-res), res);
+        }
     }
 
     mHdrPlusModeEnabled = false;
