@@ -1368,6 +1368,7 @@ typedef struct {
 } cam_faces_data_t;
 
 #define CAM_HISTOGRAM_STATS_SIZE 256
+#define MIN_CAM_HISTOGRAM_STATS_SIZE 16
 
 typedef enum {
   CAM_STATS_CHANNEL_Y,
@@ -1380,7 +1381,6 @@ typedef enum {
 } cam_histogram_data_type;
 
 typedef struct {
-    uint32_t max_hist_value;
     uint32_t hist_buf[CAM_HISTOGRAM_STATS_SIZE]; /* buf holding histogram stats data */
 } cam_histogram_data_t;
 
@@ -2505,6 +2505,9 @@ typedef enum {
     CAM_INTF_META_PDAF_DATA_ENABLE,
     /*event to flush stream buffers*/
     CAM_INTF_PARM_FLUSH_FRAMES,
+    /* Number of histogram bins */
+    CAM_INTF_META_STATS_HISTOGRAM_BINS,
+
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
