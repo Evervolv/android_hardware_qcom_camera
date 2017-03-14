@@ -5254,7 +5254,9 @@ no_error:
         mHybridAeEnable =
                 meta.find(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE).data.u8[0];
     }
-    pendingRequest.hybrid_ae_enable = mHybridAeEnable;
+
+    // Enable hybrid AE if it's enabled in metadata or HDR+ mode is enabled.
+    pendingRequest.hybrid_ae_enable = mHybridAeEnable || mHdrPlusModeEnabled;
     /* DevCamDebug metadata processCaptureRequest */
     if (meta.exists(DEVCAMDEBUG_META_ENABLE)) {
         mDevCamDebugMetaEnable =
