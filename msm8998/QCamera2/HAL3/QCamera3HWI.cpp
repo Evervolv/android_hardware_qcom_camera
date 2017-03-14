@@ -10252,6 +10252,17 @@ int QCamera3HardwareInterface::initHdrPlusClientLocked() {
 
     gHdrPlusClient = std::make_shared<HdrPlusClient>();
     if (gHdrPlusClient->isEaselPresentOnDevice()) {
+        // Check if HAL should not power on Easel even if it's present. This is to allow HDR+ tests
+        //  to connect to Easel.
+        bool doNotpowerOnEasel =
+                property_get_bool("camera.hdrplus.donotpoweroneasel", false);
+
+        if (doNotpowerOnEasel) {
+            gHdrPlusClient = nullptr;
+            ALOGI("%s: Easel is present but not powered on.", __FUNCTION__);
+            return OK;
+        }
+
         // If Easel is present, power on Easel and suspend it immediately.
         status_t res = gHdrPlusClient->powerOnEasel();
         if (res != OK) {
