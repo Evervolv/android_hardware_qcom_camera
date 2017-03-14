@@ -4070,6 +4070,9 @@ int32_t QCamera3PicChannel::returnYuvBufferAndEncode(mm_camera_buf_def_t *frame,
         return rc;
     }
 
+    // Invalidate YUV buffer cache
+    mYuvMemory->invalidateCache(frame->buf_idx);
+
     // Start postprocessor
     startPostProc(reproc_cfg);
 

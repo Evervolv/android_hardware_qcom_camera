@@ -13927,6 +13927,7 @@ bool QCamera3HardwareInterface::trySubmittingHdrPlusRequest(HdrPlusPendingReques
 
     pbcamera::StreamBuffer buffer;
     buffer.streamId = kPbYuvOutputStreamId;
+    buffer.dmaBufFd = yuvBuffer->fd;
     buffer.data = yuvBuffer->buffer;
     buffer.dataSize = yuvBuffer->frame_len;
 
