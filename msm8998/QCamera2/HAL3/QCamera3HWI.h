@@ -369,6 +369,7 @@ private:
     void dumpMetadataToFile(tuning_params_t &meta, uint32_t &dumpFrameCount,
             bool enabled, const char *type, uint32_t frameNumber);
     static void getLogLevel();
+    static int32_t getPDStatIndex(cam_capability_t *caps);
 
     void cleanAndSortStreamInfo();
     void extractJpegMetadata(CameraMetadata& jpegMetadata,
@@ -583,6 +584,8 @@ private:
     bool mPreviewStarted;
     uint32_t mMinInFlightRequests;
     uint32_t mMaxInFlightRequests;
+    bool mPDSupported;
+    int32_t mPDIndex;
     // Param to trigger instant AEC.
     bool mInstantAEC;
     // Param to know when to reset AEC

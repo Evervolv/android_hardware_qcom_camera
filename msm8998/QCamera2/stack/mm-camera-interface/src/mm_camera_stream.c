@@ -2569,6 +2569,9 @@ uint32_t mm_stream_get_v4l2_fmt(cam_format_t fmt)
     case CAM_FORMAT_Y_ONLY_12_BPP:
         val= V4L2_PIX_FMT_Y12;
         break;
+    case CAM_FORMAT_META_RAW_10BIT:
+        val = V4L2_PIX_FMT_META10;
+        break;
     case CAM_FORMAT_Y_ONLY_14_BPP:
         /* No v4l2 format is defined yet for CAM_FORMAT_Y_ONLY_14_BPP */
         /* val= V4L2_PIX_FMT_Y14; */

@@ -1517,7 +1517,12 @@ int32_t QCamera3ProcessingChannel::translateStreamTypeAndFormat(camera3_stream_t
         case HAL_PIXEL_FORMAT_RAW16:
         case HAL_PIXEL_FORMAT_RAW10:
             streamType = CAM_STREAM_TYPE_RAW;
-            streamFormat = CAM_FORMAT_BAYER_MIPI_RAW_10BPP_GBRG;
+            if ((HAL_DATASPACE_DEPTH == stream->data_space) &&
+                    (HAL_PIXEL_FORMAT_RAW16 == stream->format)) {
+                streamFormat = CAM_FORMAT_META_RAW_10BIT;
+            } else {
+                streamFormat = CAM_FORMAT_BAYER_MIPI_RAW_10BPP_GBRG;
+            }
             break;
         default:
             return -EINVAL;

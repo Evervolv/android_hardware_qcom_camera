@@ -456,6 +456,8 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mPreviewStarted(false),
       mMinInFlightRequests(MIN_INFLIGHT_REQUESTS),
       mMaxInFlightRequests(MAX_INFLIGHT_REQUESTS),
+      mPDSupported(false),
+      mPDIndex(0),
       mInstantAEC(false),
       mResetInstantAEC(false),
       mInstantAECSettledFrameNumber(0),
@@ -549,6 +551,9 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
          }
          dlclose(lib_surface_utils);
     }
+
+    mPDIndex = getPDStatIndex(gCamCapability[cameraId]);
+    mPDSupported = (0 <= mPDIndex) ? true : false;
 
     m60HzZone = is60HzZone();
 }
@@ -1120,10 +1125,12 @@ int QCamera3HardwareInterface::validateStreamDimensions(
 {
     int rc = NO_ERROR;
     size_t count = 0;
-    uint32_t depthWidth =
-            gCamCapability[mCameraId]->active_array_size.width;
-    uint32_t depthHeight =
-            gCamCapability[mCameraId]->active_array_size.height;
+    uint32_t depthWidth = 0;
+    uint32_t depthHeight = 0;
+    if (mPDSupported) {
+        depthWidth = gCamCapability[mCameraId]->raw_meta_dim[mPDIndex].width;
+        depthHeight = gCamCapability[mCameraId]->raw_meta_dim[mPDIndex].height;
+    }
 
     camera3_stream_t *inputStream = NULL;
     /*
@@ -1162,6 +1169,15 @@ int QCamera3HardwareInterface::validateStreamDimensions(
         case ANDROID_SCALER_AVAILABLE_FORMATS_RAW16:
         case ANDROID_SCALER_AVAILABLE_FORMATS_RAW_OPAQUE:
         case HAL_PIXEL_FORMAT_RAW10:
+            if ((HAL_DATASPACE_DEPTH == newStream->data_space) &&
+                    (ANDROID_SCALER_AVAILABLE_FORMATS_RAW16 == newStream->format) &&
+                    mPDSupported) {
+                if ((depthWidth == newStream->width) &&
+                        (depthHeight == newStream->height)) {
+                    sizeFound = true;
+                }
+                break;
+            }
             count = MIN(gCamCapability[mCameraId]->supported_raw_dim_cnt, MAX_SIZES_CNT);
             for (size_t i = 0; i < count; i++) {
                 if ((gCamCapability[mCameraId]->raw_dim[i].width == (int32_t)rotatedWidth) &&
@@ -1172,9 +1188,10 @@ int QCamera3HardwareInterface::validateStreamDimensions(
             }
             break;
         case HAL_PIXEL_FORMAT_BLOB:
-            if (newStream->data_space == HAL_DATASPACE_DEPTH) {
+            if ((newStream->data_space == HAL_DATASPACE_DEPTH) &&
+                    mPDSupported) {
                 //As per spec. depth cloud should be sample count / 16
-                uint32_t depthSamplesCount = depthWidth * depthHeight / 16;
+                uint32_t depthSamplesCount = (depthWidth * depthHeight * 2) / 16;
                 if ((depthSamplesCount == newStream->width) &&
                         (1 == newStream->height)) {
                     sizeFound = true;
@@ -1740,6 +1757,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     bool isJpeg = false;
     cam_dimension_t jpegSize = {0, 0};
     cam_dimension_t previewSize = {0, 0};
+    size_t pdStatCount = 0;
 
     cam_padding_info_t padding_info = gCamCapability[mCameraId]->padding_info;
 
@@ -1866,6 +1884,10 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
             case HAL_PIXEL_FORMAT_RAW_OPAQUE:
             case HAL_PIXEL_FORMAT_RAW16:
                 rawStreamCnt++;
+                if ((HAL_DATASPACE_DEPTH == newStream->data_space) &&
+                        (HAL_PIXEL_FORMAT_RAW16 == newStream->format)) {
+                    pdStatCount++;
+                }
                 break;
             case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
                 processedStreamCnt++;
@@ -2026,6 +2048,19 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         LOGE("Invalid stream configuration requested!");
         pthread_mutex_unlock(&mMutex);
         return rc;
+    }
+
+    if (1 < pdStatCount) {
+        LOGE("HAL doesn't support multiple PD streams");
+        pthread_mutex_unlock(&mMutex);
+        return -EINVAL;
+    }
+
+    if ((mOpMode == CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE) &&
+            (1 == pdStatCount)) {
+        LOGE("HAL doesn't support PD streams in HFR mode!");
+        pthread_mutex_unlock(&mMutex);
+        return -EINVAL;
     }
 
     camera3_stream_t *zslStream = NULL; //Only use this for size and not actual handle!
@@ -2315,6 +2350,17 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                 mStreamConfigInfo.type[mStreamConfigInfo.num_streams] = CAM_STREAM_TYPE_RAW;
                 mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams] = CAM_QCOM_FEATURE_NONE;
                 isRawStreamRequested = true;
+                if ((HAL_DATASPACE_DEPTH == newStream->data_space) &&
+                        (HAL_PIXEL_FORMAT_RAW16 == newStream->format)) {
+                    mStreamConfigInfo.sub_format_type[mStreamConfigInfo.num_streams] =
+                            gCamCapability[mCameraId]->sub_fmt[mPDIndex];
+                    mStreamConfigInfo.format[mStreamConfigInfo.num_streams] =
+                            gCamCapability[mCameraId]->supported_meta_raw_fmts[mPDIndex];
+                    mStreamConfigInfo.dt[mStreamConfigInfo.num_streams] =
+                            gCamCapability[mCameraId]->dt[mPDIndex];
+                    mStreamConfigInfo.vc[mStreamConfigInfo.num_streams] =
+                            gCamCapability[mCameraId]->vc[mPDIndex];
+                }
                 break;
             default:
                 onlyRaw = false; // There is non-raw stream - bypass flag if set
@@ -2457,15 +2503,17 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                 }
                 case HAL_PIXEL_FORMAT_RAW_OPAQUE:
                 case HAL_PIXEL_FORMAT_RAW16:
-                case HAL_PIXEL_FORMAT_RAW10:
+                case HAL_PIXEL_FORMAT_RAW10: {
+                    bool isRAW16 = ((newStream->format == HAL_PIXEL_FORMAT_RAW16) &&
+                            (HAL_DATASPACE_DEPTH != newStream->data_space))
+                            ? true : false;
                     mRawChannel = new QCamera3RawChannel(
                             mCameraHandle->camera_handle, mChannelHandle,
                             mCameraHandle->ops, captureResultCb,
                             setBufferErrorStatus, &padding_info,
                             this, newStream,
                             mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams],
-                            mMetadataChannel,
-                            (newStream->format == HAL_PIXEL_FORMAT_RAW16));
+                            mMetadataChannel, isRAW16);
                     if (mRawChannel == NULL) {
                         LOGE("allocation of raw channel failed");
                         pthread_mutex_unlock(&mMutex);
@@ -2474,6 +2522,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                     newStream->max_buffers = mRawChannel->getNumBuffers();
                     newStream->priv = (QCamera3ProcessingChannel*)mRawChannel;
                     break;
+                }
                 case HAL_PIXEL_FORMAT_BLOB:
                     if (newStream->data_space == HAL_DATASPACE_DEPTH) {
                         mDepthChannel = new QCamera3DepthChannel(
@@ -2551,7 +2600,8 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
          * since there is no real stream associated with it
          */
         if ((newStream->stream_type != CAMERA3_STREAM_INPUT) &&
-                (newStream->data_space != HAL_DATASPACE_DEPTH)) {
+                !((newStream->data_space == HAL_DATASPACE_DEPTH) &&
+                        (newStream->format == HAL_PIXEL_FORMAT_BLOB))) {
             mStreamConfigInfo.num_streams++;
         }
     }
@@ -5195,7 +5245,8 @@ no_error:
            }
         }
 
-        if (output.stream->data_space == HAL_DATASPACE_DEPTH) {
+        if ((output.stream->format == HAL_PIXEL_FORMAT_BLOB) &&
+                (output.stream->data_space == HAL_DATASPACE_DEPTH)) {
             depthRequestPresent = true;
             continue;
         }
@@ -5410,8 +5461,10 @@ no_error:
     }
 
     for (size_t i = 0; i < request->num_output_buffers; i++) {
-        if (request->output_buffers[i].stream->data_space ==
-                HAL_DATASPACE_DEPTH) {
+        if ((request->output_buffers[i].stream->data_space ==
+                HAL_DATASPACE_DEPTH) &&
+                (HAL_PIXEL_FORMAT_BLOB ==
+                        request->output_buffers[i].stream->format)) {
             continue;
         }
         RequestedBufferInfo requestedBuf;
@@ -8754,6 +8807,35 @@ bool QCamera3HardwareInterface::supportBurstCapture(uint32_t cameraId)
 }
 
 /*===========================================================================
+ * FUNCTION   : getPDStatIndex
+ *
+ * DESCRIPTION: Return the meta raw phase detection statistics index if present
+ *
+ * PARAMETERS :
+ *   @caps    : camera capabilities
+ *
+ * RETURN     : int32_t type
+ *              non-negative - on success
+ *              -1 - on failure
+ *==========================================================================*/
+int32_t QCamera3HardwareInterface::getPDStatIndex(cam_capability_t *caps) {
+    if (nullptr == caps) {
+        return -1;
+    }
+
+    uint32_t metaRawCount = caps->meta_raw_channel_count;
+    int32_t ret = -1;
+    for (size_t i = 0; i < metaRawCount; i++) {
+        if (CAM_FORMAT_SUBTYPE_PDAF_STATS == caps->sub_fmt[i]) {
+            ret = i;
+            break;
+        }
+    }
+
+    return ret;
+}
+
+/*===========================================================================
  * FUNCTION   : initStaticMetadata
  *
  * DESCRIPTION: initialize the static metadata
@@ -8936,6 +9018,44 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     staticInfo.update(ANDROID_STATISTICS_INFO_MAX_SHARPNESS_MAP_VALUE,
             &gCamCapability[cameraId]->max_sharpness_map_value, 1);
 
+    int32_t indexPD = getPDStatIndex(gCamCapability[cameraId]);
+    if (0 <= indexPD) {
+        // Advertise PD stats data as part of the Depth capabilities
+        int32_t depthWidth =
+                gCamCapability[cameraId]->raw_meta_dim[indexPD].width;
+        int32_t depthHeight =
+                gCamCapability[cameraId]->raw_meta_dim[indexPD].height;
+        int32_t depthSamplesCount = (depthWidth * depthHeight * 2) / 16;
+        assert(0 < depthSamplesCount);
+        staticInfo.update(ANDROID_DEPTH_MAX_DEPTH_SAMPLES,
+                &depthSamplesCount, 1);
+
+        int32_t depthConfigs[] = {HAL_PIXEL_FORMAT_RAW16, depthWidth,
+                depthHeight,
+                ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT,
+                HAL_PIXEL_FORMAT_BLOB, depthSamplesCount, 1,
+                ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT};
+        staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_STREAM_CONFIGURATIONS,
+                depthConfigs, sizeof(depthConfigs)/sizeof(depthConfigs[0]));
+
+        int64_t depthMinDuration[] = {HAL_PIXEL_FORMAT_RAW16, depthWidth,
+                depthHeight, 33333333,
+                HAL_PIXEL_FORMAT_BLOB, depthSamplesCount, 1, 33333333};
+        staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_MIN_FRAME_DURATIONS,
+                depthMinDuration,
+                sizeof(depthMinDuration) / sizeof(depthMinDuration[0]));
+
+        int64_t depthStallDuration[] = {HAL_PIXEL_FORMAT_RAW16, depthWidth,
+                depthHeight, 0,
+                HAL_PIXEL_FORMAT_BLOB, depthSamplesCount, 1, 0};
+        staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_STALL_DURATIONS,
+                depthStallDuration,
+                sizeof(depthStallDuration) / sizeof(depthStallDuration[0]));
+
+        uint8_t depthExclusive = ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE_FALSE;
+        staticInfo.update(ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE, &depthExclusive, 1);
+    }
+
     int32_t scalar_formats[] = {
             ANDROID_SCALER_AVAILABLE_FORMATS_RAW_OPAQUE,
             ANDROID_SCALER_AVAILABLE_FORMATS_RAW16,
@@ -8943,10 +9063,9 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
             ANDROID_SCALER_AVAILABLE_FORMATS_BLOB,
             HAL_PIXEL_FORMAT_RAW10,
             HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED};
-    size_t scalar_formats_count = sizeof(scalar_formats) / sizeof(int32_t);
-    staticInfo.update(ANDROID_SCALER_AVAILABLE_FORMATS,
-                      scalar_formats,
-                      scalar_formats_count);
+    size_t scalar_formats_count = sizeof(scalar_formats) / sizeof(scalar_formats[0]);
+    staticInfo.update(ANDROID_SCALER_AVAILABLE_FORMATS, scalar_formats,
+            scalar_formats_count);
 
     int32_t available_processed_sizes[MAX_SIZES_CNT * 2];
     count = MIN(gCamCapability[cameraId]->picture_sizes_tbl_cnt, MAX_SIZES_CNT);
@@ -9046,41 +9165,6 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     uint8_t face_bsgc = gCamCapability[cameraId]->face_bsgc;
     staticInfo.update(QCAMERA3_STATS_BSGC_AVAILABLE,
             &face_bsgc, 1);
-
-#ifdef SUPPORT_DEPTH_DATA
-    if (gCamCapability[cameraId]->supported_focus_modes_cnt > 1) {
-        //TODO: Update depth size accordingly, currently we use active array
-        //      as reference.
-        int32_t depthWidth = gCamCapability[cameraId]->active_array_size.width;
-        int32_t depthHeight =
-                gCamCapability[cameraId]->active_array_size.height;
-        //As per spec. depth cloud should be sample count / 16
-        int32_t depthSamplesCount = depthWidth * depthHeight / 16;
-        assert(0 < depthSamplesCount);
-        staticInfo.update(ANDROID_DEPTH_MAX_DEPTH_SAMPLES,
-                &depthSamplesCount, 1);
-
-        int32_t depthConfigs[] = {HAL_PIXEL_FORMAT_BLOB, depthSamplesCount, 1,
-                ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT };
-        staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_STREAM_CONFIGURATIONS,
-                depthConfigs, sizeof(depthConfigs)/sizeof(depthConfigs[0]));
-
-        int64_t depthMinDuration[] = {HAL_PIXEL_FORMAT_BLOB, depthSamplesCount,
-                1, 1 };
-        staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_MIN_FRAME_DURATIONS,
-                depthMinDuration,
-                sizeof(depthMinDuration) / sizeof(depthMinDuration[0]));
-
-        int64_t depthStallDuration[] = {HAL_PIXEL_FORMAT_BLOB,
-                depthSamplesCount, 1, 0 };
-        staticInfo.update(ANDROID_DEPTH_AVAILABLE_DEPTH_STALL_DURATIONS,
-                depthStallDuration,
-                sizeof(depthStallDuration) / sizeof(depthStallDuration[0]));
-
-        uint8_t depthExclusive = ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE_FALSE;
-        staticInfo.update(ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE, &depthExclusive, 1);
-    }
-#endif
 
     int32_t exposureCompensationRange[] = {
             gCamCapability[cameraId]->exposure_compensation_min,
@@ -9899,13 +9983,6 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_INFO_AVAILABLE_LENS_SHADING_MAP_MODES,
        ANDROID_SHADING_AVAILABLE_MODES,
        ANDROID_INFO_SUPPORTED_HARDWARE_LEVEL,
-#ifdef SUPPORT_DEPTH_DATA
-       ANDROID_DEPTH_MAX_DEPTH_SAMPLES,
-       ANDROID_DEPTH_AVAILABLE_DEPTH_STREAM_CONFIGURATIONS,
-       ANDROID_DEPTH_AVAILABLE_DEPTH_MIN_FRAME_DURATIONS,
-       ANDROID_DEPTH_AVAILABLE_DEPTH_STALL_DURATIONS,
-       ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE,
-#endif
 #ifndef USE_HAL_3_3
        ANDROID_SENSOR_OPAQUE_RAW_SIZE,
        ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST_RANGE,
@@ -9920,6 +9997,19 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         available_characteristics_keys.add(ANDROID_SENSOR_OPTICAL_BLACK_REGIONS);
     }
 #endif
+
+    if (0 <= indexPD) {
+        int32_t depthKeys[] = {
+                ANDROID_DEPTH_MAX_DEPTH_SAMPLES,
+                ANDROID_DEPTH_AVAILABLE_DEPTH_STREAM_CONFIGURATIONS,
+                ANDROID_DEPTH_AVAILABLE_DEPTH_MIN_FRAME_DURATIONS,
+                ANDROID_DEPTH_AVAILABLE_DEPTH_STALL_DURATIONS,
+                ANDROID_DEPTH_DEPTH_IS_EXCLUSIVE
+        };
+        available_characteristics_keys.appendArray(depthKeys,
+                sizeof(depthKeys) / sizeof(depthKeys[0]));
+    }
+
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_CHARACTERISTICS_KEYS,
                       available_characteristics_keys.array(),
                       available_characteristics_keys.size());
