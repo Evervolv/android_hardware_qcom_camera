@@ -10028,6 +10028,15 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     staticInfo.update(QCAMERA3_STATS_IS_HDR_SCENE_CONFIDENCE_RANGE,
             is_hdr_confidence_range, 2);
 
+    size_t eepromLength = strnlen(
+            reinterpret_cast<const char *>(
+                    gCamCapability[cameraId]->eeprom_version_info),
+            sizeof(gCamCapability[cameraId]->eeprom_version_info));
+    if (0 < eepromLength) {
+        staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO,
+                gCamCapability[cameraId]->eeprom_version_info, eepromLength);
+    }
+
     gStaticMetadata[cameraId] = staticInfo.release();
     return rc;
 }

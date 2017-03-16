@@ -334,7 +334,8 @@ vendor_tag_info_t nexus_experimental_2017[NEXUS_EXPERIMENTAL_2017_END -
     { "stats.histogramMode", TYPE_BYTE },
     { "stats.availableHistogramBucketCounts", TYPE_INT32 },
     { "stats.histogramBucketCount", TYPE_INT32 },
-    { "stats.histogram", TYPE_INT32 }
+    { "stats.histogram", TYPE_INT32 },
+    { "sensorEepromInfo", TYPE_BYTE }
 };
 
 vendor_tag_info_t *qcamera3_tag_info[QCAMERA3_SECTIONS_END -
@@ -545,6 +546,7 @@ uint32_t qcamera3_all_tags[] = {
     (uint32_t)NEXUS_EXPERIMENTAL_2017_HISTOGRAM_SUPPORTED_BINS,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_HISTOGRAM,
+    (uint32_t)NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO,
 };
 
 const vendor_tag_ops_t* QCamera3VendorTags::Ops = NULL;
