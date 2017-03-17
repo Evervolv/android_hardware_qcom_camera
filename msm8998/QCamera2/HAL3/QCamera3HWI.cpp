@@ -3125,7 +3125,8 @@ void QCamera3HardwareInterface::handleBatchMetadata(
         pthread_mutex_lock(&mMutex);
         handleMetadataWithLock(metadata_buf,
                 false /* free_and_bufdone_meta_buf */,
-                (i == 0) /* first metadata in the batch metadata */,
+                (i == urgentFrameNumDiff-1), /* last urgent metadata in the batch */
+                (i == frameNumDiff-1), /* last metadata in the batch metadata */
                 &is_metabuf_queued /* if metabuf isqueued or not */);
         pthread_mutex_unlock(&mMutex);
     }
@@ -3159,8 +3160,10 @@ void QCamera3HardwareInterface::notifyError(uint32_t frameNumber,
  * PARAMETERS : @metadata_buf: metadata buffer
  *              @free_and_bufdone_meta_buf: Buf done on the meta buf and free
  *                 the meta buf in this method
- *              @firstMetadataInBatch: Boolean to indicate whether this is the
- *                  first metadata in a batch. Valid only for batch mode
+ *              @lastUrgentMetadataInBatch: Boolean to indicate whether this is the
+ *                  last urgent metadata in a batch. Always true for non-batch mode
+ *              @lastMetadataInBatch: Boolean to indicate whether this is the
+ *                  last metadata in a batch. Always true for non-batch mode
  *              @p_is_metabuf_queued: Pointer to Boolean to check if metadata
  *                  buffer is enqueued or not.
  *
@@ -3169,7 +3172,8 @@ void QCamera3HardwareInterface::notifyError(uint32_t frameNumber,
  *==========================================================================*/
 void QCamera3HardwareInterface::handleMetadataWithLock(
     mm_camera_super_buf_t *metadata_buf, bool free_and_bufdone_meta_buf,
-    bool firstMetadataInBatch, bool *p_is_metabuf_queued)
+    bool lastUrgentMetadataInBatch, bool lastMetadataInBatch,
+    bool *p_is_metabuf_queued)
 {
     ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_HANDLE_METADATA_LKD);
     if ((mFlushPerf) || (ERROR == mState) || (DEINIT == mState)) {
@@ -3276,8 +3280,8 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                 i->partial_result_cnt++;
                 i->bUrgentReceived = 1;
                 // Extract 3A metadata
-                result.result =
-                    translateCbUrgentMetadataToResultMetadata(metadata);
+                result.result = translateCbUrgentMetadataToResultMetadata(
+                        metadata, lastUrgentMetadataInBatch);
                 // Populate metadata result
                 result.frame_number = urgent_frame_number;
                 result.num_output_buffers = 0;
@@ -3435,7 +3439,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                     pendingRequest.DevCamDebug_meta_enable,
                     /* DevCamDebug metadata end */
                     internalPproc, pendingRequest.fwkCacMode,
-                    firstMetadataInBatch);
+                    lastMetadataInBatch);
 
             updateFpsInPreviewBuffer(metadata, pendingRequest.frame_number);
 
@@ -6041,7 +6045,8 @@ void QCamera3HardwareInterface::captureResultCb(mm_camera_super_buf_t *metadata_
             pthread_mutex_lock(&mMutex);
             handleMetadataWithLock(metadata_buf,
                     true /* free_and_bufdone_meta_buf */,
-                    false /* first frame of batch metadata */ ,
+                    true /* last urgent frame of batch metadata */,
+                    true /* last frame of batch metadata */,
                     NULL);
             pthread_mutex_unlock(&mMutex);
         }
@@ -6202,6 +6207,8 @@ template <class mapType> cam_cds_mode_type_t lookupProp(const mapType *arr,
  *   @DevCamDebug_meta_enable: enable DevCamDebug meta
  *   // DevCamDebug metadata end
  *   @pprocDone: whether internal offline postprocsesing is done
+ *   @lastMetadataInBatch: Boolean to indicate whether this is the last metadata
+ *                         in a batch. Always true for non-batch mode.
  *
  * RETURN     : camera_metadata_t*
  *              metadata in a format specified by fwk
@@ -6220,16 +6227,15 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                                  /* DevCamDebug metadata end */
                                  bool pprocDone,
                                  uint8_t fwk_cacMode,
-                                 bool firstMetadataInBatch)
+                                 bool lastMetadataInBatch)
 {
     CameraMetadata camMetadata;
     camera_metadata_t *resultMetadata;
 
-    if (mBatchSize && !firstMetadataInBatch) {
-        /* In batch mode, use cached metadata from the first metadata
-            in the batch */
-        camMetadata.clear();
-        camMetadata = mCachedMetadata;
+    if (!lastMetadataInBatch) {
+        /* In batch mode, use empty metadata if this is not the last in batch*/
+        resultMetadata = allocate_camera_metadata(0, 0);
+        return resultMetadata;
     }
 
     if (jpegMetadata.entryCount())
@@ -6243,12 +6249,6 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     if (mBatchSize == 0) {
         // DevCamDebug metadata translateFromHalMetadata. Only update this one for non-HFR mode
         camMetadata.update(DEVCAMDEBUG_META_ENABLE, &DevCamDebug_meta_enable, 1);
-    }
-
-    if (mBatchSize && !firstMetadataInBatch) {
-        /* In batch mode, use cached metadata instead of parsing metadata buffer again */
-        resultMetadata = camMetadata.release();
-        return resultMetadata;
     }
 
     // atrace_begin(ATRACE_TAG_ALWAYS, "DevCamDebugInfo");
@@ -7613,12 +7613,6 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         camMetadata.update(NEXUS_EXPERIMENTAL_2016_AF_SCENE_CHANGE, afSceneChange, 1);
     }
 
-    /* In batch mode, cache the first metadata in the batch */
-    if (mBatchSize && firstMetadataInBatch) {
-        mCachedMetadata.clear();
-        mCachedMetadata = camMetadata;
-    }
-
     resultMetadata = camMetadata.release();
     return resultMetadata;
 }
@@ -7717,17 +7711,26 @@ mm_jpeg_exif_params_t QCamera3HardwareInterface::get3AExifParams()
  *
  * PARAMETERS :
  *   @metadata : metadata information from callback
+ *   @lastUrgentMetadataInBatch: Boolean to indicate whether this is the last
+ *                               urgent metadata in a batch. Always true for
+ *                               non-batch mode.
  *
  * RETURN     : camera_metadata_t*
  *              metadata in a format specified by fwk
  *==========================================================================*/
 camera_metadata_t*
 QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
-                                (metadata_buffer_t *metadata)
+                                (metadata_buffer_t *metadata, bool lastUrgentMetadataInBatch)
 {
     CameraMetadata camMetadata;
     camera_metadata_t *resultMetadata;
 
+    if (!lastUrgentMetadataInBatch) {
+        /* In batch mode, use empty metadata if this is not the last in batch
+         */
+        resultMetadata = allocate_camera_metadata(0, 0);
+        return resultMetadata;
+    }
 
     IF_META_AVAILABLE(uint32_t, whiteBalanceState, CAM_INTF_META_AWB_STATE, metadata) {
         uint8_t fwk_whiteBalanceState = (uint8_t) *whiteBalanceState;
