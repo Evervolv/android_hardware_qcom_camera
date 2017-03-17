@@ -10033,6 +10033,12 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
                     gCamCapability[cameraId]->eeprom_version_info),
             sizeof(gCamCapability[cameraId]->eeprom_version_info));
     if (0 < eepromLength) {
+        char easelInfo[] = ",E:N";
+        char *eepromInfo = reinterpret_cast<char *>(gCamCapability[cameraId]->eeprom_version_info);
+        if (eepromLength + sizeof(easelInfo) < MAX_EEPROM_VERSION_INFO_LEN) {
+            eepromLength += sizeof(easelInfo);
+            strlcat(eepromInfo, (gHdrPlusClient ? ",E:Y" : ",E:N"),  MAX_EEPROM_VERSION_INFO_LEN);
+        }
         staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO,
                 gCamCapability[cameraId]->eeprom_version_info, eepromLength);
     }
@@ -10309,6 +10315,14 @@ int QCamera3HardwareInterface::getCamInfo(uint32_t cameraId,
     int rc = 0;
 
     pthread_mutex_lock(&gCamLock);
+
+    rc = initHdrPlusClientLocked();
+    if (rc != OK) {
+        ALOGE("%s: initHdrPlusClientLocked failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
+        pthread_mutex_unlock(&gCamLock);
+        return rc;
+    }
+
     if (NULL == gCamCapability[cameraId]) {
         rc = initCapabilities(cameraId);
         if (rc < 0) {
@@ -10372,13 +10386,6 @@ int QCamera3HardwareInterface::getCamInfo(uint32_t cameraId,
     info->resource_cost = 100 * MIN(1.0, ratio);
     LOGI("camera %d resource cost is %d", cameraId,
             info->resource_cost);
-
-    rc = initHdrPlusClientLocked();
-    if (rc != OK) {
-        ALOGE("%s: initHdrPlusClientLocked failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
-        pthread_mutex_unlock(&gCamLock);
-        return rc;
-    }
 
     pthread_mutex_unlock(&gCamLock);
     return rc;
