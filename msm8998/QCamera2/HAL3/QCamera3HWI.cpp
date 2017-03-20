@@ -6249,8 +6249,11 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     camera_metadata_t *resultMetadata;
 
     if (!lastMetadataInBatch) {
-        /* In batch mode, use empty metadata if this is not the last in batch*/
-        resultMetadata = allocate_camera_metadata(0, 0);
+        /* In batch mode, only populate SENSOR_TIMESTAMP if this is not the last in batch.
+         * Timestamp is needed because it's used for shutter notify calculation.
+         * */
+        camMetadata.update(ANDROID_SENSOR_TIMESTAMP, &timestamp, 1);
+        resultMetadata = camMetadata.release();
         return resultMetadata;
     }
 
