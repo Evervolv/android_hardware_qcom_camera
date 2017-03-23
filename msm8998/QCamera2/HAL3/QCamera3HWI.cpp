@@ -3442,6 +3442,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                 (i->partial_result_cnt == 0)) {
                 LOGE("Error: HAL missed urgent metadata for frame number %d",
                          i->frame_number);
+                i->partial_result_cnt++;
             }
 
             if (i->frame_number == urgent_frame_number &&
@@ -4094,43 +4095,6 @@ void QCamera3HardwareInterface::handlePendingResultsWithLock(uint32_t frameNumbe
 
             result.input_buffer = iter->input_buffer;
 
-            // Prepare output buffer array
-            for (auto bufferInfoIter = iter->buffers.begin();
-                    bufferInfoIter != iter->buffers.end(); bufferInfoIter++) {
-                if (bufferInfoIter->buffer != nullptr) {
-
-                    QCamera3Channel *channel =
-                            (QCamera3Channel *)bufferInfoIter->buffer->stream->priv;
-                    uint32_t streamID = channel->getStreamID(channel->getStreamTypeMask());
-
-                    // Check if this buffer is a dropped frame.
-                    auto frameDropIter = mPendingFrameDropList.begin();
-                    while (frameDropIter != mPendingFrameDropList.end()) {
-                        if((frameDropIter->stream_ID == streamID) &&
-                                (frameDropIter->frame_number == frameNumber)) {
-                            bufferInfoIter->buffer->status = CAMERA3_BUFFER_STATUS_ERROR;
-                            LOGE("Stream STATUS_ERROR frame_number=%u, streamID=%u", frameNumber,
-                                    streamID);
-                            mPendingFrameDropList.erase(frameDropIter);
-                            break;
-                        } else {
-                            frameDropIter++;
-                        }
-                    }
-
-                    // Check buffer error status
-                    bufferInfoIter->buffer->status |= mPendingBuffersMap.getBufErrStatus(
-                            bufferInfoIter->buffer->buffer);
-                    mPendingBuffersMap.removeBuf(bufferInfoIter->buffer->buffer);
-
-                    outputBuffers.push_back(*(bufferInfoIter->buffer));
-                    free(bufferInfoIter->buffer);
-                    bufferInfoIter->buffer = NULL;
-                }
-            }
-
-            result.output_buffers = outputBuffers.size() > 0 ? &outputBuffers[0] : nullptr;
-            result.num_output_buffers = outputBuffers.size();
         } else if (iter->frame_number < frameNumber && liveRequest && thisLiveRequest) {
             // If the result metadata belongs to a live request, notify errors for previous pending
             // live requests.
@@ -4141,10 +4105,54 @@ void QCamera3HardwareInterface::handlePendingResultsWithLock(uint32_t frameNumbe
             result.result = dummyMetadata.release();
 
             notifyError(iter->frame_number, CAMERA3_MSG_ERROR_RESULT);
+
+            // partial_result should be PARTIAL_RESULT_CNT in case of
+            // ERROR_RESULT.
+            iter->partial_result_cnt = PARTIAL_RESULT_COUNT;
+            result.partial_result = PARTIAL_RESULT_COUNT;
+
         } else {
             iter++;
             continue;
         }
+
+        // Prepare output buffer array
+        for (auto bufferInfoIter = iter->buffers.begin();
+                bufferInfoIter != iter->buffers.end(); bufferInfoIter++) {
+            if (bufferInfoIter->buffer != nullptr) {
+
+                QCamera3Channel *channel =
+                        (QCamera3Channel *)bufferInfoIter->buffer->stream->priv;
+                uint32_t streamID = channel->getStreamID(channel->getStreamTypeMask());
+
+                // Check if this buffer is a dropped frame.
+                auto frameDropIter = mPendingFrameDropList.begin();
+                while (frameDropIter != mPendingFrameDropList.end()) {
+                    if((frameDropIter->stream_ID == streamID) &&
+                            (frameDropIter->frame_number == frameNumber)) {
+                        bufferInfoIter->buffer->status = CAMERA3_BUFFER_STATUS_ERROR;
+                        LOGE("Stream STATUS_ERROR frame_number=%u, streamID=%u", frameNumber,
+                                streamID);
+                        mPendingFrameDropList.erase(frameDropIter);
+                        break;
+                    } else {
+                        frameDropIter++;
+                    }
+                }
+
+                // Check buffer error status
+                bufferInfoIter->buffer->status |= mPendingBuffersMap.getBufErrStatus(
+                        bufferInfoIter->buffer->buffer);
+                mPendingBuffersMap.removeBuf(bufferInfoIter->buffer->buffer);
+
+                outputBuffers.push_back(*(bufferInfoIter->buffer));
+                free(bufferInfoIter->buffer);
+                bufferInfoIter->buffer = NULL;
+            }
+        }
+
+        result.output_buffers = outputBuffers.size() > 0 ? &outputBuffers[0] : nullptr;
+        result.num_output_buffers = outputBuffers.size();
 
         orchestrateResult(&result);
 
