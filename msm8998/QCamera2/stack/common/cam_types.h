@@ -2158,6 +2158,9 @@ typedef enum {
     /* A frame counter set by the framework. Must be maintained unchanged in
      * output frame. */
     CAM_INTF_META_URGENT_FRAME_NUMBER,
+    /* Choose sensor mode which has Full FOV when multiple modes satisfy the
+     * other requirements. MUST be defined before CAM_INTF_META_STREAM_INFO */
+    CAM_INTF_META_SENSOR_MODE_FULLFOV,
     /*Number of streams and size of streams in current configuration*/
     CAM_INTF_META_STREAM_INFO,
     /* List of areas to use for metering */

@@ -61,7 +61,9 @@ enum qcamera3_ext_section {
     QCAMERA3_HISTOGRAM,
     QCAMERA3_BINNING_CORRECTION,
     QCAMERA3_STATS,
-    NEXUS_EXPERIMENTAL_2017,
+    //This value is hardcoded in NDK camera clients and hence enum value is
+    //assigned to ensure this value does not go off sync
+    NEXUS_EXPERIMENTAL_2017 = 0x8019,
     QCAMERA3_SECTIONS_END
 };
 
@@ -418,6 +420,10 @@ enum qcamera3_ext_tags {
     NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER,
     NEXUS_EXPERIMENTAL_2017_AF_REGIONS_CONFIDENCE,
 
+    //This value is hardcoded in NDK camera clients and hence enum value is
+    //assigned to ensure this value does not go off sync
+    //NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV = 0x80190007
+    NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV = NEXUS_EXPERIMENTAL_2017_START + 7,
     NEXUS_EXPERIMENTAL_2017_END,
 };
 

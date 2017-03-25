@@ -1209,6 +1209,7 @@ typedef struct {
     INCLUDE(CAM_INTF_META_STATS_HISTOGRAM_BINS,         int32_t,                     1);
     INCLUDE(CAM_INTF_META_TRACKING_AF_TRIGGER,          uint8_t,                     1);
     INCLUDE(CAM_INTF_META_AF_REGIONS_CONFIDENCE,        int32_t,                     1);
+    INCLUDE(CAM_INTF_META_SENSOR_MODE_FULLFOV,          int32_t,                     1);
 
 } metadata_data_t;
 
