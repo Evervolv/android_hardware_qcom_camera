@@ -7463,22 +7463,6 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         camMetadata.update(ANDROID_LENS_STATE , &fwk_lensState, 1);
     }
 
-    IF_META_AVAILABLE(cam_area_t, hAfRegions, CAM_INTF_META_AF_ROI, metadata) {
-        /*af regions*/
-        int32_t afRegions[REGIONS_TUPLE_COUNT];
-        // Adjust crop region from sensor output coordinate system to active
-        // array coordinate system.
-        mCropRegionMapper.toActiveArray(hAfRegions->rect.left, hAfRegions->rect.top,
-                hAfRegions->rect.width, hAfRegions->rect.height);
-
-        convertToRegions(hAfRegions->rect, afRegions, hAfRegions->weight);
-        camMetadata.update(ANDROID_CONTROL_AF_REGIONS, afRegions,
-                REGIONS_TUPLE_COUNT);
-        LOGD("Metadata : ANDROID_CONTROL_AF_REGIONS: FWK: [%d,%d,%d,%d] HAL: [%d,%d,%d,%d]",
-                 afRegions[0], afRegions[1], afRegions[2], afRegions[3],
-                hAfRegions->rect.left, hAfRegions->rect.top, hAfRegions->rect.width,
-                hAfRegions->rect.height);
-    }
 
     IF_META_AVAILABLE(uint32_t, hal_ab_mode, CAM_INTF_PARM_ANTIBANDING, metadata) {
         uint32_t ab_mode = *hal_ab_mode;
@@ -7952,6 +7936,23 @@ QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
         camMetadata.update(ANDROID_CONTROL_AF_TRIGGER_ID, &af_trigger->trigger_id, 1);
         LOGD("urgent Metadata : ANDROID_CONTROL_AF_TRIGGER_ID = %d",
                 af_trigger->trigger_id);
+    }
+
+    IF_META_AVAILABLE(cam_area_t, hAfRegions, CAM_INTF_META_AF_ROI, metadata) {
+        /*af regions*/
+        int32_t afRegions[REGIONS_TUPLE_COUNT];
+        // Adjust crop region from sensor output coordinate system to active
+        // array coordinate system.
+        mCropRegionMapper.toActiveArray(hAfRegions->rect.left, hAfRegions->rect.top,
+                hAfRegions->rect.width, hAfRegions->rect.height);
+
+        convertToRegions(hAfRegions->rect, afRegions, hAfRegions->weight);
+        camMetadata.update(ANDROID_CONTROL_AF_REGIONS, afRegions,
+                REGIONS_TUPLE_COUNT);
+        LOGD("Metadata : ANDROID_CONTROL_AF_REGIONS: FWK: [%d,%d,%d,%d] HAL: [%d,%d,%d,%d]",
+                 afRegions[0], afRegions[1], afRegions[2], afRegions[3],
+                hAfRegions->rect.left, hAfRegions->rect.top, hAfRegions->rect.width,
+                hAfRegions->rect.height);
     }
 
     IF_META_AVAILABLE(int32_t, whiteBalance, CAM_INTF_PARM_WHITE_BALANCE, metadata) {
