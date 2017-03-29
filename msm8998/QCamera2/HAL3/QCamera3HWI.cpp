@@ -6656,7 +6656,7 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         }
         IF_META_AVAILABLE(int32_t, DevCamDebug_aec_l_linecount,
                 CAM_INTF_META_DEV_CAM_AEC_L_LINECOUNT, metadata) {
-            float fwk_DevCamDebug_aec_l_linecount = *DevCamDebug_aec_l_linecount;
+            int32_t fwk_DevCamDebug_aec_l_linecount = *DevCamDebug_aec_l_linecount;
             camMetadata.update(DEVCAMDEBUG_AEC_L_LINECOUNT, &fwk_DevCamDebug_aec_l_linecount, 1);
         }
         IF_META_AVAILABLE(float, DevCamDebug_aec_s_real_gain,
@@ -6666,7 +6666,7 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         }
         IF_META_AVAILABLE(int32_t, DevCamDebug_aec_s_linecount,
                 CAM_INTF_META_DEV_CAM_AEC_S_LINECOUNT, metadata) {
-            float fwk_DevCamDebug_aec_s_linecount = *DevCamDebug_aec_s_linecount;
+            int32_t fwk_DevCamDebug_aec_s_linecount = *DevCamDebug_aec_s_linecount;
             camMetadata.update(DEVCAMDEBUG_AEC_S_LINECOUNT, &fwk_DevCamDebug_aec_s_linecount, 1);
         }
         IF_META_AVAILABLE(float, DevCamDebug_aec_hdr_sensitivity_ratio,
