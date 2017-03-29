@@ -872,6 +872,13 @@ typedef enum {
     CAM_AF_TRIGGER_CANCEL
 } cam_af_trigger_type_t;
 
+// This enum must match nexus_experimental_2017_tracking_af_trigger
+typedef enum {
+    CAM_TRACKING_AF_TRIGGER_IDLE,
+    CAM_TRACKING_AF_TRIGGER_START,
+    CAM_TRACKING_AF_TRIGGER_STOP,
+} cam_tracking_af_trigger_t;
+
 typedef enum {
     CAM_AE_STATE_INACTIVE,
     CAM_AE_STATE_SEARCHING,
@@ -2507,6 +2514,10 @@ typedef enum {
     CAM_INTF_PARM_FLUSH_FRAMES,
     /* Number of histogram bins */
     CAM_INTF_META_STATS_HISTOGRAM_BINS,
+    /* Tracking AF trigger */
+    CAM_INTF_META_TRACKING_AF_TRIGGER,
+    /* AF regions condidence */
+    CAM_INTF_META_AF_REGIONS_CONFIDENCE,
 
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;

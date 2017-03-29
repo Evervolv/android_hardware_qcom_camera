@@ -414,6 +414,10 @@ enum qcamera3_ext_tags {
     /* EEPROM Version Information */
     NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO,
 
+    /* Tracking AF */
+    NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER,
+    NEXUS_EXPERIMENTAL_2017_AF_REGIONS_CONFIDENCE,
+
     NEXUS_EXPERIMENTAL_2017_END,
 };
 
@@ -422,7 +426,6 @@ typedef enum qcamera3_ext_opaque_raw_format {
     QCAMERA3_OPAQUE_RAW_FORMAT_LEGACY,
     QCAMERA3_OPAQUE_RAW_FORMAT_MIPI
 } qcamera3_ext_opaque_raw_format_t;
-
 
 // QCAMERA3_VIDEO_HDR_MODE
 typedef enum camera_metadata_enum_android_video_hdr_mode {
@@ -492,6 +495,13 @@ typedef enum {
      */
     QCAMERA3_VENDOR_STREAM_CONFIGURATION_RAW_ONLY_MODE = 0x8000,
 } QCamera3VendorStreamConfiguration;
+
+// NEXUS_EXPERIMENTAL_2017_TRACKING_AF
+typedef enum nexus_experimental_2017_tracking_af_trigger {
+    NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER_IDLE,
+    NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER_START,
+    NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER_STOP,
+} nexus_experimental_2017_tracking_af_trigger_t;
 
 class QCamera3VendorTags {
 
