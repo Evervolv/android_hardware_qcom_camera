@@ -690,6 +690,9 @@ private:
     status_t fillPbStreamConfig(pbcamera::StreamConfiguration *config, uint32_t pbStreamId,
             int pbStreamFormat, QCamera3Channel *channel, uint32_t streamIndex);
 
+    // Open HDR+ client asynchronously.
+    status_t openHdrPlusClientAsyncLocked();
+
     // Enable HDR+ mode. Easel will start capturing ZSL buffers.
     status_t enableHdrPlusModeLocked();
 
@@ -700,8 +703,9 @@ private:
     status_t configureHdrPlusStreamsLocked();
 
     // Try to submit an HDR+ request. Returning true if an HDR+ request was submitted. Returning
-    // false if it is not an HDR+ request or submitting an HDR+ request failed.
-    bool trySubmittingHdrPlusRequest(HdrPlusPendingRequest *hdrPlusRequest,
+    // false if it is not an HDR+ request or submitting an HDR+ request failed. Must be called with
+    // gHdrPlusClientLock held.
+    bool trySubmittingHdrPlusRequestLocked(HdrPlusPendingRequest *hdrPlusRequest,
         const camera3_capture_request_t &request, const CameraMetadata &metadata);
 
     // Update HDR+ result metadata with the still capture's request settings.
@@ -709,6 +713,8 @@ private:
             std::shared_ptr<metadata_buffer_t> settings);
 
     // HDR+ client callbacks.
+    void onOpened(std::unique_ptr<HdrPlusClient> client) override;
+    void onOpenFailed(status_t err) override;
     void onCaptureResult(pbcamera::CaptureResult *result,
             const camera_metadata_t &resultMetadata) override;
     void onFailedCaptureResult(pbcamera::CaptureResult *failedResult) override;
