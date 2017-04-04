@@ -7955,6 +7955,11 @@ QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
                 hAfRegions->rect.height);
     }
 
+    // AF region confidence
+    IF_META_AVAILABLE(int32_t, afRegionConfidence, CAM_INTF_META_AF_REGIONS_CONFIDENCE, metadata) {
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_AF_REGIONS_CONFIDENCE, afRegionConfidence, 1);
+    }
+
     IF_META_AVAILABLE(int32_t, whiteBalance, CAM_INTF_PARM_WHITE_BALANCE, metadata) {
         int val = lookupFwkName(WHITE_BALANCE_MODES_MAP,
                 METADATA_MAP_SIZE(WHITE_BALANCE_MODES_MAP), *whiteBalance);
@@ -10679,6 +10684,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     vsMode = ANDROID_CONTROL_VIDEO_STABILIZATION_MODE_OFF;
     optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
     uint8_t shadingmap_mode = ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF;
+    uint8_t trackingAfTrigger = NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER_IDLE;
 
     switch (type) {
       case CAMERA3_TEMPLATE_PREVIEW:
@@ -10779,6 +10785,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     }
     settings.update(ANDROID_CONTROL_AF_MODE, &focusMode, 1);
     settings.update(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_ENABLE, &histogramEnable, 1);
+    settings.update(NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER, &trackingAfTrigger, 1);
 
     if (gCamCapability[mCameraId]->optical_stab_modes_count == 1 &&
             gCamCapability[mCameraId]->optical_stab_modes[0] == CAM_OPT_STAB_ON)
@@ -12578,6 +12585,16 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
                  frame_settings.find(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS).data.i32[0];
         if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_STATS_HISTOGRAM_BINS,
                 histogramBins)) {
+            rc = BAD_VALUE;
+        }
+    }
+
+    // Tracking AF
+    if (frame_settings.exists(NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER)) {
+        uint8_t trackingAfTrigger =
+                frame_settings.find(NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER).data.u8[0];
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_TRACKING_AF_TRIGGER,
+                trackingAfTrigger)) {
             rc = BAD_VALUE;
         }
     }
