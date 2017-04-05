@@ -122,6 +122,9 @@ namespace qcamera {
 #define MOUTH_Y                5
 #define TOTAL_LANDMARK_INDICES 6
 
+// Max preferred zoom
+#define MAX_PREFERRED_ZOOM_RATIO 5.0
+
 cam_capability_t *gCamCapability[MM_CAMERA_MAX_NUM_SENSORS];
 const camera_metadata_t *gStaticMetadata[MM_CAMERA_MAX_NUM_SENSORS];
 extern pthread_mutex_t gCamLock;
@@ -9134,7 +9137,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     uint32_t zoomSteps = gCamCapability[cameraId]->zoom_ratio_tbl_cnt;
     uint32_t maxZoomStep = gCamCapability[cameraId]->zoom_ratio_tbl[zoomSteps - 1];
     uint32_t minZoomStep = 100; //as per HAL1/API1 spec
-    float maxZoom = maxZoomStep/minZoomStep;
+    // Cap the max zoom to the max preferred value
+    float maxZoom = MIN(maxZoomStep/minZoomStep, MAX_PREFERRED_ZOOM_RATIO);
     staticInfo.update(ANDROID_SCALER_AVAILABLE_MAX_DIGITAL_ZOOM,
             &maxZoom, 1);
 
