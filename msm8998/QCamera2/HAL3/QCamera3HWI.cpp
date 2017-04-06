@@ -1045,7 +1045,9 @@ int QCamera3HardwareInterface::closeCamera()
             // Disconnect Easel if it's connected.
             gEaselManagerClient.closeHdrPlusClient(std::move(gHdrPlusClient));
             gHdrPlusClient = nullptr;
+        }
 
+        if (EaselManagerClientOpened) {
             rc = gEaselManagerClient.stopMipi(mCameraId);
             if (rc != 0) {
                 ALOGE("%s: Stopping MIPI failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
