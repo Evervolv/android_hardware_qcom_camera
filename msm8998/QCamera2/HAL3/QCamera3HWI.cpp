@@ -138,6 +138,7 @@ EaselManagerClient gEaselManagerClient;
 bool EaselManagerClientOpened = false; // If gEaselManagerClient is opened.
 std::unique_ptr<HdrPlusClient> gHdrPlusClient = nullptr;
 bool gHdrPlusClientOpening = false; // If HDR+ client is being opened.
+bool gEaselProfilingEnabled = false; // If Easel profiling is enabled.
 
 // If Easel is in bypass only mode. If true, Easel HDR+ won't be enabled.
 bool gEaselBypassOnly;
@@ -403,6 +404,21 @@ camera3_device_ops_t QCamera3HardwareInterface::mCameraOps = {
 
 // initialise to some default value
 uint32_t QCamera3HardwareInterface::sessionId[] = {0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF};
+
+static inline void logEaselEvent(const char *tag, const char *event) {
+    if (CC_UNLIKELY(gEaselProfilingEnabled)) {
+        struct timespec ts = {};
+        static int64_t kMsPerSec = 1000;
+        static int64_t kNsPerMs = 1000000;
+        status_t res = clock_gettime(CLOCK_BOOTTIME, &ts);
+        if (res != OK) {
+            ALOGE("[%s] Failed to get boot time for <%s>.", tag, event);
+        } else {
+            int64_t now = static_cast<int64_t>(ts.tv_sec) * kMsPerSec + ts.tv_nsec / kNsPerMs;
+            ALOGI("[%s] %s at %" PRId64 " ms", tag, event, now);
+        }
+    }
+}
 
 /*===========================================================================
  * FUNCTION   : QCamera3HardwareInterface
@@ -873,6 +889,7 @@ int QCamera3HardwareInterface::openCamera()
     {
         Mutex::Autolock l(gHdrPlusClientLock);
         if (gEaselManagerClient.isEaselPresentOnDevice()) {
+            logEaselEvent("EASEL_STARTUP_LATENCY", "Resume");
             rc = gEaselManagerClient.resume();
             if (rc != 0) {
                 ALOGE("%s: Resuming Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
@@ -3976,6 +3993,8 @@ void QCamera3HardwareInterface::handleBufferWithLock(
     if (mPreviewStarted == false) {
         QCamera3Channel *channel = (QCamera3Channel *)buffer->stream->priv;
         if ((1U << CAM_STREAM_TYPE_PREVIEW) == channel->getStreamTypeMask()) {
+            logEaselEvent("EASEL_STARTUP_LATENCY", "Preview Started");
+
             mPerfLockMgr.releasePerfLock(PERF_LOCK_START_PREVIEW);
             mPerfLockMgr.releasePerfLock(PERF_LOCK_OPEN_CAMERA);
             mPreviewStarted = true;
@@ -4904,6 +4923,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
         {
             Mutex::Autolock l(gHdrPlusClientLock);
             if (EaselManagerClientOpened) {
+                logEaselEvent("EASEL_STARTUP_LATENCY", "Starting MIPI");
                 rc = gEaselManagerClient.startMipi(mCameraId, mSensorModeInfo.op_pixel_clk);
                 if (rc != OK) {
                     ALOGE("%s: Failed to start MIPI rate for camera %u to %u", __FUNCTION__,
@@ -10513,6 +10533,7 @@ int QCamera3HardwareInterface::initHdrPlusClientLocked() {
         }
 
         gEaselBypassOnly = !property_get_bool("persist.camera.hdrplus.enable", false);
+        gEaselProfilingEnabled = property_get_bool("persist.camera.hdrplus.profiling", false);
     }
 
     return OK;
