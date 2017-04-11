@@ -2170,6 +2170,9 @@ typedef enum {
     /* The ID sent with the latest CAMERA2_TRIGGER_PRECAPTURE_METERING call */
     /* Current state of AE algorithm */
     CAM_INTF_META_AEC_STATE,
+    /* Tracking AF trigger. This has to be before AF_ROI so that the behavior of
+     * AF_ROI depends on TRACKING_AF_TRIGGER.*/
+    CAM_INTF_META_TRACKING_AF_TRIGGER,
     /* List of areas to use for focus estimation */
     CAM_INTF_META_AF_ROI,
     /* Default ROI of the camera to be sent to FOV control*/
@@ -2518,8 +2521,6 @@ typedef enum {
     CAM_INTF_PARM_FLUSH_FRAMES,
     /* Number of histogram bins */
     CAM_INTF_META_STATS_HISTOGRAM_BINS,
-    /* Tracking AF trigger */
-    CAM_INTF_META_TRACKING_AF_TRIGGER,
     /* AF regions condidence */
     CAM_INTF_META_AF_REGIONS_CONFIDENCE,
 

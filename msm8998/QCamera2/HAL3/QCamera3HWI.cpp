@@ -9959,7 +9959,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        /* DevCamDebug metadata end */
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM_ENABLE,
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS,
-       NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV
+       NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV,
+       NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER,
        };
 
     size_t request_keys_cnt =
@@ -10069,6 +10070,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM_ENABLE,
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS,
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM,
+       NEXUS_EXPERIMENTAL_2017_AF_REGIONS_CONFIDENCE,
        };
 
     size_t result_keys_cnt =
