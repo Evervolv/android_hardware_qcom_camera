@@ -4756,9 +4756,8 @@ int QCamera3HardwareInterface::processCaptureRequest(
             fwkVideoStabMode = meta.find(ANDROID_CONTROL_VIDEO_STABILIZATION_MODE).data.u8[0];
         }
 
-        // If EIS setprop is enabled & if first capture setting has EIS enabled then only
-        // turn it on for video/preview
-        bool setEis = m_bEisEnable && fwkVideoStabMode && m_bEisSupportedSize &&
+        // If EIS setprop is enabled then only turn it on for video/preview
+        bool setEis = m_bEisEnable && m_bEisSupportedSize &&
                 (isTypeVideo >= IS_TYPE_EIS_2_0);
         int32_t vsMode;
         vsMode = (setEis)? DIS_ENABLE: DIS_DISABLE;
