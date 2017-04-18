@@ -139,6 +139,7 @@ bool EaselManagerClientOpened = false; // If gEaselManagerClient is opened.
 std::unique_ptr<HdrPlusClient> gHdrPlusClient = nullptr;
 bool gHdrPlusClientOpening = false; // If HDR+ client is being opened.
 bool gEaselProfilingEnabled = false; // If Easel profiling is enabled.
+bool gExposeEnableZslKey = false; // If HAL makes android.control.enableZsl available.
 
 // If Easel is in bypass only mode. If true, Easel HDR+ won't be enabled.
 bool gEaselBypassOnly;
@@ -499,6 +500,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       m_pDualCamCmdHeap(NULL),
       m_pDualCamCmdPtr(NULL),
       mHdrPlusModeEnabled(false),
+      mZslEnabled(false),
       mIsApInputUsedForHdrPlus(false),
       mFirstPreviewIntentSeen(false),
       m_bSensorHDREnabled(false)
@@ -3611,6 +3613,12 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
             }
 
             saveExifParams(metadata);
+
+            bool *enableZsl = nullptr;
+            if (gExposeEnableZslKey) {
+                enableZsl = &pendingRequest.enableZsl;
+            }
+
             resultMetadata = translateFromHalMetadata(metadata,
                     pendingRequest.timestamp, pendingRequest.request_id,
                     pendingRequest.jpegMetadata, pendingRequest.pipeline_depth,
@@ -3620,7 +3628,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                     pendingRequest.DevCamDebug_meta_enable,
                     /* DevCamDebug metadata end */
                     internalPproc, pendingRequest.fwkCacMode,
-                    lastMetadataInBatch);
+                    lastMetadataInBatch, enableZsl);
 
             updateFpsInPreviewBuffer(metadata, pendingRequest.frame_number);
 
@@ -5463,6 +5471,16 @@ no_error:
     pendingRequest.fwkCacMode = mCacMode;
     pendingRequest.hdrplus = hdrPlusRequest;
 
+    // extract enableZsl info
+    if (gExposeEnableZslKey) {
+        if (meta.exists(ANDROID_CONTROL_ENABLE_ZSL)) {
+            pendingRequest.enableZsl = meta.find(ANDROID_CONTROL_ENABLE_ZSL).data.u8[0];
+            mZslEnabled = pendingRequest.enableZsl;
+        } else {
+            pendingRequest.enableZsl = mZslEnabled;
+        }
+    }
+
     PendingBuffersInRequest bufsForCurRequest;
     bufsForCurRequest.frame_number = frameNumber;
     // Mark current timestamp for the new request
@@ -6426,7 +6444,8 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                                  /* DevCamDebug metadata end */
                                  bool pprocDone,
                                  uint8_t fwk_cacMode,
-                                 bool lastMetadataInBatch)
+                                 bool lastMetadataInBatch,
+                                 const bool *enableZsl)
 {
     CameraMetadata camMetadata;
     camera_metadata_t *resultMetadata;
@@ -7797,6 +7816,13 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     // AF scene change
     IF_META_AVAILABLE(uint8_t, afSceneChange, CAM_INTF_META_AF_SCENE_CHANGE, metadata) {
         camMetadata.update(NEXUS_EXPERIMENTAL_2016_AF_SCENE_CHANGE, afSceneChange, 1);
+    }
+
+    // Enable ZSL
+    if (enableZsl != nullptr) {
+        uint8_t value = *enableZsl ?
+                ANDROID_CONTROL_ENABLE_ZSL_TRUE : ANDROID_CONTROL_ENABLE_ZSL_FALSE;
+        camMetadata.update(ANDROID_CONTROL_ENABLE_ZSL, &value, 1);
     }
 
     resultMetadata = camMetadata.release();
@@ -9839,6 +9865,10 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         available_request_keys.add(ANDROID_CONTROL_AF_REGIONS);
     }
 
+    if (gExposeEnableZslKey) {
+        available_request_keys.add(ANDROID_CONTROL_ENABLE_ZSL);
+    }
+
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_REQUEST_KEYS,
             available_request_keys.array(), available_request_keys.size());
 
@@ -9960,6 +9990,11 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         available_result_keys.add(ANDROID_SENSOR_DYNAMIC_WHITE_LEVEL);
     }
 #endif
+
+    if (gExposeEnableZslKey) {
+        available_result_keys.add(ANDROID_CONTROL_ENABLE_ZSL);
+    }
+
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_RESULT_KEYS,
             available_result_keys.array(), available_result_keys.size());
 
@@ -10539,6 +10574,9 @@ int QCamera3HardwareInterface::initHdrPlusClientLocked() {
 
         gEaselBypassOnly = !property_get_bool("persist.camera.hdrplus.enable", false);
         gEaselProfilingEnabled = property_get_bool("persist.camera.hdrplus.profiling", false);
+
+        // Expose enableZsl key only when HDR+ mode is enabled.
+        gExposeEnableZslKey = !gEaselBypassOnly;
     }
 
     return OK;
@@ -10702,6 +10740,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
     uint8_t shadingmap_mode = ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF;
     uint8_t trackingAfTrigger = NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER_IDLE;
+    uint8_t enableZsl = ANDROID_CONTROL_ENABLE_ZSL_FALSE;
 
     switch (type) {
       case CAMERA3_TEMPLATE_PREVIEW:
@@ -10739,6 +10778,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         if (CAM_SENSOR_RAW == gCamCapability[mCameraId]->sensor_type.sens_type) {
             shadingmap_mode = ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_ON;
         }
+        enableZsl = ANDROID_CONTROL_ENABLE_ZSL_TRUE;
         break;
       case CAMERA3_TEMPLATE_VIDEO_RECORD:
         controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_VIDEO_RECORD;
@@ -11081,6 +11121,10 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
 
     /* hybrid ae */
     settings.update(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE, &hybrid_ae, 1);
+
+    if (gExposeEnableZslKey) {
+        settings.update(ANDROID_CONTROL_ENABLE_ZSL, &enableZsl, 1);
+    }
 
     mDefaultMetadata[type] = settings.release();
 

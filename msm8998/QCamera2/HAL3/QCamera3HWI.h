@@ -246,7 +246,8 @@ public:
                             uint8_t DevCamDebug_meta_enable,
                             /* DevCamDebug metadata end */
                             bool pprocDone, uint8_t fwk_cacMode,
-                            bool lastMetadataInBatch);
+                            bool lastMetadataInBatch,
+                            const bool *enableZsl);
     camera_metadata_t* saveRequestSettings(const CameraMetadata& jpegMetadata,
                             camera3_capture_request_t *request);
     int initParameters();
@@ -515,6 +516,7 @@ private:
         uint8_t DevCamDebug_meta_enable;
         /* DevCamDebug metadata end */
 
+        bool enableZsl; // If ZSL is enabled.
         bool hdrplus; // If this is an HDR+ request.
     } PendingRequestInfo;
     typedef struct {
@@ -725,6 +727,9 @@ private:
 
     // If HDR+ mode is enabled i.e. if Easel is capturing ZSL buffers.
     bool mHdrPlusModeEnabled;
+
+    // If ZSL is enabled (android.control.enableZsl).
+    bool mZslEnabled;
 
     // If HAL provides RAW input buffers to Easel. This is just for prototyping.
     bool mIsApInputUsedForHdrPlus;
