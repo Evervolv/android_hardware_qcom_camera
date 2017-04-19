@@ -4435,6 +4435,15 @@ void QCamera3HardwareInterface::orchestrateResult(
         if (frameworkFrameNumber == EMPTY_FRAMEWORK_FRAME_NUMBER) {
             LOGD("Internal Request drop the result");
         } else {
+            if (result->result != NULL) {
+                CameraMetadata metadata;
+                metadata.acquire((camera_metadata_t *)result->result);
+                if (metadata.exists(ANDROID_SYNC_FRAME_NUMBER)) {
+                    int64_t sync_frame_number = frameworkFrameNumber;
+                    metadata.update(ANDROID_SYNC_FRAME_NUMBER, &sync_frame_number, 1);
+                }
+                result->result = metadata.release();
+            }
             result->frame_number = frameworkFrameNumber;
             mCallbackOps->process_capture_result(mCallbackOps, result);
         }
