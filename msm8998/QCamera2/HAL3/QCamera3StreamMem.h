@@ -46,7 +46,7 @@ namespace qcamera {
 
 class QCamera3StreamMem {
 public:
-    QCamera3StreamMem(uint32_t maxHeapBuffer, bool queueAll = true);
+    QCamera3StreamMem(uint32_t maxHeapBuffer);
     virtual ~QCamera3StreamMem();
 
     uint32_t getCnt();
@@ -93,7 +93,6 @@ private:
     QCamera3GrallocMemory mGrallocMem;
     uint32_t mMaxHeapBuffers;
     Mutex mLock;
-    bool mQueueHeapBuffers;
 };
 
 };

@@ -168,7 +168,9 @@ private:
     int32_t getBatchBufDef(mm_camera_buf_def_t& batchBufDef,
             int32_t index);
     int32_t aggregateBufToBatch(mm_camera_buf_def_t& bufDef);
+    int32_t aggregateStartingBufs(const uint8_t *initial_reg_flag);
     int32_t handleBatchBuffer(mm_camera_super_buf_t *superBuf);
+    int32_t bufDoneLocked(uint32_t index);
 
     static const char* mStreamNames[CAM_STREAM_TYPE_MAX];
     void flushFreeBatchBufQ();

@@ -48,11 +48,10 @@ namespace qcamera {
  *
  * RETURN     : None
  *==========================================================================*/
-QCamera3StreamMem::QCamera3StreamMem(uint32_t maxHeapBuffer, bool queueHeapBuffers) :
+QCamera3StreamMem::QCamera3StreamMem(uint32_t maxHeapBuffer) :
         mHeapMem(maxHeapBuffer),
         mGrallocMem(maxHeapBuffer),
-        mMaxHeapBuffers(maxHeapBuffer),
-        mQueueHeapBuffers(queueHeapBuffers)
+        mMaxHeapBuffers(maxHeapBuffer)
 {
 }
 
@@ -100,9 +99,14 @@ uint32_t QCamera3StreamMem::getCnt()
  *==========================================================================*/
 int QCamera3StreamMem::getRegFlags(uint8_t * regFlags)
 {
-    // Assume that all buffers allocated can be queued.
-    for (uint32_t i = 0; i < mHeapMem.getCnt(); i ++)
-        regFlags[i] = (mQueueHeapBuffers ? 1 : 0);
+    // Queue all Heap buffers that are allocated.
+    for (uint32_t i = 0; i < mHeapMem.getCnt(); i ++) {
+        regFlags[i] = 1;
+    }
+    // Queue all gralloc buffers that are registered.
+    for (uint32_t i = 0; i < mGrallocMem.getCnt(); i++) {
+        regFlags[mMaxHeapBuffers+i] = 1;
+    }
     return NO_ERROR;
 }
 
