@@ -4900,6 +4900,15 @@ int QCamera3HardwareInterface::processCaptureRequest(
             }
         }
 
+        if (meta.exists(NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV)) {
+            uint8_t sensorModeFullFov =
+                    meta.find(NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV).data.u8[0];
+            LOGD("SENSOR_MODE_FULLFOV %d" , sensorModeFullFov);
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_SENSOR_MODE_FULLFOV,
+                    sensorModeFullFov)) {
+                rc = BAD_VALUE;
+            }
+        }
         //TODO: validate the arguments, HSV scenemode should have only the
         //advertised fps ranges
 
@@ -9863,7 +9872,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        DEVCAMDEBUG_META_ENABLE,
        /* DevCamDebug metadata end */
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM_ENABLE,
-       NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS
+       NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS,
+       NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV
        };
 
     size_t request_keys_cnt =
