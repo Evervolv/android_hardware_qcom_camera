@@ -298,7 +298,8 @@ QCamera3Stream::QCamera3Stream(uint32_t camHandle,
         mBatchBufDefs(NULL),
         mCurrentBatchBufDef(NULL),
         mBufsStaged(0),
-        mFreeBatchBufQ(NULL, this)
+        mFreeBatchBufQ(NULL, this),
+        mNRMode(0)
 {
     mMemVtbl.user_data = this;
     mMemVtbl.get_bufs = get_bufs;
@@ -309,6 +310,9 @@ QCamera3Stream::QCamera3Stream(uint32_t camHandle,
     mMemVtbl.set_config_ops = NULL;
     memset(&mFrameLenOffset, 0, sizeof(mFrameLenOffset));
     memcpy(&mPaddingInfo, paddingInfo, sizeof(cam_padding_info_t));
+    if (nullptr != channel) {
+        mNRMode = channel->getNRMode();
+    }
 }
 
 /*===========================================================================
@@ -411,6 +415,7 @@ int32_t QCamera3Stream::init(cam_stream_type_t streamType,
     mStreamInfo->pp_config.feature_mask = postprocess_mask;
     mStreamInfo->is_type = is_type;
     mStreamInfo->pp_config.rotation = streamRotation;
+    mStreamInfo->nr_mode = mNRMode;
 
     memset(value, 0, sizeof(value));
     property_get("persist.camera.cache.optimize", value, "1");

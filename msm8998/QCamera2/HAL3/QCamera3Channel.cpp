@@ -98,6 +98,7 @@ QCamera3Channel::QCamera3Channel(uint32_t cam_handle,
     mNumBuffers = numBuffers;
     mPerFrameMapUnmapEnable = true;
     mDumpFrmCnt = 0;
+    mNRMode = 0;
 }
 
 /*===========================================================================
