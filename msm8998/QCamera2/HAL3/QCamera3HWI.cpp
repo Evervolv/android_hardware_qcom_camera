@@ -14447,6 +14447,10 @@ void QCamera3HardwareInterface::disableHdrPlusModeLocked()
         if (res != OK) {
             ALOGE("%s: Failed to disable HDR+ mode: %s (%d)", __FUNCTION__, strerror(-res), res);
         }
+
+        // Close HDR+ client so Easel can enter low power mode.
+        gEaselManagerClient.closeHdrPlusClient(std::move(gHdrPlusClient));
+        gHdrPlusClient = nullptr;
     }
 
     mHdrPlusModeEnabled = false;
