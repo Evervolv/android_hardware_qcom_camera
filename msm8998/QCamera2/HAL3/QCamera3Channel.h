@@ -136,6 +136,9 @@ public:
             uint32_t width, uint32_t height, bool forcePreviewUBWC);
     virtual int32_t timeoutFrame(__unused uint32_t frameNumber) = 0;
 
+    void setNRMode(uint8_t nrMode) { mNRMode = nrMode; }
+    uint8_t getNRMode() { return mNRMode; }
+
     void *mUserData;
     cam_padding_info_t mPaddingInfo;
     QCamera3Stream *mStreams[MAX_STREAM_NUM_IN_BUNDLE];
@@ -180,6 +183,7 @@ protected:
     uint32_t mDumpFrmCnt;
     uint32_t mSkipMode;
     uint32_t mDumpSkipCnt;
+    uint8_t mNRMode;
 };
 
 /* QCamera3ProcessingChannel is used to handle all streams that are directly

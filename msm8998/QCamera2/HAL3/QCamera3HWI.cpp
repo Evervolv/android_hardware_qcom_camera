@@ -4859,6 +4859,11 @@ int QCamera3HardwareInterface::processCaptureRequest(
 
         setMobicat();
 
+        uint8_t nrMode = 0;
+        if (meta.exists(ANDROID_NOISE_REDUCTION_MODE)) {
+            nrMode = meta.find(ANDROID_NOISE_REDUCTION_MODE).data.u8[0];
+        }
+
         /* Set fps and hfr mode while sending meta stream info so that sensor
          * can configure appropriate streaming mode */
         mHFRVideoFps = DEFAULT_VIDEO_FPS;
@@ -4982,6 +4987,9 @@ int QCamera3HardwareInterface::processCaptureRequest(
         for (List<stream_info_t *>::iterator it = mStreamInfo.begin();
             it != mStreamInfo.end(); it++) {
             QCamera3Channel *channel = (QCamera3Channel *)(*it)->stream->priv;
+
+            /* Initial value of NR mode is needed before stream on */
+            channel->setNRMode(nrMode);
             if ((((1U << CAM_STREAM_TYPE_VIDEO) == channel->getStreamTypeMask()) ||
                ((1U << CAM_STREAM_TYPE_PREVIEW) == channel->getStreamTypeMask())) &&
                setEis) {

@@ -135,6 +135,7 @@ private:
     uint32_t    mBufsStaged; //Number of image buffers aggregated into
                              //currentBatchBufDef
     QCameraQueue mFreeBatchBufQ; //Buffer queue containing empty batch buffers
+    uint8_t mNRMode; // Initial noise reduction mode
 
     static int32_t get_bufs(
                      cam_frame_len_offset_t *offset,
