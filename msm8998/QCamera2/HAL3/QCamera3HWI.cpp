@@ -133,6 +133,10 @@ namespace qcamera {
 // Max preferred zoom
 #define MAX_PREFERRED_ZOOM_RATIO 5.0
 
+
+// TODO: Enabl HDR+ for front camera after it's supported. b/37723569.
+#define ENABLE_HDRPLUS_FOR_FRONT_CAMERA 0
+
 cam_capability_t *gCamCapability[MM_CAMERA_MAX_NUM_SENSORS];
 const camera_metadata_t *gStaticMetadata[MM_CAMERA_MAX_NUM_SENSORS];
 extern pthread_mutex_t gCamLock;
@@ -5258,7 +5262,7 @@ no_error:
     }
 
     // Enable HDR+ mode for the first PREVIEW_INTENT request.
-    {
+    if (ENABLE_HDRPLUS_FOR_FRONT_CAMERA || mCameraId == 0) {
         Mutex::Autolock l(gHdrPlusClientLock);
         if (gEaselManagerClient.isEaselPresentOnDevice() &&
                 !gEaselBypassOnly && !mFirstPreviewIntentSeen &&
@@ -9967,7 +9971,9 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     }
 
     if (gExposeEnableZslKey) {
-        available_request_keys.add(ANDROID_CONTROL_ENABLE_ZSL);
+        if (ENABLE_HDRPLUS_FOR_FRONT_CAMERA || cameraId == 0) {
+            available_request_keys.add(ANDROID_CONTROL_ENABLE_ZSL);
+        }
     }
 
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_REQUEST_KEYS,
@@ -10673,7 +10679,7 @@ int QCamera3HardwareInterface::initHdrPlusClientLocked() {
             ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__, strerror(-res), res);
         }
 
-        gEaselBypassOnly = !property_get_bool("persist.camera.hdrplus.enable", false);
+        gEaselBypassOnly = !property_get_bool("persist.camera.hdrplus.enable", true);
         gEaselProfilingEnabled = property_get_bool("persist.camera.hdrplus.profiling", false);
 
         // Expose enableZsl key only when HDR+ mode is enabled.
@@ -14473,6 +14479,10 @@ void QCamera3HardwareInterface::disableHdrPlusModeLocked()
         if (res != OK) {
             ALOGE("%s: Failed to disable HDR+ mode: %s (%d)", __FUNCTION__, strerror(-res), res);
         }
+
+        // Close HDR+ client so Easel can enter low power mode.
+        gEaselManagerClient.closeHdrPlusClient(std::move(gHdrPlusClient));
+        gHdrPlusClient = nullptr;
     }
 
     mHdrPlusModeEnabled = false;
