@@ -720,6 +720,7 @@ private:
     void onCaptureResult(pbcamera::CaptureResult *result,
             const camera_metadata_t &resultMetadata) override;
     void onFailedCaptureResult(pbcamera::CaptureResult *failedResult) override;
+    void onShutter(uint32_t requestId, int64_t apSensorTimestampNs) override;
 
     // Map from frame number to frame. Must be protected by mHdrPlusPendingRequestsLock.
     std::map<uint32_t, HdrPlusPendingRequest> mHdrPlusPendingRequests;
