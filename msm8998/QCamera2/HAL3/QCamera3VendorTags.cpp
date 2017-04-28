@@ -71,6 +71,11 @@ enum qcamera3_ext_tags qcamera3_ext3_section_bounds[QCAMERA3_SECTIONS_END -
         NEXUS_EXPERIMENTAL_2017_END,
 };
 
+enum qcamera3_ext_tags tango_section_bounds[TANGO_SECTIONS_END -
+    TANGO_SECTIONS_START] = {
+        TANGO_MODE_DATA_END,
+};
+
 typedef struct vendor_tag_info {
     const char *tag_name;
     uint8_t     tag_type;
@@ -104,6 +109,11 @@ const char *qcamera3_ext_section_names[QCAMERA3_SECTIONS_END -
     "org.codeaurora.qcamera3.binning_correction",
     "org.codeaurora.qcamera3.stats",
     "com.google.nexus.experimental2017",
+};
+
+const char *tango_section_names[TANGO_SECTIONS_END -
+      TANGO_SECTIONS_START] = {
+    "com.google.tango"
 };
 
 vendor_tag_info_t qcamera3_privatedata[QCAMERA3_PRIVATEDATA_END - QCAMERA3_PRIVATEDATA_START] = {
@@ -338,7 +348,12 @@ vendor_tag_info_t nexus_experimental_2017[NEXUS_EXPERIMENTAL_2017_END -
     { "sensorEepromInfo", TYPE_BYTE },
     { "control.tracking_af_trigger", TYPE_BYTE },
     { "control.af_regions_confidence", TYPE_INT32 },
-    { "sensor.modeFullFov", TYPE_BYTE }
+};
+
+vendor_tag_info_t tango_mode_data[TANGO_MODE_DATA_END -
+        TANGO_MODE_DATA_START] = {
+    { "tango_mode", TYPE_BYTE}, //Unused. Reserved for backward compatibility
+    { "sensor.fullfov", TYPE_BYTE },
 };
 
 vendor_tag_info_t *qcamera3_tag_info[QCAMERA3_SECTIONS_END -
@@ -369,6 +384,11 @@ vendor_tag_info_t *qcamera3_tag_info[QCAMERA3_SECTIONS_END -
     qcamera3_binning_correction,
     qcamera3_stats,
     nexus_experimental_2017,
+};
+
+vendor_tag_info_t *tango_tag_info[TANGO_SECTIONS_END -
+      TANGO_SECTIONS_START] = {
+    tango_mode_data,
 };
 
 uint32_t qcamera3_all_tags[] = {
@@ -552,7 +572,9 @@ uint32_t qcamera3_all_tags[] = {
     (uint32_t)NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_AF_REGIONS_CONFIDENCE,
-    (uint32_t)NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV,
+
+    //TANGO_MODE
+    (uint32_t)TANGO_MODE_DATA_SENSOR_FULLFOV,
 };
 
 const vendor_tag_ops_t* QCamera3VendorTags::Ops = NULL;
@@ -661,10 +683,12 @@ const char* QCamera3VendorTags::get_section_name(
     const char *ret;
     uint32_t section = tag >> 16;
 
-    if (section < VENDOR_SECTION || section >= QCAMERA3_SECTIONS_END)
-        ret = NULL;
-    else
+    if (section >= VENDOR_SECTION && section < QCAMERA3_SECTIONS_END)
         ret = qcamera3_ext_section_names[section - VENDOR_SECTION];
+    else if (section >= TANGO_SECTIONS_START && section < TANGO_SECTIONS_END)
+        ret = tango_section_names[section - TANGO_SECTIONS_START];
+    else
+        ret = NULL;
 
     if (ret)
         LOGL("section_name[%d] is %s", tag, ret);
@@ -699,12 +723,14 @@ const char* QCamera3VendorTags::get_tag_name(
         goto done;
     }
 
-    if (section < VENDOR_SECTION || section >= QCAMERA3_SECTIONS_END)
-        ret = NULL;
-    else if (tag >= (uint32_t)qcamera3_ext3_section_bounds[section_index])
-        ret = NULL;
-    else
+    if (section >= VENDOR_SECTION && section < QCAMERA3_SECTIONS_END &&
+        tag < (uint32_t)qcamera3_ext3_section_bounds[section_index])
         ret = qcamera3_tag_info[section_index][tag_index].tag_name;
+    else if (section >= TANGO_SECTIONS_START && section < TANGO_SECTIONS_END &&
+        tag < (uint32_t)tango_section_bounds[section - TANGO_SECTIONS_START])
+        ret = tango_tag_info[section - TANGO_SECTIONS_START][tag_index].tag_name;
+    else
+        ret = NULL;
 
     if (ret)
         LOGL("tag name for tag %d is %s", tag, ret);
@@ -740,12 +766,14 @@ int QCamera3VendorTags::get_tag_type(
         ret = -1;
         goto done;
     }
-    if (section < VENDOR_SECTION || section >= QCAMERA3_SECTIONS_END)
-        ret = -1;
-    else if (tag >= (uint32_t )qcamera3_ext3_section_bounds[section_index])
-        ret = -1;
-    else
+    if (section >= VENDOR_SECTION && section < QCAMERA3_SECTIONS_END &&
+        tag < (uint32_t)qcamera3_ext3_section_bounds[section_index])
         ret = qcamera3_tag_info[section_index][tag_index].tag_type;
+    else if (section >= TANGO_SECTIONS_START && section < TANGO_SECTIONS_END &&
+        tag < (uint32_t)tango_section_bounds[section - TANGO_SECTIONS_START])
+        ret = tango_tag_info[section - TANGO_SECTIONS_START][tag_index].tag_type;
+    else
+        ret = NULL;
 
     LOGL("tag type for tag %d is %d", tag, ret);
     LOGL("X");
