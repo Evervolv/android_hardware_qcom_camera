@@ -3666,7 +3666,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
             LOGD("Iterator Frame = %d urgent frame = %d",
                  i->frame_number, urgent_frame_number);
 
-            if ((!i->input_buffer) && (i->frame_number < urgent_frame_number) &&
+            if ((!i->input_buffer) && (!i->hdrplus) && (i->frame_number < urgent_frame_number) &&
                 (i->partial_result_cnt == 0)) {
                 LOGE("Error: HAL missed urgent metadata for frame number %d",
                          i->frame_number);
@@ -14654,6 +14654,14 @@ void QCamera3HardwareInterface::onFatalError()
     handleCameraDeviceError();
 }
 
+void QCamera3HardwareInterface::onShutter(uint32_t requestId, int64_t apSensorTimestampNs)
+{
+    ALOGV("%s: %d: Received a shutter for HDR+ request %d timestamp %" PRId64, __FUNCTION__,
+            __LINE__, requestId, apSensorTimestampNs);
+
+    mShutterDispatcher.markShutterReady(requestId, apSensorTimestampNs);
+}
+
 void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
         const camera_metadata_t &resultMetadata)
 {
@@ -14731,17 +14739,6 @@ void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
             picChannel->returnYuvBuffer(pendingRequest.yuvBuffer.get());
             ALOGE("%s: Translate framework metadata to HAL metadata failed: %s (%d).", __FUNCTION__,
                     strerror(-res), res);
-        }
-
-        // Find the timestamp
-        camera_metadata_ro_entry_t entry;
-        res = find_camera_metadata_ro_entry(updatedResultMetadata,
-                ANDROID_SENSOR_TIMESTAMP, &entry);
-        if (res != OK) {
-            ALOGE("%s: Cannot find sensor timestamp for frame number %d: %s (%d)",
-                    __FUNCTION__, result->requestId, strerror(-res), res);
-        } else {
-            mShutterDispatcher.markShutterReady(result->requestId, entry.data.i64[0]);
         }
 
         // Send HDR+ metadata to framework.
