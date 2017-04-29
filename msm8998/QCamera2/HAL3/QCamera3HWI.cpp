@@ -3481,7 +3481,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
             LOGD("Iterator Frame = %d urgent frame = %d",
                  i->frame_number, urgent_frame_number);
 
-            if ((!i->input_buffer) && (!i->hdrplus) && (i->frame_number < urgent_frame_number) &&
+            if ((!i->input_buffer) && (i->frame_number < urgent_frame_number) &&
                 (i->partial_result_cnt == 0)) {
                 LOGE("Error: HAL missed urgent metadata for frame number %d",
                          i->frame_number);
@@ -4070,8 +4070,8 @@ void QCamera3HardwareInterface::handlePendingResultsWithLock(uint32_t frameNumbe
     // Check what type of request this is.
     bool liveRequest = false;
     if (requestIter->hdrplus) {
-        // HDR+ request's first partial result is sensor timestamp.
-        requestIter->partial_result_cnt++;
+        // HDR+ request doesn't have partial results.
+        requestIter->partial_result_cnt = PARTIAL_RESULT_COUNT;
     } else if (requestIter->input_buffer != nullptr) {
         // Reprocessing request result is the same as settings.
         requestIter->resultMetadata = requestIter->settings;
@@ -14594,20 +14594,6 @@ void QCamera3HardwareInterface::onOpenFailed(status_t err) {
     ALOGE("%s: Opening HDR+ client failed: %s (%d)", __FUNCTION__, strerror(-err), err);
     Mutex::Autolock l(gHdrPlusClientLock);
     gHdrPlusClientOpening = false;
-}
-
-void QCamera3HardwareInterface::onShutter(uint32_t requestId, int64_t apSensorTimestampNs)
-{
-    ALOGV("%s: %d: Received a shutter for HDR+ request %d timestamp %" PRId64, __FUNCTION__,
-            __LINE__, requestId, apSensorTimestampNs);
-
-    CameraMetadata metadata;
-    metadata.update(ANDROID_SENSOR_TIMESTAMP, &apSensorTimestampNs, 1);
-
-    // Send shutter to framework.
-    pthread_mutex_lock(&mMutex);
-    handlePendingResultsWithLock(requestId, metadata.release());
-    pthread_mutex_unlock(&mMutex);
 }
 
 void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
