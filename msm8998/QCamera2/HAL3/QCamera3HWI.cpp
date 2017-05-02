@@ -5359,7 +5359,7 @@ no_error:
     }
 
     if (blob_request) {
-        KPI_ATRACE_CAMSCOPE_INT("SNAPSHOT", CAMSCOPE_HAL3_SNAPSHOT, 1);
+        ATRACE_ASYNC_BEGIN("SNAPSHOT", frameNumber);
         mPerfLockMgr.acquirePerfLock(PERF_LOCK_TAKE_SNAPSHOT);
     }
     if (blob_request && mRawDumpChannel) {
