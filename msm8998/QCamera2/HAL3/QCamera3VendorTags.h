@@ -35,6 +35,8 @@
 
 namespace qcamera {
 
+#define TANGO_SECTION_OFFSET  0x4000
+
 enum qcamera3_ext_section {
     QCAMERA3_PRIVATEDATA = VENDOR_SECTION,
     QCAMERA3_CDS,
@@ -61,10 +63,14 @@ enum qcamera3_ext_section {
     QCAMERA3_HISTOGRAM,
     QCAMERA3_BINNING_CORRECTION,
     QCAMERA3_STATS,
-    //This value is hardcoded in NDK camera clients and hence enum value is
+    NEXUS_EXPERIMENTAL_2017,
+    QCAMERA3_SECTIONS_END,
+
+    //This value is hardcoded in NDK clients and hence enum value is
     //assigned to ensure this value does not go off sync
-    NEXUS_EXPERIMENTAL_2017 = 0x8019,
-    QCAMERA3_SECTIONS_END
+    TANGO_SECTIONS_START = VENDOR_SECTION + TANGO_SECTION_OFFSET,
+    TANGO_MODE_DATA = TANGO_SECTIONS_START,
+    TANGO_SECTIONS_END
 };
 
 enum qcamera3_ext_section_ranges {
@@ -94,6 +100,7 @@ enum qcamera3_ext_section_ranges {
     QCAMERA3_BINNING_CORRECTION_START = QCAMERA3_BINNING_CORRECTION << 16,
     QCAMERA3_STATS_START = QCAMERA3_STATS << 16,
     NEXUS_EXPERIMENTAL_2017_START = NEXUS_EXPERIMENTAL_2017 << 16,
+    TANGO_MODE_DATA_START = TANGO_MODE_DATA << 16,
 };
 
 enum qcamera3_ext_tags {
@@ -419,12 +426,12 @@ enum qcamera3_ext_tags {
     /* Tracking AF */
     NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER,
     NEXUS_EXPERIMENTAL_2017_AF_REGIONS_CONFIDENCE,
-
-    //This value is hardcoded in NDK camera clients and hence enum value is
-    //assigned to ensure this value does not go off sync
-    //NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV = 0x80190007
-    NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV = NEXUS_EXPERIMENTAL_2017_START + 7,
     NEXUS_EXPERIMENTAL_2017_END,
+
+    /* Select sensor mode for tango */
+    TANGO_MODE_DATA_MODE = TANGO_MODE_DATA_START, //Unused. Reserved for backward compatibility
+    TANGO_MODE_DATA_SENSOR_FULLFOV,
+    TANGO_MODE_DATA_END,
 };
 
 // QCAMERA3_OPAQUE_RAW_FORMAT

@@ -4940,9 +4940,9 @@ int QCamera3HardwareInterface::processCaptureRequest(
             }
         }
 
-        if (meta.exists(NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV)) {
+        if (meta.exists(TANGO_MODE_DATA_SENSOR_FULLFOV)) {
             uint8_t sensorModeFullFov =
-                    meta.find(NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV).data.u8[0];
+                    meta.find(TANGO_MODE_DATA_SENSOR_FULLFOV).data.u8[0];
             LOGD("SENSOR_MODE_FULLFOV %d" , sensorModeFullFov);
             if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_SENSOR_MODE_FULLFOV,
                     sensorModeFullFov)) {
@@ -9957,7 +9957,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        /* DevCamDebug metadata end */
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM_ENABLE,
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS,
-       NEXUS_EXPERIMENTAL_2017_SENSOR_MODE_FULLFOV,
+       TANGO_MODE_DATA_SENSOR_FULLFOV,
        NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER,
        };
 
