@@ -2209,6 +2209,15 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     property_get("persist.camera.is_type", is_type_value, "4");
     m_bEis3PropertyEnabled = (atoi(is_type_value) == IS_TYPE_EIS_3_0);
 
+    char property_value[PROPERTY_VALUE_MAX];
+    property_get("persist.camera.gzoom.at", property_value, "0");
+    int goog_zoom_at = atoi(property_value);
+    bool is_goog_zoom_video_enabled = ((goog_zoom_at & 1) > 0);
+    bool is_goog_zoom_preview_enabled = ((goog_zoom_at & 2) > 0);
+
+    property_get("persist.camera.gzoom.4k", property_value, "0");
+    bool is_goog_zoom_4k_enabled = (atoi(property_value) > 0);
+
     //Create metadata channel and initialize it
     cam_feature_mask_t metadataFeatureMask = CAM_QCOM_FEATURE_NONE;
     setPAAFSupport(metadataFeatureMask, CAM_STREAM_TYPE_METADATA,
@@ -2242,6 +2251,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     memset(&mStreamConfigInfo, 0, sizeof(cam_stream_size_info_t));
     /* Allocate channel objects for the requested streams */
     for (size_t i = 0; i < streamList->num_streams; i++) {
+
         camera3_stream_t *newStream = streamList->streams[i];
         uint32_t stream_usage = newStream->usage;
         mStreamConfigInfo.stream_sizes[mStreamConfigInfo.num_streams].width = (int32_t)newStream->width;
@@ -2296,6 +2306,10 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                         mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams] |=
                             CAM_QTI_FEATURE_PPEISCORE;
                     }
+                    if (is_goog_zoom_video_enabled && (is_goog_zoom_4k_enabled || !m_bIs4KVideo)) {
+                        mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams] |=
+                            CAM_QCOM_FEATURE_GOOG_ZOOM;
+                    }
                     video_stream_idx = mStreamConfigInfo.num_streams;
                 } else {
                         mStreamConfigInfo.type[mStreamConfigInfo.num_streams] =
@@ -2310,6 +2324,10 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                     if(!m_bSwTnrPreview) {
                         mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams] &=
                                 ~CAM_QTI_FEATURE_SW_TNR;
+                    }
+                    if (is_goog_zoom_preview_enabled) {
+                        mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams] |=
+                            CAM_QCOM_FEATURE_GOOG_ZOOM;
                     }
                     preview_stream_idx[preview_stream_cnt++] = mStreamConfigInfo.num_streams;
                     padding_info.width_padding = mSurfaceStridePadding;
@@ -2520,6 +2538,12 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                             forcePreviewUBWC = false;
                         }
                         channel->setUBWCEnabled(forcePreviewUBWC);
+                         /* When goog_zoom is linked to the preview or video stream,
+                          * disable ubwc to the linked stream */
+                        if ((mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams] &
+                                CAM_QCOM_FEATURE_GOOG_ZOOM) != 0) {
+                            channel->setUBWCEnabled(false);
+                        }
                         newStream->max_buffers = channel->getNumBuffers();
                         newStream->priv = channel;
                     }
