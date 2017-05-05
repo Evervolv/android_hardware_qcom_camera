@@ -11190,7 +11190,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     uint8_t sync_type = CAM_TYPE_STANDALONE;
     settings.update(QCAMERA3_DUALCAM_LINK_ENABLE, &sync_type, 1);
 
-    uint8_t is_main = 0; //this doesn't matter as app should overwrite
+    uint8_t is_main = 1;
     settings.update(QCAMERA3_DUALCAM_LINK_IS_MAIN, &is_main, 1);
 
     uint8_t related_camera_id = mCameraId;
