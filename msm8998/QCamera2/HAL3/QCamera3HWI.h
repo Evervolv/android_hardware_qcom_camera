@@ -722,6 +722,7 @@ private:
     // HDR+ client callbacks.
     void onOpened(std::unique_ptr<HdrPlusClient> client) override;
     void onOpenFailed(status_t err) override;
+    void onFatalError() override;
     void onCaptureResult(pbcamera::CaptureResult *result,
             const camera_metadata_t &resultMetadata) override;
     void onFailedCaptureResult(pbcamera::CaptureResult *failedResult) override;

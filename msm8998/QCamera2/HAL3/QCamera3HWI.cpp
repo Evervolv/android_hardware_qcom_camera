@@ -14487,7 +14487,8 @@ bool QCamera3HardwareInterface::trySubmittingHdrPlusRequestLocked(
     return true;
 }
 
-status_t QCamera3HardwareInterface::openHdrPlusClientAsyncLocked() {
+status_t QCamera3HardwareInterface::openHdrPlusClientAsyncLocked()
+{
     if (gHdrPlusClientOpening || gHdrPlusClient != nullptr) {
         return OK;
     }
@@ -14561,6 +14562,7 @@ void QCamera3HardwareInterface::disableHdrPlusModeLocked()
     }
 
     mHdrPlusModeEnabled = false;
+    gHdrPlusClientOpening = false;
     ALOGD("%s: HDR+ mode disabled", __FUNCTION__);
 }
 
@@ -14632,7 +14634,8 @@ status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked()
     return OK;
 }
 
-void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client) {
+void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
+{
     if (client == nullptr) {
         ALOGE("%s: Opened client is null.", __FUNCTION__);
         return;
@@ -14641,6 +14644,11 @@ void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client) 
     ALOGI("%s: HDR+ client opened.", __FUNCTION__);
 
     Mutex::Autolock l(gHdrPlusClientLock);
+    if (!gHdrPlusClientOpening) {
+        ALOGW("%s: HDR+ is disabled while HDR+ client is being opened.", __FUNCTION__);
+        return;
+    }
+
     gHdrPlusClient = std::move(client);
     gHdrPlusClientOpening = false;
 
@@ -14661,14 +14669,28 @@ void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client) 
     }
 }
 
-void QCamera3HardwareInterface::onOpenFailed(status_t err) {
+void QCamera3HardwareInterface::onOpenFailed(status_t err)
+{
     ALOGE("%s: Opening HDR+ client failed: %s (%d)", __FUNCTION__, strerror(-err), err);
     Mutex::Autolock l(gHdrPlusClientLock);
     gHdrPlusClientOpening = false;
 }
 
+void QCamera3HardwareInterface::onFatalError()
+{
+    ALOGE("%s: HDR+ client has a fatal error.", __FUNCTION__);
+
+    // Set HAL state to error.
+    pthread_mutex_lock(&mMutex);
+    mState = ERROR;
+    pthread_mutex_unlock(&mMutex);
+
+    handleCameraDeviceError();
+}
+
 void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
-        const camera_metadata_t &resultMetadata) {
+        const camera_metadata_t &resultMetadata)
+{
     if (result != nullptr) {
         if (result->outputBuffers.size() != 1) {
             ALOGE("%s: Number of output buffers (%u) is not supported.", __FUNCTION__,
@@ -14763,17 +14785,86 @@ void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
     }
 }
 
-void QCamera3HardwareInterface::onFailedCaptureResult(pbcamera::CaptureResult *failedResult) {
-    // TODO: Handle HDR+ capture failures and send the failure to framework.
-    Mutex::Autolock lock(mHdrPlusPendingRequestsLock);
-    auto pendingRequest = mHdrPlusPendingRequests.find(failedResult->requestId);
+void QCamera3HardwareInterface::onFailedCaptureResult(pbcamera::CaptureResult *failedResult)
+{
+    if (failedResult == nullptr) {
+        ALOGE("%s: Got an empty failed result.", __FUNCTION__);
+        return;
+    }
 
-    // Return the buffer to pic channel.
-    QCamera3PicChannel *picChannel =
-            (QCamera3PicChannel*)pendingRequest->second.frameworkOutputBuffers[0].stream->priv;
-    picChannel->returnYuvBuffer(pendingRequest->second.yuvBuffer.get());
+    ALOGE("%s: Got a failed HDR+ result for request %d", __FUNCTION__, failedResult->requestId);
 
-    mHdrPlusPendingRequests.erase(pendingRequest);
+    // Remove the pending HDR+ request.
+    {
+        Mutex::Autolock lock(mHdrPlusPendingRequestsLock);
+        auto pendingRequest = mHdrPlusPendingRequests.find(failedResult->requestId);
+
+        // Return the buffer to pic channel.
+        QCamera3PicChannel *picChannel =
+                (QCamera3PicChannel*)pendingRequest->second.frameworkOutputBuffers[0].stream->priv;
+        picChannel->returnYuvBuffer(pendingRequest->second.yuvBuffer.get());
+
+        mHdrPlusPendingRequests.erase(pendingRequest);
+    }
+
+    pthread_mutex_lock(&mMutex);
+
+    // Find the pending buffers.
+    auto pendingBuffers = mPendingBuffersMap.mPendingBuffersInRequest.begin();
+    while (pendingBuffers != mPendingBuffersMap.mPendingBuffersInRequest.end()) {
+        if (pendingBuffers->frame_number == failedResult->requestId) {
+            break;
+        }
+        pendingBuffers++;
+    }
+
+    // Send out buffer errors for the pending buffers.
+    if (pendingBuffers != mPendingBuffersMap.mPendingBuffersInRequest.end()) {
+        std::vector<camera3_stream_buffer_t> streamBuffers;
+        for (auto &buffer : pendingBuffers->mPendingBufferList) {
+            // Prepare a stream buffer.
+            camera3_stream_buffer_t streamBuffer = {};
+            streamBuffer.stream = buffer.stream;
+            streamBuffer.buffer = buffer.buffer;
+            streamBuffer.status = CAMERA3_BUFFER_STATUS_ERROR;
+            streamBuffer.acquire_fence = -1;
+            streamBuffer.release_fence = -1;
+
+            streamBuffers.push_back(streamBuffer);
+
+            // Send out error buffer event.
+            camera3_notify_msg_t notify_msg = {};
+            notify_msg.type = CAMERA3_MSG_ERROR;
+            notify_msg.message.error.frame_number = pendingBuffers->frame_number;
+            notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_BUFFER;
+            notify_msg.message.error.error_stream = buffer.stream;
+
+            orchestrateNotify(&notify_msg);
+        }
+
+        camera3_capture_result_t result = {};
+        result.frame_number = pendingBuffers->frame_number;
+        result.num_output_buffers = streamBuffers.size();
+        result.output_buffers = &streamBuffers[0];
+
+        // Send out result with buffer errors.
+        orchestrateResult(&result);
+
+        // Remove pending buffers.
+        mPendingBuffersMap.mPendingBuffersInRequest.erase(pendingBuffers);
+    }
+
+    // Remove pending request.
+    auto halRequest = mPendingRequestsList.begin();
+    while (halRequest != mPendingRequestsList.end()) {
+        if (halRequest->frame_number == failedResult->requestId) {
+            mPendingRequestsList.erase(halRequest);
+            break;
+        }
+        halRequest++;
+    }
+
+    pthread_mutex_unlock(&mMutex);
 }
 
 }; //end namespace qcamera
