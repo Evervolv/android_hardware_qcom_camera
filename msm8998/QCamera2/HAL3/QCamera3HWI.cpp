@@ -131,7 +131,7 @@ namespace qcamera {
 #define TOTAL_LANDMARK_INDICES 6
 
 // Max preferred zoom
-#define MAX_PREFERRED_ZOOM_RATIO 5.0
+#define MAX_PREFERRED_ZOOM_RATIO 7.0
 
 cam_capability_t *gCamCapability[MM_CAMERA_MAX_NUM_SENSORS];
 const camera_metadata_t *gStaticMetadata[MM_CAMERA_MAX_NUM_SENSORS];
