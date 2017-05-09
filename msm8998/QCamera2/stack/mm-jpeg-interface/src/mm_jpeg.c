@@ -2814,8 +2814,8 @@ int32_t mm_jpeg_start_job(mm_jpeg_obj *my_obj,
     return -1;
   }
 
-  KPI_ATRACE_INT("Camera:JPEG",
-      (int32_t)((uint32_t)session_idx<<16 | ++p_session->job_index));
+  KPI_ATRACE_ASYNC_BEGIN("Camera:JPEG",
+      (int32_t)(job->encode_job.session_id));
 
   *job_id = job->encode_job.session_id |
     (((uint32_t)p_session->job_hist++ % JOB_HIST_MAX) << 16);
@@ -3057,7 +3057,7 @@ int32_t mm_jpeg_create_session(mm_jpeg_obj *my_obj,
     }
 
     snprintf(trace_tag, sizeof(trace_tag), "Camera:JPEGsession%d", session_idx);
-    ATRACE_INT(trace_tag, 1);
+    KPI_ATRACE_ASYNC_BEGIN(trace_tag, session_idx);
 
     p_session->job_index = 0;
 
@@ -3216,7 +3216,7 @@ error1:
   rc = -1;
 error2:
   if (NULL != p_session) {
-    ATRACE_INT(trace_tag, 0);
+    KPI_ATRACE_ASYNC_END(trace_tag, session_idx);
   }
   return rc;
 }
@@ -3390,7 +3390,7 @@ int32_t mm_jpeg_destroy_session(mm_jpeg_obj *my_obj,
   cam_sem_post(&my_obj->job_mgr.job_sem);
 
   snprintf(trace_tag, sizeof(trace_tag), "Camera:JPEGsession%d", GET_SESSION_IDX(session_id));
-  ATRACE_INT(trace_tag, 0);
+  KPI_ATRACE_ASYNC_END(trace_tag, session_id);
 
   LOGH("destroy session successful. X");
 
@@ -3550,9 +3550,7 @@ OMX_ERRORTYPE mm_jpeg_fbd(OMX_HANDLETYPE hComponent,
   LOGI("KPI Perf] : PROFILE_JPEG_FBD");
 
   pthread_mutex_lock(&p_session->lock);
-  KPI_ATRACE_INT("Camera:JPEG",
-      (int32_t)((uint32_t)GET_SESSION_IDX(
-        p_session->sessionId)<<16 | --p_session->job_index));
+  KPI_ATRACE_ASYNC_END("Camera:JPEG", p_session->sessionId);
   if (MM_JPEG_ABORT_NONE != p_session->abort_state) {
     pthread_mutex_unlock(&p_session->lock);
     return ret;
