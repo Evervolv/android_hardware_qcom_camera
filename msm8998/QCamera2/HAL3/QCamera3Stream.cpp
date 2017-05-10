@@ -739,8 +739,25 @@ void *QCamera3Stream::dataProcRoutine(void *data)
  *==========================================================================*/
 int32_t QCamera3Stream::bufDone(uint32_t index)
 {
-    int32_t rc = NO_ERROR;
     Mutex::Autolock lock(mLock);
+    return bufDoneLocked(index);
+}
+
+/*===========================================================================
+ * FUNCTION   : bufDoneLocked
+ *
+ * DESCRIPTION: return stream buffer to kernel while holding the lock
+ *
+ * PARAMETERS :
+ *   @index   : index of buffer to be returned
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCamera3Stream::bufDoneLocked(uint32_t index)
+{
+    int32_t rc = NO_ERROR;
 
     if ((index >= mNumBufs) || (mBufDefs == NULL)) {
         LOGE("index; %d, mNumBufs: %d", index, mNumBufs);
@@ -1432,6 +1449,12 @@ int32_t QCamera3Stream::getBatchBufs(
         }
     }
 
+    rc = aggregateStartingBufs(*initial_reg_flag);
+    if (rc != NO_ERROR) {
+        LOGE("Failed to aggregate starting buffers to the batch %d", rc);
+        goto err4;
+    }
+
     *num_bufs = mNumBatchBufs;
     *initial_reg_flag = regFlags;
     *bufs = mBatchBufDefs;
@@ -1563,6 +1586,35 @@ int32_t QCamera3Stream::aggregateBufToBatch(mm_camera_buf_def_t& bufDef)
     mBufsStaged++;
     LOGD("buffer id: %d aggregated into batch buffer id: %d",
              bufDef.buf_idx, mCurrentBatchBufDef->buf_idx);
+    return rc;
+}
+
+/*===========================================================================
+ * FUNCTION   : aggregateStartingBuffers
+ *
+ * DESCRIPTION: Aggregate initial buffers to the first batch before stream_on
+ *
+ * PARAMETERS :
+ *   @initial_reg_flag: flag to indicate if buffer needs to be registered
+ *                      at kernel initially
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success always
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCamera3Stream::aggregateStartingBufs(const uint8_t *initial_reg_flag)
+{
+    int32_t rc = NO_ERROR;
+
+    for (uint8_t i = 0; i < mBatchSize; i++) {
+        if (initial_reg_flag[i]) {
+            rc = bufDoneLocked(i);
+            if (rc != NO_ERROR) {
+                LOGE("Failed to aggregate buffer %d to batch", i);
+                break;
+            }
+        }
+    }
     return rc;
 }
 

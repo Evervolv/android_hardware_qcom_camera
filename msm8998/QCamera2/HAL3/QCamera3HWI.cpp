@@ -500,6 +500,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mCurrFeatureState(0),
       mLdafCalibExist(false),
       mLastCustIntentFrmNum(-1),
+      mFirstMetadataCallback(true),
       mState(CLOSED),
       mIsDeviceLinked(false),
       mIsMainCamera(true),
@@ -2914,6 +2915,8 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     // Update state
     mState = CONFIGURED;
 
+    mFirstMetadataCallback = true;
+
     pthread_mutex_unlock(&mMutex);
 
     return rc;
@@ -3364,6 +3367,55 @@ void QCamera3HardwareInterface::notifyError(uint32_t frameNumber,
 
     return;
 }
+
+/*===========================================================================
+ * FUNCTION   : sendPartialMetadataWithLock
+ *
+ * DESCRIPTION: Send partial capture result callback with mMutex lock held.
+ *
+ * PARAMETERS : @metadata: metadata buffer
+ *              @requestIter: The iterator for the pending capture request for
+ *              which the partial result is being sen
+ *              @lastUrgentMetadataInBatch: Boolean to indicate whether this is the
+ *                  last urgent metadata in a batch. Always true for non-batch mode
+ *
+ * RETURN     :
+ *
+ *==========================================================================*/
+
+void QCamera3HardwareInterface::sendPartialMetadataWithLock(
+        metadata_buffer_t *metadata,
+        const pendingRequestIterator requestIter,
+        bool lastUrgentMetadataInBatch)
+{
+    camera3_capture_result_t result;
+    memset(&result, 0, sizeof(camera3_capture_result_t));
+
+    requestIter->partial_result_cnt++;
+
+    // Extract 3A metadata
+    result.result = translateCbUrgentMetadataToResultMetadata(
+            metadata, lastUrgentMetadataInBatch);
+    // Populate metadata result
+    result.frame_number = requestIter->frame_number;
+    result.num_output_buffers = 0;
+    result.output_buffers = NULL;
+    result.partial_result = requestIter->partial_result_cnt;
+
+    {
+        Mutex::Autolock l(gHdrPlusClientLock);
+        if (gHdrPlusClient != nullptr && mHdrPlusModeEnabled) {
+            // Notify HDR+ client about the partial metadata.
+            gHdrPlusClient->notifyFrameMetadata(result.frame_number, *result.result,
+            result.partial_result == PARTIAL_RESULT_COUNT);
+        }
+    }
+
+    orchestrateResult(&result);
+    LOGD("urgent frame_number = %u", result.frame_number);
+    free_camera_metadata((camera_metadata_t *)result.result);
+}
+
 /*===========================================================================
  * FUNCTION   : handleMetadataWithLock
  *
@@ -3465,10 +3517,24 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
             }
         }
     }
+    //For the very first metadata callback, regardless whether it contains valid
+    //frame number, send the partial metadata for the jumpstarting requests.
+    //Note that this has to be done even if the metadata doesn't contain valid
+    //urgent frame number, because in the case only 1 request is ever submitted
+    //to HAL, there won't be subsequent valid urgent frame number.
+    if (mFirstMetadataCallback) {
+        for (pendingRequestIterator i =
+                mPendingRequestsList.begin(); i != mPendingRequestsList.end(); i++) {
+            if (i->bUseFirstPartial) {
+                sendPartialMetadataWithLock(metadata, i, lastUrgentMetadataInBatch);
+            }
+        }
+        mFirstMetadataCallback = false;
+    }
+
     //Partial result on process_capture_result for timestamp
     if (urgent_frame_number_valid) {
-        LOGD("valid urgent frame_number = %u, capture_time = %lld",
-           urgent_frame_number, capture_time);
+        LOGD("valid urgent frame_number = %u", urgent_frame_number);
 
         //Recieved an urgent Frame Number, handle it
         //using partial results
@@ -3485,40 +3551,13 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
             }
 
             if (i->frame_number == urgent_frame_number &&
-                     i->bUrgentReceived == 0) {
-
-                camera3_capture_result_t result;
-                memset(&result, 0, sizeof(camera3_capture_result_t));
-
-                i->partial_result_cnt++;
-                i->bUrgentReceived = 1;
-                // Extract 3A metadata
-                result.result = translateCbUrgentMetadataToResultMetadata(
-                        metadata, lastUrgentMetadataInBatch);
-                // Populate metadata result
-                result.frame_number = urgent_frame_number;
-                result.num_output_buffers = 0;
-                result.output_buffers = NULL;
-                result.partial_result = i->partial_result_cnt;
-
-                {
-                    Mutex::Autolock l(gHdrPlusClientLock);
-                    if (gHdrPlusClient != nullptr && mHdrPlusModeEnabled) {
-                        // Notify HDR+ client about the partial metadata.
-                        gHdrPlusClient->notifyFrameMetadata(result.frame_number, *result.result,
-                                result.partial_result == PARTIAL_RESULT_COUNT);
-                    }
-                }
-
-                orchestrateResult(&result);
-                LOGD("urgent frame_number = %u, capture_time = %lld",
-                      result.frame_number, capture_time);
+                     i->partial_result_cnt == 0) {
+                sendPartialMetadataWithLock(metadata, i, lastUrgentMetadataInBatch);
                 if (mResetInstantAEC && mInstantAECSettledFrameNumber == 0) {
                     // Instant AEC settled for this frame.
                     LOGH("instant AEC settled for frame number %d", urgent_frame_number);
                     mInstantAECSettledFrameNumber = urgent_frame_number;
                 }
-                free_camera_metadata((camera_metadata_t *)result.result);
                 break;
             }
         }
@@ -4775,6 +4814,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
                 pthread_mutex_unlock(&mMutex);
                 return rc;
             }
+
         }
         mPerfLockMgr.acquirePerfLock(PERF_LOCK_START_PREVIEW);
         /* get eis information for stream configuration */
@@ -5167,88 +5207,6 @@ int QCamera3HardwareInterface::processCaptureRequest(
                 goto error_exit;
             }
         }
-
-        //Then start them.
-        LOGH("Start META Channel");
-        rc = mMetadataChannel->start();
-        if (rc < 0) {
-            LOGE("META channel start failed");
-            pthread_mutex_unlock(&mMutex);
-            goto error_exit;
-        }
-
-        if (mAnalysisChannel) {
-            rc = mAnalysisChannel->start();
-            if (rc < 0) {
-                LOGE("Analysis channel start failed");
-                mMetadataChannel->stop();
-                pthread_mutex_unlock(&mMutex);
-                goto error_exit;
-            }
-        }
-
-        if (mSupportChannel) {
-            rc = mSupportChannel->start();
-            if (rc < 0) {
-                LOGE("Support channel start failed");
-                mMetadataChannel->stop();
-                /* Although support and analysis are mutually exclusive today
-                   adding it in anycase for future proofing */
-                if (mAnalysisChannel) {
-                    mAnalysisChannel->stop();
-                }
-                pthread_mutex_unlock(&mMutex);
-                goto error_exit;
-            }
-        }
-        for (List<stream_info_t *>::iterator it = mStreamInfo.begin();
-            it != mStreamInfo.end(); it++) {
-            QCamera3Channel *channel = (QCamera3Channel *)(*it)->stream->priv;
-            LOGH("Start Processing Channel mask=%d",
-                     channel->getStreamTypeMask());
-            rc = channel->start();
-            if (rc < 0) {
-                LOGE("channel start failed");
-                pthread_mutex_unlock(&mMutex);
-                goto error_exit;
-            }
-        }
-
-        if (mRawDumpChannel) {
-            LOGD("Starting raw dump stream");
-            rc = mRawDumpChannel->start();
-            if (rc != NO_ERROR) {
-                LOGE("Error Starting Raw Dump Channel");
-                for (List<stream_info_t *>::iterator it = mStreamInfo.begin();
-                      it != mStreamInfo.end(); it++) {
-                    QCamera3Channel *channel =
-                        (QCamera3Channel *)(*it)->stream->priv;
-                    LOGH("Stopping Processing Channel mask=%d",
-                        channel->getStreamTypeMask());
-                    channel->stop();
-                }
-                if (mSupportChannel)
-                    mSupportChannel->stop();
-                if (mAnalysisChannel) {
-                    mAnalysisChannel->stop();
-                }
-                mMetadataChannel->stop();
-                pthread_mutex_unlock(&mMutex);
-                goto error_exit;
-            }
-        }
-
-        if (mChannelHandle) {
-
-            rc = mCameraHandle->ops->start_channel(mCameraHandle->camera_handle,
-                    mChannelHandle);
-            if (rc != NO_ERROR) {
-                LOGE("start_channel failed %d", rc);
-                pthread_mutex_unlock(&mMutex);
-                goto error_exit;
-            }
-        }
-
         goto no_error;
 error_exit:
         mPerfLockMgr.releasePerfLock(PERF_LOCK_START_PREVIEW);
@@ -5491,7 +5449,6 @@ no_error:
     pendingRequest.request_id = request_id;
     pendingRequest.blob_request = blob_request;
     pendingRequest.timestamp = 0;
-    pendingRequest.bUrgentReceived = 0;
     if (request->input_buffer) {
         pendingRequest.input_buffer =
                 (camera3_stream_buffer_t*)malloc(sizeof(camera3_stream_buffer_t));
@@ -5501,6 +5458,7 @@ no_error:
        pendingRequest.input_buffer = NULL;
        pInputBuffer = NULL;
     }
+    pendingRequest.bUseFirstPartial = (mState == CONFIGURED && !request->input_buffer);
 
     pendingRequest.pipeline_depth = 0;
     pendingRequest.partial_result_cnt = 0;
@@ -5880,6 +5838,7 @@ no_error:
                 if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STREAM_ID,
                         streamsArray)) {
                     LOGE("Failed to set stream type mask in the parameters");
+                    pthread_mutex_unlock(&mMutex);
                     return BAD_VALUE;
                 }
 
@@ -5910,6 +5869,88 @@ no_error:
                 }
             }
             mPendingLiveRequest++;
+
+            // Start all streams after the first setting is sent, so that the
+            // setting can be applied sooner: (0 + apply_delay)th frame.
+            if (mState == CONFIGURED && mChannelHandle) {
+                //Then start them.
+                LOGH("Start META Channel");
+                rc = mMetadataChannel->start();
+                if (rc < 0) {
+                    LOGE("META channel start failed");
+                    pthread_mutex_unlock(&mMutex);
+                    return rc;
+                }
+
+                if (mAnalysisChannel) {
+                    rc = mAnalysisChannel->start();
+                    if (rc < 0) {
+                        LOGE("Analysis channel start failed");
+                        mMetadataChannel->stop();
+                        pthread_mutex_unlock(&mMutex);
+                        return rc;
+                    }
+                }
+
+                if (mSupportChannel) {
+                    rc = mSupportChannel->start();
+                    if (rc < 0) {
+                        LOGE("Support channel start failed");
+                        mMetadataChannel->stop();
+                        /* Although support and analysis are mutually exclusive today
+                           adding it in anycase for future proofing */
+                        if (mAnalysisChannel) {
+                            mAnalysisChannel->stop();
+                        }
+                        pthread_mutex_unlock(&mMutex);
+                        return rc;
+                    }
+                }
+                for (List<stream_info_t *>::iterator it = mStreamInfo.begin();
+                        it != mStreamInfo.end(); it++) {
+                    QCamera3Channel *channel = (QCamera3Channel *)(*it)->stream->priv;
+                    LOGH("Start Processing Channel mask=%d",
+                            channel->getStreamTypeMask());
+                    rc = channel->start();
+                    if (rc < 0) {
+                        LOGE("channel start failed");
+                        pthread_mutex_unlock(&mMutex);
+                        return rc;
+                    }
+                }
+
+                if (mRawDumpChannel) {
+                    LOGD("Starting raw dump stream");
+                    rc = mRawDumpChannel->start();
+                    if (rc != NO_ERROR) {
+                        LOGE("Error Starting Raw Dump Channel");
+                        for (List<stream_info_t *>::iterator it = mStreamInfo.begin();
+                              it != mStreamInfo.end(); it++) {
+                            QCamera3Channel *channel =
+                                (QCamera3Channel *)(*it)->stream->priv;
+                            LOGH("Stopping Processing Channel mask=%d",
+                                channel->getStreamTypeMask());
+                            channel->stop();
+                        }
+                        if (mSupportChannel)
+                            mSupportChannel->stop();
+                        if (mAnalysisChannel) {
+                            mAnalysisChannel->stop();
+                        }
+                        mMetadataChannel->stop();
+                        pthread_mutex_unlock(&mMutex);
+                        return rc;
+                    }
+                }
+
+                rc = mCameraHandle->ops->start_channel(mCameraHandle->camera_handle,
+                        mChannelHandle);
+                if (rc != NO_ERROR) {
+                    LOGE("start_channel failed %d", rc);
+                    pthread_mutex_unlock(&mMutex);
+                    return rc;
+                }
+            }
         }
     }
 
