@@ -381,7 +381,7 @@ int32_t QCameraChannel::start()
             mStreams[i]->start();
         }
     }
-    rc = m_camOps->start_channel(m_camHandle, m_handle);
+    rc = m_camOps->start_channel(m_camHandle, m_handle, /*start_sensor_streaming*/true);
 
     if (rc != NO_ERROR) {
         for (size_t i = 0; i < mStreams.size(); i++) {

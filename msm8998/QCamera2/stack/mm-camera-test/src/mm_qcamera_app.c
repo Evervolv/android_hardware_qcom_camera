@@ -845,7 +845,8 @@ int mm_app_start_channel(mm_camera_test_obj_t *test_obj,
                          mm_camera_channel_t *channel)
 {
     return test_obj->cam->ops->start_channel(test_obj->cam->camera_handle,
-                                             channel->ch_id);
+                                             channel->ch_id,
+                                             /*start_sensor_streaming*/true);
 }
 
 int mm_app_stop_channel(mm_camera_test_obj_t *test_obj,

@@ -1288,13 +1288,17 @@ static int32_t mm_camera_intf_config_stream(uint32_t camera_handle,
  * PARAMETERS :
  *   @camera_handle: camera handle
  *   @ch_id        : channel handle
+ *   @start_sensor_streaming: whether to start sensor streaming.
+ *                            If false, start_sensor_streaming() must be
+ *                            called to start sensor streaming.
  *
  * RETURN     : int32_t type of status
  *              0  -- success
  *              -1 -- failure
  *==========================================================================*/
 static int32_t mm_camera_intf_start_channel(uint32_t camera_handle,
-                                            uint32_t ch_id)
+                                            uint32_t ch_id,
+                                            bool start_sensor_streaming)
 {
     int32_t rc = -1;
     mm_camera_obj_t * my_obj = NULL;
@@ -1310,6 +1314,10 @@ static int32_t mm_camera_intf_start_channel(uint32_t camera_handle,
             pthread_mutex_lock(&my_obj->cam_lock);
             pthread_mutex_unlock(&g_intf_lock);
             rc = mm_camera_start_channel(my_obj, chid);
+            // Start sensor streaming now if needed.
+            if (rc == 0 && start_sensor_streaming) {
+                rc = mm_camera_start_sensor_stream_on(my_obj, ch_id);
+            }
         } else {
             pthread_mutex_unlock(&g_intf_lock);
         }
@@ -1328,6 +1336,31 @@ static int32_t mm_camera_intf_start_channel(uint32_t camera_handle,
             pthread_mutex_unlock(&g_intf_lock);
         }
     }
+    LOGH("X ch_id = %u rc = %d", ch_id, rc);
+    return rc;
+}
+
+static int32_t mm_camera_intf_start_sensor_streaming(uint32_t camera_handle,
+                                            uint32_t ch_id)
+{
+    int32_t rc = -1;
+    mm_camera_obj_t * my_obj = NULL;
+    uint32_t chid = get_main_camera_handle(ch_id);
+
+    if (chid) {
+        uint32_t handle = get_main_camera_handle(camera_handle);
+        pthread_mutex_lock(&g_intf_lock);
+
+        my_obj = mm_camera_util_get_camera_by_handler(handle);
+        if(my_obj) {
+            pthread_mutex_lock(&my_obj->cam_lock);
+            pthread_mutex_unlock(&g_intf_lock);
+            rc = mm_camera_start_sensor_stream_on(my_obj, ch_id);
+        } else {
+            pthread_mutex_unlock(&g_intf_lock);
+        }
+    }
+
     LOGH("X ch_id = %u rc = %d", ch_id, rc);
     return rc;
 }
@@ -3086,6 +3119,7 @@ static mm_camera_ops_t mm_camera_ops = {
     .set_stream_parms = mm_camera_intf_set_stream_parms,
     .get_stream_parms = mm_camera_intf_get_stream_parms,
     .start_channel = mm_camera_intf_start_channel,
+    .start_sensor_streaming = mm_camera_intf_start_sensor_streaming,
     .stop_channel = mm_camera_intf_stop_channel,
     .request_super_buf = mm_camera_intf_request_super_buf,
     .cancel_super_buf_request = mm_camera_intf_cancel_super_buf_request,

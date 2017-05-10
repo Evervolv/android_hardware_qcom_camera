@@ -208,6 +208,7 @@ typedef enum {
     MM_STREAM_EVT_REG_BUF,
     MM_STREAM_EVT_UNREG_BUF,
     MM_STREAM_EVT_START,
+    MM_STREAM_EVT_START_SENSOR_STREAMING,
     MM_STREAM_EVT_STOP,
     MM_STREAM_EVT_QBUF,
     MM_STREAM_EVT_SET_PARM,
@@ -368,6 +369,7 @@ typedef enum {
     MM_CHANNEL_EVT_CONFIG_STREAM,
     MM_CHANNEL_EVT_GET_BUNDLE_INFO,
     MM_CHANNEL_EVT_START,
+    MM_CHANNEL_EVT_START_SENSOR_STREAMING,
     MM_CHANNEL_EVT_STOP,
     MM_CHANNEL_EVT_PAUSE,
     MM_CHANNEL_EVT_RESUME,
@@ -758,6 +760,8 @@ extern int32_t mm_camera_config_stream(mm_camera_obj_t *my_obj,
                                        uint32_t stream_id,
                                        mm_camera_stream_config_t *config);
 extern int32_t mm_camera_start_channel(mm_camera_obj_t *my_obj,
+                                       uint32_t ch_id);
+extern int32_t mm_camera_start_sensor_stream_on(mm_camera_obj_t *my_obj,
                                        uint32_t ch_id);
 extern int32_t mm_camera_stop_channel(mm_camera_obj_t *my_obj,
                                       uint32_t ch_id);

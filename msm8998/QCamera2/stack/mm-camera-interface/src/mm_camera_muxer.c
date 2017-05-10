@@ -1214,6 +1214,9 @@ int32_t mm_camera_muxer_start_channel(uint32_t camera_handle,
         pthread_mutex_lock(&my_obj->cam_lock);
         pthread_mutex_unlock(&cam_obj->muxer_lock);
         rc = mm_camera_start_channel(my_obj, ch_id);
+        if (rc == 0) {
+            rc = mm_camera_start_sensor_stream_on(my_obj, ch_id);
+        }
     } else{
         pthread_mutex_unlock(&cam_obj->muxer_lock);
     }

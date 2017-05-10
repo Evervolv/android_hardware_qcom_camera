@@ -73,6 +73,7 @@ int32_t mm_channel_config_stream(mm_channel_t *my_obj,
 int32_t mm_channel_get_bundle_info(mm_channel_t *my_obj,
                                    cam_bundle_config_t *bundle_info);
 int32_t mm_channel_start(mm_channel_t *my_obj);
+int32_t mm_channel_start_sensor_streaming(mm_channel_t *my_obj);
 int32_t mm_channel_stop(mm_channel_t *my_obj);
 int32_t mm_channel_request_super_buf(mm_channel_t *my_obj,
         mm_camera_req_buf_t *buf);
@@ -1259,6 +1260,13 @@ int32_t mm_channel_fsm_fn_active(mm_channel_t *my_obj,
                     (mm_evt_paylod_trigger_frame_sync *)in_val);
         }
         break;
+
+    case MM_CHANNEL_EVT_START_SENSOR_STREAMING:
+        {
+            rc = mm_channel_start_sensor_streaming(my_obj);
+        }
+        break;
+
      default:
         LOGE("invalid state (%d) for evt (%d), in(%p), out(%p)",
                     my_obj->state, evt, in_val, out_val);
@@ -1949,6 +1957,58 @@ int32_t mm_channel_start(mm_channel_t *my_obj)
         LOGH("registering Channel obj %p", my_obj);
         mm_frame_sync_register_channel(my_obj);
     }
+    return rc;
+}
+
+int32_t mm_channel_start_sensor_streaming(mm_channel_t *my_obj)
+{
+    int32_t rc = 0;
+    int i = 0;
+    mm_stream_t *s_objs[MAX_STREAM_NUM_IN_BUNDLE] = {NULL};
+    uint8_t num_streams_to_start = 0;
+    mm_stream_t *s_obj = NULL;
+    int meta_stream_idx = 0;
+    cam_stream_type_t stream_type = CAM_STREAM_TYPE_DEFAULT;
+
+    for (i = 0; i < MAX_STREAM_NUM_IN_BUNDLE; i++) {
+        if (my_obj->streams[i].my_hdl > 0) {
+            s_obj = mm_channel_util_get_stream_by_handler(my_obj,
+                                                          my_obj->streams[i].my_hdl);
+            if (NULL != s_obj) {
+                stream_type = s_obj->stream_info->stream_type;
+                /* remember meta data stream index */
+                if ((stream_type == CAM_STREAM_TYPE_METADATA) &&
+                        (s_obj->ch_obj == my_obj)) {
+                    meta_stream_idx = num_streams_to_start;
+                }
+                s_objs[num_streams_to_start++] = s_obj;
+            }
+        }
+    }
+
+    if (meta_stream_idx > 0 ) {
+        /* always start meta data stream first, so switch the stream object with the first one */
+        s_obj = s_objs[0];
+        s_objs[0] = s_objs[meta_stream_idx];
+        s_objs[meta_stream_idx] = s_obj;
+    }
+
+    for (i = 0; i < num_streams_to_start; i++) {
+        if (s_objs[i]->ch_obj != my_obj) {
+            continue;
+        }
+
+        /* start sensor streaming */
+        rc = mm_stream_fsm_fn(s_objs[i],
+                              MM_STREAM_EVT_START_SENSOR_STREAMING,
+                              NULL,
+                              NULL);
+        if (0 != rc) {
+            LOGE("start stream failed at idx(%d)", i);
+            break;
+        }
+    }
+
     return rc;
 }
 
