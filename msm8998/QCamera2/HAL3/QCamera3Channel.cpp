@@ -663,12 +663,18 @@ cam_format_t QCamera3Channel::getStreamDefaultFormat(cam_stream_type_t type,
     switch (type) {
     case CAM_STREAM_TYPE_PREVIEW:
         if (isUBWCEnabled()) {
+
             char prop[PROPERTY_VALUE_MAX];
             int pFormat;
             memset(prop, 0, sizeof(prop));
             property_get("persist.camera.preview.ubwc", prop, "1");
             pFormat = atoi(prop);
-            if (pFormat == 1 && forcePreviewUBWC) {
+
+            // When goog_zoom is linked to the preview stream, disable ubwc to preview
+            property_get("persist.camera.gzoom.at", prop, "0");
+            bool is_goog_zoom_preview_enabled = ((atoi(prop) & 2) > 0);
+
+            if (pFormat == 1 && forcePreviewUBWC && !is_goog_zoom_preview_enabled) {
                 streamFormat = CAM_FORMAT_YUV_420_NV12_UBWC;
             } else {
                 /* Changed to macro to ensure format sent to gralloc for preview
@@ -686,7 +692,17 @@ cam_format_t QCamera3Channel::getStreamDefaultFormat(cam_stream_type_t type,
         /* Disable UBWC for smaller video resolutions due to CPP downscale
             limits. Refer cpp_hw_params.h::CPP_DOWNSCALE_LIMIT_UBWC */
         if (isUBWCEnabled() && (width >= 640) && (height >= 480)) {
-            if ((QCameraCommon::isVideoUBWCEnabled())) {
+            // When goog_zoom is linked to the video stream, disable ubwc to video
+            char prop[PROPERTY_VALUE_MAX];
+            property_get("persist.camera.gzoom.at", prop, "0");
+            bool is_goog_zoom_video_enabled = ((atoi(prop) & 1) > 0);
+
+            property_get("persist.camera.gzoom.4k", prop, "0");
+            bool is_goog_zoom_4k_enabled = (atoi(prop) > 0);
+            bool is_4k_video = (width >= 3840 && height >= 2160);
+
+            if ((QCameraCommon::isVideoUBWCEnabled()) && (!is_goog_zoom_video_enabled
+                    || (is_4k_video && !is_goog_zoom_4k_enabled))) {
                 streamFormat = CAM_FORMAT_YUV_420_NV12_UBWC;
             } else {
                 streamFormat = CAM_FORMAT_YUV_420_NV12_VENUS;
