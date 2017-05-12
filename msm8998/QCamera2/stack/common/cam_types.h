@@ -3141,4 +3141,11 @@ typedef struct {
   float reserved_f[16];
 }tuning_mod1_data_AF;
 
+
+// Used with MSM_CAMERA_PRIV_STREAM_ON.
+typedef enum {
+    CAM_STREAM_ON_TYPE_CONFIG, // Configure modules for stream ON without starting sensor streaming.
+    CAM_STREAM_ON_TYPE_START_SENSOR_STREAMING, // Start sensor streaming.
+} cam_stream_on_type_t;
+
 #endif /* __QCAMERA_TYPES_H__ */

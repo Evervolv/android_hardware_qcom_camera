@@ -5049,20 +5049,6 @@ int QCamera3HardwareInterface::processCaptureRequest(
                 mSensorModeInfo.active_array_size.width,
                 mSensorModeInfo.active_array_size.height);
 
-        {
-            Mutex::Autolock l(gHdrPlusClientLock);
-            if (EaselManagerClientOpened) {
-                logEaselEvent("EASEL_STARTUP_LATENCY", "Starting MIPI");
-                rc = gEaselManagerClient.startMipi(mCameraId, mSensorModeInfo.op_pixel_clk);
-                if (rc != OK) {
-                    ALOGE("%s: Failed to start MIPI rate for camera %u to %u", __FUNCTION__,
-                            mCameraId, mSensorModeInfo.op_pixel_clk);
-                    pthread_mutex_unlock(&mMutex);
-                    goto error_exit;
-                }
-            }
-        }
-
         /* Set batchmode before initializing channel. Since registerBuffer
          * internally initializes some of the channels, better set batchmode
          * even before first register buffer */
@@ -5967,10 +5953,35 @@ no_error:
                     }
                 }
 
+                // Configure modules for stream on.
                 rc = mCameraHandle->ops->start_channel(mCameraHandle->camera_handle,
-                        mChannelHandle);
+                        mChannelHandle, /*start_sensor_streaming*/false);
                 if (rc != NO_ERROR) {
                     LOGE("start_channel failed %d", rc);
+                    pthread_mutex_unlock(&mMutex);
+                    return rc;
+                }
+
+                {
+                    // Configure Easel for stream on.
+                    Mutex::Autolock l(gHdrPlusClientLock);
+                    if (EaselManagerClientOpened) {
+                        logEaselEvent("EASEL_STARTUP_LATENCY", "Starting MIPI");
+                        rc = gEaselManagerClient.startMipi(mCameraId, mSensorModeInfo.op_pixel_clk);
+                        if (rc != OK) {
+                            ALOGE("%s: Failed to start MIPI rate for camera %u to %u", __FUNCTION__,
+                                    mCameraId, mSensorModeInfo.op_pixel_clk);
+                            pthread_mutex_unlock(&mMutex);
+                            return rc;
+                        }
+                    }
+                }
+
+                // Start sensor streaming.
+                rc = mCameraHandle->ops->start_sensor_streaming(mCameraHandle->camera_handle,
+                        mChannelHandle);
+                if (rc != NO_ERROR) {
+                    LOGE("start_sensor_stream_on failed %d", rc);
                     pthread_mutex_unlock(&mMutex);
                     return rc;
                 }
@@ -6187,7 +6198,7 @@ int QCamera3HardwareInterface::flush(bool restartChannels)
         }
         if (mChannelHandle) {
             mCameraHandle->ops->start_channel(mCameraHandle->camera_handle,
-                        mChannelHandle);
+                        mChannelHandle, /*start_sensor_streaming*/true);
             if (rc < 0) {
                 LOGE("start_channel failed");
                 pthread_mutex_unlock(&mMutex);

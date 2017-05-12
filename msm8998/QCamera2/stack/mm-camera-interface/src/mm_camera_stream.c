@@ -66,6 +66,7 @@ int32_t mm_stream_get_parm(mm_stream_t *my_obj,
 int32_t mm_stream_do_action(mm_stream_t *my_obj,
                             void *in_value);
 int32_t mm_stream_streamon(mm_stream_t *my_obj);
+int32_t mm_stream_start_sensor_streaming(mm_stream_t *my_obj);
 int32_t mm_stream_streamoff(mm_stream_t *my_obj);
 int32_t mm_stream_read_msm_frame(mm_stream_t * my_obj,
                                  mm_camera_buf_info_t* buf_info,
@@ -993,6 +994,11 @@ int32_t mm_stream_fsm_active(mm_stream_t * my_obj,
             rc = mm_stream_trigger_frame_sync(my_obj, type);
         }
         break;
+    case MM_STREAM_EVT_START_SENSOR_STREAMING:
+        {
+            rc = mm_stream_start_sensor_streaming(my_obj);
+        }
+        break;
     default:
         LOGE("invalid state (%d) for evt (%d), in(%p), out(%p)",
                     my_obj->state, evt, in_val, out_val);
@@ -1354,11 +1360,13 @@ int32_t mm_stream_streamon(mm_stream_t *my_obj)
 #ifndef DAEMON_PRESENT
     cam_shim_packet_t *shim_cmd;
     cam_shim_cmd_data shim_cmd_data;
+    // Only configure for stream on without starting sensor streaming.
+    unsigned int value = CAM_STREAM_ON_TYPE_CONFIG;
 
     memset(&shim_cmd_data, 0, sizeof(shim_cmd_data));
     shim_cmd_data.command = MSM_CAMERA_PRIV_STREAM_ON;
     shim_cmd_data.stream_id = my_obj->server_stream_id;
-    shim_cmd_data.value = NULL;
+    shim_cmd_data.value = &value;
     shim_cmd = mm_camera_create_shim_cmd_packet(CAM_SHIM_SET_PARM,
             cam_obj->sessionid, &shim_cmd_data);
     rc = mm_camera_module_send_cmd(shim_cmd);
@@ -1369,6 +1377,47 @@ int32_t mm_stream_streamon(mm_stream_t *my_obj)
         goto error_case;
     }
 #endif
+    LOGD("X rc = %d",rc);
+    return rc;
+error_case:
+     /* remove fd from data poll thread in case of failure */
+     mm_camera_poll_thread_del_poll_fd(&my_obj->ch_obj->poll_thread[0],
+             idx, my_obj->my_hdl, mm_camera_sync_call);
+
+    LOGD("X rc = %d",rc);
+    return rc;
+}
+
+int32_t mm_stream_start_sensor_streaming(mm_stream_t *my_obj)
+{
+    int32_t rc = 0;
+
+    enum v4l2_buf_type buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    uint8_t idx = mm_camera_util_get_index_by_num(
+            my_obj->ch_obj->cam_obj->my_num, my_obj->my_hdl);
+    mm_camera_obj_t *cam_obj = my_obj->ch_obj->cam_obj;
+    LOGD("E, my_handle = 0x%x, fd = %d, state = %d session_id:%d stream_id:%d",
+            my_obj->my_hdl, my_obj->fd, my_obj->state, cam_obj->sessionid,
+            my_obj->server_stream_id);
+
+    cam_shim_packet_t *shim_cmd;
+    cam_shim_cmd_data shim_cmd_data;
+    unsigned int value = CAM_STREAM_ON_TYPE_START_SENSOR_STREAMING;
+
+    memset(&shim_cmd_data, 0, sizeof(shim_cmd_data));
+    shim_cmd_data.command = MSM_CAMERA_PRIV_STREAM_ON;
+    shim_cmd_data.stream_id = my_obj->server_stream_id;
+    shim_cmd_data.value = &value;
+    shim_cmd = mm_camera_create_shim_cmd_packet(CAM_SHIM_SET_PARM,
+            cam_obj->sessionid, &shim_cmd_data);
+    rc = mm_camera_module_send_cmd(shim_cmd);
+    mm_camera_destroy_shim_cmd_packet(shim_cmd);
+    if (rc < 0) {
+        LOGE("Module StreamON failed: rc=%d", rc);
+        ioctl(my_obj->fd, VIDIOC_STREAMOFF, &buf_type);
+        goto error_case;
+    }
+
     LOGD("X rc = %d",rc);
     return rc;
 error_case:

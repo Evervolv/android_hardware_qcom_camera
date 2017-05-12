@@ -1263,6 +1263,27 @@ int32_t mm_camera_start_channel(mm_camera_obj_t *my_obj, uint32_t ch_id)
     return rc;
 }
 
+int32_t mm_camera_start_sensor_stream_on(mm_camera_obj_t *my_obj, uint32_t ch_id)
+{
+    int32_t rc = -1;
+    mm_channel_t * ch_obj =
+        mm_camera_util_get_channel_by_handler(my_obj, ch_id);
+
+    if (NULL != ch_obj) {
+        pthread_mutex_lock(&ch_obj->ch_lock);
+        pthread_mutex_unlock(&my_obj->cam_lock);
+
+        rc = mm_channel_fsm_fn(ch_obj,
+                               MM_CHANNEL_EVT_START_SENSOR_STREAMING,
+                               NULL,
+                               NULL);
+    } else {
+        pthread_mutex_unlock(&my_obj->cam_lock);
+    }
+
+    return rc;
+}
+
 /*===========================================================================
  * FUNCTION   : mm_camera_stop_channel
  *

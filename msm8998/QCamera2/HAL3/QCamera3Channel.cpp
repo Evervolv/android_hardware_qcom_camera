@@ -4482,7 +4482,7 @@ int32_t QCamera3ReprocessChannel::start()
     rc = QCamera3Channel::start();
 
     if (rc == NO_ERROR) {
-       rc = m_camOps->start_channel(m_camHandle, m_handle);
+       rc = m_camOps->start_channel(m_camHandle, m_handle, /*start_sensor_streaming*/true);
 
        // Check failure
        if (rc != NO_ERROR) {

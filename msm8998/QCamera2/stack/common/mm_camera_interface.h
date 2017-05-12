@@ -32,6 +32,7 @@
 
 // System dependencies
 #include <media/msmb_camera.h>
+#include <stdbool.h>
 
 // Camera dependencies
 #include "cam_intf.h"
@@ -753,12 +754,30 @@ typedef struct {
     /** start_channel: fucntion definition for starting a channel
      *    @camera_handle : camer handler
      *    @ch_id : channel handler
+     *    @start_sensor_streaming: whether to start sensor streaming.
+     *                             If false, start_sensor_streaming() must be
+     *                             called to start sensor streaming.
+     *
      *  Return value: 0 -- success
      *                -1 -- failure
-     * This call will start all streams belongs to the channel
+     * This call will start all streams belongs to the channel.
      **/
     int32_t (*start_channel) (uint32_t camera_handle,
-                              uint32_t ch_id);
+                              uint32_t ch_id, bool start_sensor_streaming);
+
+    /**
+     * start_sensor_streaming: function definition for starting sensor
+     *                         streaming.
+     *   @camera_handle : camera handler
+     *   @ch_id : channel handler
+     *
+     *  Return value: 0 -- success
+     *                -1 -- failure
+     * This call will start sensor streaming if start_channel() was called with
+     * start_sensor_streaming == FALSE.
+     */
+    int32_t (*start_sensor_streaming) (uint32_t camera_handle,
+                                       uint32_t ch_id);
 
     /** stop_channel: fucntion definition for stopping a channel
      *    @camera_handle : camer handler
