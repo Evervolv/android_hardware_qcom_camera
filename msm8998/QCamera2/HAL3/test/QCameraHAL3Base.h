@@ -39,7 +39,6 @@
 #include <linux/msm_ion.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <system/window.h>
 #include <stdio.h>
 #include <pthread.h>
 #include <poll.h>
