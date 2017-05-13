@@ -5227,25 +5227,6 @@ no_error:
         mFirstConfiguration = false;
     }
 
-    // Enable HDR+ mode for the first PREVIEW_INTENT request.
-    {
-        Mutex::Autolock l(gHdrPlusClientLock);
-        if (gEaselManagerClient.isEaselPresentOnDevice() &&
-                !gEaselBypassOnly && !mFirstPreviewIntentSeen &&
-                meta.exists(ANDROID_CONTROL_CAPTURE_INTENT) &&
-                meta.find(ANDROID_CONTROL_CAPTURE_INTENT).data.u8[0] ==
-                ANDROID_CONTROL_CAPTURE_INTENT_PREVIEW) {
-            rc = enableHdrPlusModeLocked();
-            if (rc != OK) {
-                LOGE("%s: Failed to open HDR+ asynchronously", __FUNCTION__);
-                pthread_mutex_unlock(&mMutex);
-                return rc;
-            }
-
-            mFirstPreviewIntentSeen = true;
-        }
-    }
-
     uint32_t frameNumber = request->frame_number;
     cam_stream_ID_t streamsArray;
 
@@ -5986,6 +5967,25 @@ no_error:
                     return rc;
                 }
             }
+        }
+    }
+
+    // Enable HDR+ mode for the first PREVIEW_INTENT request.
+    {
+        Mutex::Autolock l(gHdrPlusClientLock);
+        if (gEaselManagerClient.isEaselPresentOnDevice() &&
+                !gEaselBypassOnly && !mFirstPreviewIntentSeen &&
+                meta.exists(ANDROID_CONTROL_CAPTURE_INTENT) &&
+                meta.find(ANDROID_CONTROL_CAPTURE_INTENT).data.u8[0] ==
+                ANDROID_CONTROL_CAPTURE_INTENT_PREVIEW) {
+            rc = enableHdrPlusModeLocked();
+            if (rc != OK) {
+                LOGE("%s: Failed to open HDR+ asynchronously", __FUNCTION__);
+                pthread_mutex_unlock(&mMutex);
+                return rc;
+            }
+
+            mFirstPreviewIntentSeen = true;
         }
     }
 
