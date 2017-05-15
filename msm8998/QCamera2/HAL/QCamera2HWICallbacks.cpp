@@ -750,9 +750,11 @@ void QCamera2HardwareInterface::synchronous_stream_cb_routine(
     // Otherwise, mBootToMonoTimestampOffset value will be 0.
     frameTime = frameTime - pme->mBootToMonoTimestampOffset;
     // Calculate the future presentation time stamp for displaying frames at regular interval
+#if 0 // Temporary removing the dependency on libgui
     if (pme->getRecordingHintValue() == true) {
         mPreviewTimestamp = pme->mCameraDisplay.computePresentationTimeStamp(frameTime);
     }
+#endif
     stream->mStreamTimestamp = frameTime;
 
     // Enqueue  buffer to gralloc.
