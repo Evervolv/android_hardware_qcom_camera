@@ -46,14 +46,7 @@
 #define TUNING_INFO_DEBUG_DATA_SIZE       (4)
 #define OIS_DATA_MAX_SIZE                 (32)
 
-#ifndef SUPPORT_DEPTH_DATA
-#define SUPPORT_DEPTH_DATA
-#endif
-#ifdef SUPPORT_DEPTH_DATA
 #define MAX_DEPTH_DATA_SIZE               (4032*2*756)
-#else
-#define MAX_DEPTH_DATA_SIZE               (1)
-#endif
 
 #define CEILING64(X) (((X) + 0x0003F) & 0xFFFFFFC0)
 #define CEILING32(X) (((X) + 0x0001F) & 0xFFFFFFE0)
@@ -1763,7 +1756,7 @@ typedef struct {
 typedef struct {
     uint32_t frame_id;
     size_t length;
-    uint8_t depth_data[MAX_DEPTH_DATA_SIZE];
+    uint8_t *depth_data;
 } cam_depth_data_t;
 
 typedef enum {

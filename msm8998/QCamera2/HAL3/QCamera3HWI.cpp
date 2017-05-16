@@ -2232,6 +2232,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         pthread_mutex_unlock(&mMutex);
         return rc;
     }
+    mMetadataChannel->enableDepthData(depthPresent);
     rc = mMetadataChannel->initialize(IS_TYPE_NONE);
     if (rc < 0) {
         LOGE("metadata channel initialization failed");

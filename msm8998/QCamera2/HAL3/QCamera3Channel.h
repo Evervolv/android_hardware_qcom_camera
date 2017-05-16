@@ -350,8 +350,11 @@ public:
             { return NO_ERROR; };
     virtual int32_t timeoutFrame(__unused uint32_t frameNumber) {return NO_ERROR; };
 
+    void enableDepthData(bool enable) { mDepthDataPresent = enable; }
+
 private:
     QCamera3StreamMem *mMemory;
+    bool mDepthDataPresent;
 };
 
 /* QCamera3RawChannel is for opaqueu/cross-platform raw stream containing

@@ -2081,7 +2081,7 @@ QCamera3MetadataChannel::QCamera3MetadataChannel(uint32_t cam_handle,
                         QCamera3Channel(cam_handle, channel_handle, cam_ops,
                                 cb_routine, cb_buffer_err, paddingInfo, postprocess_mask,
                                 userData, numBuffers),
-                        mMemory(NULL)
+                        mMemory(NULL), mDepthDataPresent(false)
 {
 }
 
@@ -2167,11 +2167,39 @@ QCamera3StreamMem* QCamera3MetadataChannel::getStreamBufs(uint32_t len)
         return NULL;
     }
     clear_metadata_buffer((metadata_buffer_t*)mMemory->getPtr(0));
+
+    for (uint32_t i = 0; i < mMemory->getCnt(); i++) {
+        if (mMemory->valid(i)) {
+            metadata_buffer_t *metadata_buffer_t =
+                    static_cast<::metadata_buffer_t *> (mMemory->getPtr(i));
+            metadata_buffer_t->depth_data.depth_data = nullptr;
+            if (mDepthDataPresent) {
+                metadata_buffer_t->depth_data.depth_data =
+                        new uint8_t[MAX_DEPTH_DATA_SIZE];
+            }
+        } else {
+            LOGE("Invalid meta buffer at index: %d", i);
+        }
+    }
+
     return mMemory;
 }
 
 void QCamera3MetadataChannel::putStreamBufs()
 {
+    for (uint32_t i = 0; i < mMemory->getCnt(); i++) {
+        if (mMemory->valid(i)) {
+            metadata_buffer_t *metadata_buffer_t =
+                    static_cast<::metadata_buffer_t *> (mMemory->getPtr(i));
+            if (nullptr != metadata_buffer_t->depth_data.depth_data) {
+                delete [] metadata_buffer_t->depth_data.depth_data;
+                metadata_buffer_t->depth_data.depth_data = nullptr;
+            }
+        } else {
+            LOGE("Invalid meta buffer at index: %d", i);
+        }
+    }
+
     mMemory->deallocate();
     delete mMemory;
     mMemory = NULL;
