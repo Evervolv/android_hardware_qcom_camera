@@ -2858,6 +2858,9 @@ int32_t mm_stream_calc_offset_preview(cam_stream_info_t *stream_info,
         buf_planes->plane_info.mp[0].scanline = scanline;
         buf_planes->plane_info.mp[0].width = dim->width;
         buf_planes->plane_info.mp[0].height = dim->height;
+        buf_planes->plane_info.mp[0].meta_stride = 0;
+        buf_planes->plane_info.mp[0].meta_scanline = 0;
+        buf_planes->plane_info.mp[0].meta_len = 0;
         if (stream_info->stream_type != CAM_STREAM_TYPE_OFFLINE_PROC) {
             stride = VENUS_UV_STRIDE(COLOR_FMT_NV12, dim->width);
             scanline = VENUS_UV_SCANLINES(COLOR_FMT_NV12, dim->height);
@@ -2874,6 +2877,9 @@ int32_t mm_stream_calc_offset_preview(cam_stream_info_t *stream_info,
         buf_planes->plane_info.mp[1].scanline = scanline;
         buf_planes->plane_info.mp[1].width = dim->width;
         buf_planes->plane_info.mp[1].height = dim->height / 2;
+        buf_planes->plane_info.mp[1].meta_stride = 0;
+        buf_planes->plane_info.mp[1].meta_scanline = 0;
+        buf_planes->plane_info.mp[1].meta_len = 0;
 #else
         LOGE("Venus hardware not avail, cannot use this format");
         rc = -1;
@@ -2900,6 +2906,9 @@ int32_t mm_stream_calc_offset_preview(cam_stream_info_t *stream_info,
         buf_planes->plane_info.mp[0].scanline = scanline;
         buf_planes->plane_info.mp[0].width = dim->width;
         buf_planes->plane_info.mp[0].height = dim->height;
+        buf_planes->plane_info.mp[0].meta_stride = 0;
+        buf_planes->plane_info.mp[0].meta_scanline = 0;
+        buf_planes->plane_info.mp[0].meta_len = 0;
         if (stream_info->stream_type != CAM_STREAM_TYPE_OFFLINE_PROC) {
             stride = VENUS_UV_STRIDE(COLOR_FMT_NV21, dim->width);
             scanline = VENUS_UV_SCANLINES(COLOR_FMT_NV21, dim->height);
@@ -2916,6 +2925,9 @@ int32_t mm_stream_calc_offset_preview(cam_stream_info_t *stream_info,
         buf_planes->plane_info.mp[1].scanline = scanline;
         buf_planes->plane_info.mp[1].width = dim->width;
         buf_planes->plane_info.mp[1].height = dim->height / 2;
+        buf_planes->plane_info.mp[1].meta_stride = 0;
+        buf_planes->plane_info.mp[1].meta_scanline = 0;
+        buf_planes->plane_info.mp[1].meta_len = 0;
 #else
         LOGE("Venus hardware not avail, cannot use this format");
         rc = -1;
