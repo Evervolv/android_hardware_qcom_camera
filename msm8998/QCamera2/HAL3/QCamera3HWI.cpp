@@ -853,6 +853,7 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
         return PERMISSION_DENIED;
     }
 
+    logEaselEvent("EASEL_STARTUP_LATENCY", "Camera Open");
     mPerfLockMgr.acquirePerfLock(PERF_LOCK_OPEN_CAMERA);
     LOGI("[KPI Perf]: E PROFILE_OPEN_CAMERA camera id %d",
              mCameraId);
@@ -4816,6 +4817,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
     // For first capture request, send capture intent, and
     // stream on all streams
     if (mState == CONFIGURED) {
+        logEaselEvent("EASEL_STARTUP_LATENCY", "First request");
         // send an unconfigure to the backend so that the isp
         // resources are deallocated
         if (!mFirstConfiguration) {
@@ -5956,6 +5958,7 @@ no_error:
                             pthread_mutex_unlock(&mMutex);
                             return rc;
                         }
+                        logEaselEvent("EASEL_STARTUP_LATENCY", "Starting MIPI done");
                     }
                 }
 
@@ -14642,6 +14645,7 @@ void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
         return;
     }
 
+    logEaselEvent("EASEL_STARTUP_LATENCY", "HDR+ client opened.");
     ALOGI("%s: HDR+ client opened.", __FUNCTION__);
 
     Mutex::Autolock l(gHdrPlusClientLock);
