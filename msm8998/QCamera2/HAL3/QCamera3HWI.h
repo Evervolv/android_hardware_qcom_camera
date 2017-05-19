@@ -96,6 +96,8 @@ class QCamera3MetadataChannel;
 class QCamera3PicChannel;
 class QCamera3HeapMemory;
 class QCamera3Exif;
+class ShutterDispatcher;
+class BufferDispatcher;
 
 typedef struct {
     camera3_stream_t *stream;
@@ -150,6 +152,77 @@ private:
     std::map<uint32_t, uint32_t> _register;
     uint32_t _nextFreeInternalNumber;
     Mutex mRegistryLock;
+};
+
+class QCamera3HardwareInterface;
+
+/*
+ * ShutterDispatcher class dispatches shutter callbacks in order of the frame
+ * number. It will dispatch a shutter callback only after all shutter callbacks
+ * of previous frames were dispatched.
+ */
+class ShutterDispatcher {
+public:
+    ShutterDispatcher(QCamera3HardwareInterface *parent);
+    virtual ~ShutterDispatcher() = default;
+
+    // Tell dispatch to expect a shutter for a frame number.
+    void expectShutter(uint32_t frameNumber);
+    // Mark a shutter callback for a frame ready.
+    void markShutterReady(uint32_t frameNumber, uint64_t timestamp);
+    // Discard a pending shutter for frame number.
+    void clear(uint32_t frameNumber);
+    // Discard all pending shutters.
+    void clear();
+
+private:
+    struct Shutter {
+        bool ready; // If the shutter is ready.
+        uint64_t timestamp; // Timestamp of the shutter.
+        Shutter() : ready(false), timestamp(0) {};
+    };
+
+    std::mutex mLock;
+
+    // frame number -> shutter map. Protected by mLock.
+    std::map<uint32_t, Shutter> mShutters;
+
+    QCamera3HardwareInterface *mParent;
+};
+
+/*
+ * BufferDispatcher class dispatches output buffers in a stream in order of the
+ * frame number. It will dispatch an output buffer in a stream only after all
+ * previous output buffers in the same stream were dispatched.
+ */
+class OutputBufferDispatcher {
+public:
+    OutputBufferDispatcher(QCamera3HardwareInterface *parent);
+    virtual ~OutputBufferDispatcher() = default;
+
+    // Configure streams.
+    status_t configureStreams(camera3_stream_configuration_t *streamList);
+    // Tell dispatcher to expect a buffer for a stream for a frame number.
+    status_t expectBuffer(uint32_t frameNumber, camera3_stream_t *stream);
+    // Mark a buffer ready for a stream for a frame number.
+    void markBufferReady(uint32_t frameNumber, const camera3_stream_buffer_t &buffer);
+    // Discard all pending buffers. If clearConfiguredStreams is true, discard configured streams
+    // as well.
+    void clear(bool clearConfiguredStreams = true);
+
+private:
+    struct Buffer {
+        bool ready; // If the buffer is ready.
+        camera3_stream_buffer_t buffer;
+        Buffer() : ready(false), buffer({}) {};
+    };
+
+    std::mutex mLock;
+
+    // A two-level map: stream -> (frame number -> buffer). Protected by mLock.
+    std::map<camera3_stream_t*, std::map<uint32_t, Buffer>> mStreamBuffers;
+
+    QCamera3HardwareInterface *mParent;
 };
 
 class QCamera3HardwareInterface : HdrPlusClientListener {
@@ -360,8 +433,8 @@ private:
             uint32_t frame_number);
     void handleInputBufferWithLock(uint32_t frame_number);
     // Handle pending results when a new result metadata of a frame is received.
-    // Shutter and metadata callbacks are invoked in the order of frame number.
-    void handlePendingResultsWithLock(uint32_t frameNumber,
+    // metadata callbacks are invoked in the order of frame number.
+    void handlePendingResultMetadataWithLock(uint32_t frameNumber,
             const camera_metadata_t *resultMetadata);
     void handleDepthDataLocked(const cam_depth_data_t &depthData,
             uint32_t frameNumber);
@@ -510,7 +583,6 @@ private:
         uint32_t partial_result_cnt;
         uint8_t capture_intent;
         uint8_t fwkCacMode;
-        bool shutter_notified;
         uint8_t hybrid_ae_enable;
         /* DevCamDebug metadata PendingRequestInfo */
         uint8_t DevCamDebug_meta_enable;
@@ -544,6 +616,9 @@ private:
     bool mWokenUpByDaemon;
     int32_t mCurrentRequestId;
     cam_stream_size_info_t mStreamConfigInfo;
+
+    ShutterDispatcher mShutterDispatcher;
+    OutputBufferDispatcher mOutputBufferDispatcher;
 
     //mutex for serialized access to camera3_device_ops_t functions
     pthread_mutex_t mMutex;

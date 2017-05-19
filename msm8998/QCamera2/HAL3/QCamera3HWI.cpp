@@ -467,6 +467,8 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       m_bEisEnable(false),
       m_bEis3PropertyEnabled(false),
       m_MobicatMask(0),
+      mShutterDispatcher(this),
+      mOutputBufferDispatcher(this),
       mMinProcessedFrameDuration(0),
       mMinJpegFrameDuration(0),
       mMinRawFrameDuration(0),
@@ -2207,6 +2209,9 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         mDepthChannel = NULL;
     }
 
+    mShutterDispatcher.clear();
+    mOutputBufferDispatcher.clear();
+
     char is_type_value[PROPERTY_VALUE_MAX];
     property_get("persist.camera.is_type", is_type_value, "4");
     m_bEis3PropertyEnabled = (atoi(is_type_value) == IS_TYPE_EIS_3_0);
@@ -2676,6 +2681,9 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
             mStreamConfigInfo.num_streams++;
         }
     }
+
+    // Let buffer dispatcher know the configured streams.
+    mOutputBufferDispatcher.configureStreams(streamList);
 
     // By default, preview stream TNR is disabled.
     // Enable TNR to the preview stream if all conditions below are satisfied:
@@ -3759,8 +3767,10 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
         }
     }
 
-    // Try to send out shutter callbacks and capture results.
-    handlePendingResultsWithLock(frame_number,  resultMetadata);
+    mShutterDispatcher.markShutterReady(frame_number, capture_time);
+
+    // Try to send out capture result metadata.
+    handlePendingResultMetadataWithLock(frame_number,  resultMetadata);
     return;
 
 done_metadata:
@@ -3799,20 +3809,12 @@ void QCamera3HardwareInterface::handleDepthDataLocked(
          .status = CAMERA3_BUFFER_STATUS_OK,
          .buffer = nullptr,
          .stream = mDepthChannel->getStream()};
-    camera3_capture_result_t result =
-        {.result = nullptr,
-         .num_output_buffers = 1,
-         .output_buffers = &resultBuffer,
-         .partial_result = 0,
-         .frame_number = 0};
-
     do {
         depthBuffer = mDepthChannel->getOldestFrame(currentFrameNumber);
         if (nullptr == depthBuffer) {
             break;
         }
 
-        result.frame_number = currentFrameNumber;
         resultBuffer.buffer = depthBuffer;
         if (currentFrameNumber == frameNumber) {
             int32_t rc = mDepthChannel->populateDepthData(depthData,
@@ -3835,8 +3837,7 @@ void QCamera3HardwareInterface::handleDepthDataLocked(
             resultBuffer.status = CAMERA3_BUFFER_STATUS_ERROR;
         }
         mDepthChannel->unmapBuffer(currentFrameNumber);
-
-        orchestrateResult(&result);
+        mOutputBufferDispatcher.markBufferReady(currentFrameNumber, resultBuffer);
     } while (currentFrameNumber < frameNumber);
 }
 
@@ -3868,12 +3869,6 @@ void QCamera3HardwareInterface::notifyErrorFoPendingDepthData(
          .buffer = nullptr,
          .stream = depthCh->getStream(),
          .status = CAMERA3_BUFFER_STATUS_ERROR};
-    camera3_capture_result_t result =
-        {.result = nullptr,
-         .frame_number = 0,
-         .num_output_buffers = 1,
-         .partial_result = 0,
-         .output_buffers = &resultBuffer};
 
     while (nullptr !=
             (depthBuffer = depthCh->getOldestFrame(currentFrameNumber))) {
@@ -3882,9 +3877,7 @@ void QCamera3HardwareInterface::notifyErrorFoPendingDepthData(
         notify_msg.message.error.frame_number = currentFrameNumber;
         orchestrateNotify(&notify_msg);
 
-        resultBuffer.buffer = depthBuffer;
-        result.frame_number = currentFrameNumber;
-        orchestrateResult(&result);
+        mOutputBufferDispatcher.markBufferReady(currentFrameNumber, resultBuffer);
     };
 }
 
@@ -3945,38 +3938,22 @@ void QCamera3HardwareInterface::handleInputBufferWithLock(uint32_t frame_number)
     }
     if (i != mPendingRequestsList.end() && i->input_buffer) {
         //found the right request
-        if (!i->shutter_notified) {
-            CameraMetadata settings;
-            camera3_notify_msg_t notify_msg;
-            memset(&notify_msg, 0, sizeof(camera3_notify_msg_t));
-            nsecs_t capture_time = systemTime(CLOCK_MONOTONIC);
-            if(i->settings) {
-                settings = i->settings;
-                if (settings.exists(ANDROID_SENSOR_TIMESTAMP)) {
-                    capture_time = settings.find(ANDROID_SENSOR_TIMESTAMP).data.i64[0];
-                } else {
-                    LOGE("No timestamp in input settings! Using current one.");
-                }
+        CameraMetadata settings;
+        nsecs_t capture_time = systemTime(CLOCK_MONOTONIC);
+        if(i->settings) {
+            settings = i->settings;
+            if (settings.exists(ANDROID_SENSOR_TIMESTAMP)) {
+                capture_time = settings.find(ANDROID_SENSOR_TIMESTAMP).data.i64[0];
             } else {
-                LOGE("Input settings missing!");
+                LOGE("No timestamp in input settings! Using current one.");
             }
-
-            notify_msg.type = CAMERA3_MSG_SHUTTER;
-            notify_msg.message.shutter.frame_number = frame_number;
-            notify_msg.message.shutter.timestamp = (uint64_t)capture_time;
-            orchestrateNotify(&notify_msg);
-            i->shutter_notified = true;
-            LOGD("Input request metadata notify frame_number = %u, capture_time = %llu",
-                        i->frame_number, notify_msg.message.shutter.timestamp);
+        } else {
+            LOGE("Input settings missing!");
         }
 
-        if (i->input_buffer->release_fence != -1) {
-           int32_t rc = sync_wait(i->input_buffer->release_fence, TIMEOUT_NEVER);
-           close(i->input_buffer->release_fence);
-           if (rc != OK) {
-               LOGE("input buffer sync wait failed %d", rc);
-           }
-        }
+        mShutterDispatcher.markShutterReady(frame_number, capture_time);
+        LOGD("Input request metadata notify frame_number = %u, capture_time = %llu",
+                    i->frame_number, capture_time);
 
         camera3_capture_result result;
         memset(&result, 0, sizeof(camera3_capture_result));
@@ -4030,72 +4007,34 @@ void QCamera3HardwareInterface::handleBufferWithLock(
     while (i != mPendingRequestsList.end() && i->frame_number != frame_number){
         i++;
     }
-    if (i == mPendingRequestsList.end()) {
-        // Verify all pending requests frame_numbers are greater
-        for (pendingRequestIterator j = mPendingRequestsList.begin();
-                j != mPendingRequestsList.end(); j++) {
-            if ((j->frame_number < frame_number) && !(j->input_buffer)) {
-                LOGW("Error: pending live frame number %d is smaller than %d",
-                         j->frame_number, frame_number);
-            }
-        }
-        camera3_capture_result_t result;
-        memset(&result, 0, sizeof(camera3_capture_result_t));
-        result.result = NULL;
-        result.frame_number = frame_number;
-        result.num_output_buffers = 1;
-        result.partial_result = 0;
-        for (List<PendingFrameDropInfo>::iterator m = mPendingFrameDropList.begin();
-                m != mPendingFrameDropList.end(); m++) {
-            QCamera3Channel *channel = (QCamera3Channel *)buffer->stream->priv;
-            uint32_t streamID = channel->getStreamID(channel->getStreamTypeMask());
-            if((m->stream_ID == streamID) && (m->frame_number==frame_number) ) {
-                buffer->status=CAMERA3_BUFFER_STATUS_ERROR;
-                LOGD("Stream STATUS_ERROR frame_number=%d, streamID=%d",
-                         frame_number, streamID);
-                m = mPendingFrameDropList.erase(m);
-                break;
-            }
-        }
-        buffer->status |= mPendingBuffersMap.getBufErrStatus(buffer->buffer);
-        result.output_buffers = buffer;
-        LOGH("result frame_number = %d, buffer = %p",
-                 frame_number, buffer->buffer);
 
-        mPendingBuffersMap.removeBuf(buffer->buffer);
-
-        orchestrateResult(&result);
-    } else {
+    if (i != mPendingRequestsList.end()) {
         if (i->input_buffer) {
-            if (i->input_buffer->release_fence != -1) {
-               int32_t rc = sync_wait(i->input_buffer->release_fence, TIMEOUT_NEVER);
-               close(i->input_buffer->release_fence);
-               if (rc != OK) {
-                   LOGE("input buffer sync wait failed %d", rc);
-               }
-            }
-        }
-
-        // Put buffer into the pending request
-        for (auto &requestedBuffer : i->buffers) {
-            if (requestedBuffer.stream == buffer->stream) {
-                if (requestedBuffer.buffer != nullptr) {
-                    LOGE("Error: buffer is already set");
-                } else {
-                    requestedBuffer.buffer = (camera3_stream_buffer_t *)malloc(
-                        sizeof(camera3_stream_buffer_t));
-                    *(requestedBuffer.buffer) = *buffer;
-                    LOGH("cache buffer %p at result frame_number %u",
-                         buffer->buffer, frame_number);
-                }
-            }
-        }
-
-        if (i->input_buffer) {
-            // For a reprocessing request, try to send out shutter callback and result metadata.
-            handlePendingResultsWithLock(frame_number, nullptr);
+            // For a reprocessing request, try to send out result metadata.
+            handlePendingResultMetadataWithLock(frame_number, nullptr);
         }
     }
+
+    // Check if this frame was dropped.
+    for (List<PendingFrameDropInfo>::iterator m = mPendingFrameDropList.begin();
+            m != mPendingFrameDropList.end(); m++) {
+        QCamera3Channel *channel = (QCamera3Channel *)buffer->stream->priv;
+        uint32_t streamID = channel->getStreamID(channel->getStreamTypeMask());
+        if((m->stream_ID == streamID) && (m->frame_number==frame_number) ) {
+            buffer->status=CAMERA3_BUFFER_STATUS_ERROR;
+            LOGD("Stream STATUS_ERROR frame_number=%d, streamID=%d",
+                     frame_number, streamID);
+            m = mPendingFrameDropList.erase(m);
+            break;
+        }
+    }
+
+    buffer->status |= mPendingBuffersMap.getBufErrStatus(buffer->buffer);
+    LOGH("result frame_number = %d, buffer = %p",
+             frame_number, buffer->buffer);
+
+    mPendingBuffersMap.removeBuf(buffer->buffer);
+    mOutputBufferDispatcher.markBufferReady(frame_number, *buffer);
 
     if (mPreviewStarted == false) {
         QCamera3Channel *channel = (QCamera3Channel *)buffer->stream->priv;
@@ -4112,7 +4051,7 @@ void QCamera3HardwareInterface::handleBufferWithLock(
     }
 }
 
-void QCamera3HardwareInterface::handlePendingResultsWithLock(uint32_t frameNumber,
+void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t frameNumber,
         const camera_metadata_t *resultMetadata)
 {
     // Find the pending request for this result metadata.
@@ -4154,13 +4093,13 @@ void QCamera3HardwareInterface::handlePendingResultsWithLock(uint32_t frameNumbe
         }
     }
 
-    // The pending requests are ordered by increasing frame numbers. The shutter callback and
-    // result metadata are ready to be sent if all previous pending requests are ready to be sent.
+    // The pending requests are ordered by increasing frame numbers. The result metadata are ready
+    // to be sent if all previous pending requests are ready to be sent.
     bool readyToSend = true;
 
-    // Iterate through the pending requests to send out shutter callbacks and results that are
-    // ready. Also if this result metadata belongs to a live request, notify errors for previous
-    // live requests that don't have result metadata yet.
+    // Iterate through the pending requests to send out result metadata that are ready. Also if
+    // this result metadata belongs to a live request, notify errors for previous live requests
+    // that don't have result metadata yet.
     auto iter = mPendingRequestsList.begin();
     while (iter != mPendingRequestsList.end()) {
         // Check if current pending request is ready. If it's not ready, the following pending
@@ -4170,8 +4109,6 @@ void QCamera3HardwareInterface::handlePendingResultsWithLock(uint32_t frameNumbe
         }
 
         bool thisLiveRequest = iter->hdrplus == false && iter->input_buffer == nullptr;
-
-        std::vector<camera3_stream_buffer_t> outputBuffers;
 
         camera3_capture_result_t result = {};
         result.frame_number = iter->frame_number;
@@ -4188,32 +4125,6 @@ void QCamera3HardwareInterface::handlePendingResultsWithLock(uint32_t frameNumbe
                 iter++;
                 continue;
             }
-
-            // Invoke shutter callback if not yet.
-            if (!iter->shutter_notified) {
-                int64_t timestamp = systemTime(CLOCK_MONOTONIC);
-
-                // Find the timestamp in HDR+ result metadata
-                camera_metadata_ro_entry_t entry;
-                status_t res = find_camera_metadata_ro_entry(iter->resultMetadata,
-                        ANDROID_SENSOR_TIMESTAMP, &entry);
-                if (res != OK) {
-                    ALOGE("%s: Cannot find sensor timestamp for frame number %d: %s (%d)",
-                            __FUNCTION__, iter->frame_number, strerror(-res), res);
-                } else {
-                    timestamp = entry.data.i64[0];
-                }
-
-                camera3_notify_msg_t notify_msg = {};
-                notify_msg.type = CAMERA3_MSG_SHUTTER;
-                notify_msg.message.shutter.frame_number = iter->frame_number;
-                notify_msg.message.shutter.timestamp = timestamp;
-                orchestrateNotify(&notify_msg);
-                iter->shutter_notified = true;
-            }
-
-            result.input_buffer = iter->input_buffer;
-
         } else if (iter->frame_number < frameNumber && liveRequest && thisLiveRequest) {
             // If the result metadata belongs to a live request, notify errors for previous pending
             // live requests.
@@ -4229,50 +4140,13 @@ void QCamera3HardwareInterface::handlePendingResultsWithLock(uint32_t frameNumbe
             // ERROR_RESULT.
             iter->partial_result_cnt = PARTIAL_RESULT_COUNT;
             result.partial_result = PARTIAL_RESULT_COUNT;
-
         } else {
             iter++;
             continue;
         }
 
-        // Prepare output buffer array
-        for (auto bufferInfoIter = iter->buffers.begin();
-                bufferInfoIter != iter->buffers.end(); bufferInfoIter++) {
-            if (bufferInfoIter->buffer != nullptr) {
-
-                QCamera3Channel *channel =
-                        (QCamera3Channel *)bufferInfoIter->buffer->stream->priv;
-                uint32_t streamID = channel->getStreamID(channel->getStreamTypeMask());
-
-                // Check if this buffer is a dropped frame.
-                auto frameDropIter = mPendingFrameDropList.begin();
-                while (frameDropIter != mPendingFrameDropList.end()) {
-                    if((frameDropIter->stream_ID == streamID) &&
-                            (frameDropIter->frame_number == frameNumber)) {
-                        bufferInfoIter->buffer->status = CAMERA3_BUFFER_STATUS_ERROR;
-                        LOGE("Stream STATUS_ERROR frame_number=%u, streamID=%u", frameNumber,
-                                streamID);
-                        mPendingFrameDropList.erase(frameDropIter);
-                        break;
-                    } else {
-                        frameDropIter++;
-                    }
-                }
-
-                // Check buffer error status
-                bufferInfoIter->buffer->status |= mPendingBuffersMap.getBufErrStatus(
-                        bufferInfoIter->buffer->buffer);
-                mPendingBuffersMap.removeBuf(bufferInfoIter->buffer->buffer);
-
-                outputBuffers.push_back(*(bufferInfoIter->buffer));
-                free(bufferInfoIter->buffer);
-                bufferInfoIter->buffer = NULL;
-            }
-        }
-
-        result.output_buffers = outputBuffers.size() > 0 ? &outputBuffers[0] : nullptr;
-        result.num_output_buffers = outputBuffers.size();
-
+        result.output_buffers = nullptr;
+        result.num_output_buffers = 0;
         orchestrateResult(&result);
 
         // For reprocessing, result metadata is the same as settings so do not free it here to
@@ -5460,7 +5334,6 @@ no_error:
     extractJpegMetadata(mCurJpegMeta, request);
     pendingRequest.jpegMetadata = mCurJpegMeta;
     pendingRequest.settings = saveRequestSettings(mCurJpegMeta, request);
-    pendingRequest.shutter_notified = false;
     pendingRequest.capture_intent = mCaptureIntent;
     if (meta.exists(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE)) {
         mHybridAeEnable =
@@ -5543,6 +5416,14 @@ no_error:
 
     latestRequest = mPendingRequestsList.insert(
             mPendingRequestsList.end(), pendingRequest);
+
+    // Let shutter dispatcher and buffer dispatcher know shutter and output buffers are expected
+    // for the frame number.
+    mShutterDispatcher.expectShutter(frameNumber);
+    for (size_t i = 0; i < request->num_output_buffers; i++) {
+        mOutputBufferDispatcher.expectBuffer(frameNumber, request->output_buffers[i].stream);
+    }
+
     if(mFlush) {
         LOGI("mFlush is true");
         pthread_mutex_unlock(&mMutex);
@@ -13908,141 +13789,103 @@ int32_t QCamera3HardwareInterface::startAllChannels()
  *==========================================================================*/
 int32_t QCamera3HardwareInterface::notifyErrorForPendingRequests()
 {
-    int32_t rc = NO_ERROR;
-    unsigned int frameNum = 0;
-    camera3_capture_result_t result;
-    camera3_stream_buffer_t *pStream_Buf = NULL;
-
-    memset(&result, 0, sizeof(camera3_capture_result_t));
-
-    if (mPendingRequestsList.size() > 0) {
-        pendingRequestIterator i = mPendingRequestsList.begin();
-        frameNum = i->frame_number;
-    } else {
-        /* There might still be pending buffers even though there are
-         no pending requests. Setting the frameNum to MAX so that
-         all the buffers with smaller frame numbers are returned */
-        frameNum = UINT_MAX;
-    }
-
-    LOGH("Oldest frame num on mPendingRequestsList = %u",
-       frameNum);
-
     notifyErrorFoPendingDepthData(mDepthChannel);
 
-    for (auto req = mPendingBuffersMap.mPendingBuffersInRequest.begin();
-            req != mPendingBuffersMap.mPendingBuffersInRequest.end(); ) {
+    auto pendingRequest = mPendingRequestsList.begin();
+    auto pendingBuffer = mPendingBuffersMap.mPendingBuffersInRequest.begin();
 
-        if (req->frame_number < frameNum) {
-            // Send Error notify to frameworks for each buffer for which
-            // metadata buffer is already sent
-            LOGH("Sending ERROR BUFFER for frame %d for %d buffer(s)",
-                req->frame_number, req->mPendingBufferList.size());
-
-            pStream_Buf = new camera3_stream_buffer_t[req->mPendingBufferList.size()];
-            if (NULL == pStream_Buf) {
-                LOGE("No memory for pending buffers array");
-                return NO_MEMORY;
-            }
-            memset(pStream_Buf, 0,
-                sizeof(camera3_stream_buffer_t)*req->mPendingBufferList.size());
-            result.result = NULL;
-            result.frame_number = req->frame_number;
-            result.num_output_buffers = req->mPendingBufferList.size();
-            result.output_buffers = pStream_Buf;
-
-            size_t index = 0;
-            for (auto info = req->mPendingBufferList.begin();
-                info != req->mPendingBufferList.end(); ) {
-
+    // Iterate through pending requests (for which result metadata isn't sent yet) and pending
+    // buffers (for which buffers aren't sent yet).
+    while (pendingRequest != mPendingRequestsList.end() ||
+           pendingBuffer != mPendingBuffersMap.mPendingBuffersInRequest.end()) {
+        if (pendingRequest == mPendingRequestsList.end() ||
+            pendingBuffer->frame_number < pendingRequest->frame_number) {
+            // If metadata for this frame was sent, notify about a buffer error and returns buffers
+            // with error.
+            for (auto &info : pendingBuffer->mPendingBufferList) {
+                // Send a buffer error for this frame number.
                 camera3_notify_msg_t notify_msg;
                 memset(&notify_msg, 0, sizeof(camera3_notify_msg_t));
                 notify_msg.type = CAMERA3_MSG_ERROR;
                 notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_BUFFER;
-                notify_msg.message.error.error_stream = info->stream;
-                notify_msg.message.error.frame_number = req->frame_number;
-                pStream_Buf[index].acquire_fence = -1;
-                pStream_Buf[index].release_fence = -1;
-                pStream_Buf[index].buffer = info->buffer;
-                pStream_Buf[index].status = CAMERA3_BUFFER_STATUS_ERROR;
-                pStream_Buf[index].stream = info->stream;
+                notify_msg.message.error.error_stream = info.stream;
+                notify_msg.message.error.frame_number = pendingBuffer->frame_number;
                 orchestrateNotify(&notify_msg);
-                index++;
-                // Remove buffer from list
-                info = req->mPendingBufferList.erase(info);
+
+                camera3_stream_buffer_t buffer = {};
+                buffer.acquire_fence = -1;
+                buffer.release_fence = -1;
+                buffer.buffer = info.buffer;
+                buffer.status = CAMERA3_BUFFER_STATUS_ERROR;
+                buffer.stream = info.stream;
+                mOutputBufferDispatcher.markBufferReady(pendingBuffer->frame_number, buffer);
             }
 
-            // Remove this request from Map
-            LOGD("Removing request %d. Remaining requests in mPendingBuffersMap: %d",
-                req->frame_number, mPendingBuffersMap.mPendingBuffersInRequest.size());
-            req = mPendingBuffersMap.mPendingBuffersInRequest.erase(req);
-
-            orchestrateResult(&result);
-
-            delete [] pStream_Buf;
-        } else {
-
-            // Go through the pending requests info and send error request to framework
-            pendingRequestIterator i = mPendingRequestsList.begin(); //make sure i is at the beginning
-
-            LOGH("Sending ERROR REQUEST for frame %d", req->frame_number);
-
-            // Send error notify to frameworks
+            pendingBuffer = mPendingBuffersMap.mPendingBuffersInRequest.erase(pendingBuffer);
+        } else if (pendingBuffer == mPendingBuffersMap.mPendingBuffersInRequest.end() ||
+                   pendingBuffer->frame_number > pendingRequest->frame_number) {
+            // If the buffers for this frame were sent already, notify about a result error.
             camera3_notify_msg_t notify_msg;
             memset(&notify_msg, 0, sizeof(camera3_notify_msg_t));
             notify_msg.type = CAMERA3_MSG_ERROR;
-            notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_REQUEST;
-            notify_msg.message.error.error_stream = NULL;
-            notify_msg.message.error.frame_number = req->frame_number;
+            notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_RESULT;
+            notify_msg.message.error.error_stream = nullptr;
+            notify_msg.message.error.frame_number = pendingRequest->frame_number;
             orchestrateNotify(&notify_msg);
 
-            pStream_Buf = new camera3_stream_buffer_t[req->mPendingBufferList.size()];
-            if (NULL == pStream_Buf) {
-                LOGE("No memory for pending buffers array");
-                return NO_MEMORY;
-            }
-            memset(pStream_Buf, 0, sizeof(camera3_stream_buffer_t)*req->mPendingBufferList.size());
-
-            result.result = NULL;
-            result.frame_number = req->frame_number;
-            result.input_buffer = i->input_buffer;
-            result.num_output_buffers = req->mPendingBufferList.size();
-            result.output_buffers = pStream_Buf;
-
-            size_t index = 0;
-            for (auto info = req->mPendingBufferList.begin();
-                info != req->mPendingBufferList.end(); ) {
-                pStream_Buf[index].acquire_fence = -1;
-                pStream_Buf[index].release_fence = -1;
-                pStream_Buf[index].buffer = info->buffer;
-                pStream_Buf[index].status = CAMERA3_BUFFER_STATUS_ERROR;
-                pStream_Buf[index].stream = info->stream;
-                index++;
-                // Remove buffer from list
-                info = req->mPendingBufferList.erase(info);
+            if (pendingRequest->input_buffer != nullptr) {
+                camera3_capture_result result = {};
+                result.frame_number = pendingRequest->frame_number;
+                result.result = nullptr;
+                result.input_buffer = pendingRequest->input_buffer;
+                orchestrateResult(&result);
             }
 
-            // Remove this request from Map
-            LOGD("Removing request %d. Remaining requests in mPendingBuffersMap: %d",
-                req->frame_number, mPendingBuffersMap.mPendingBuffersInRequest.size());
-            req = mPendingBuffersMap.mPendingBuffersInRequest.erase(req);
+            mShutterDispatcher.clear(pendingRequest->frame_number);
+            pendingRequest = mPendingRequestsList.erase(pendingRequest);
+        } else {
+            // If both buffers and result metadata weren't sent yet, notify about a request error
+            // and return buffers with error.
+            for (auto &info : pendingBuffer->mPendingBufferList) {
+                camera3_notify_msg_t notify_msg;
+                memset(&notify_msg, 0, sizeof(camera3_notify_msg_t));
+                notify_msg.type = CAMERA3_MSG_ERROR;
+                notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_REQUEST;
+                notify_msg.message.error.error_stream = info.stream;
+                notify_msg.message.error.frame_number = pendingBuffer->frame_number;
+                orchestrateNotify(&notify_msg);
 
-            orchestrateResult(&result);
-            delete [] pStream_Buf;
-            i = erasePendingRequest(i);
+                camera3_stream_buffer_t buffer = {};
+                buffer.acquire_fence = -1;
+                buffer.release_fence = -1;
+                buffer.buffer = info.buffer;
+                buffer.status = CAMERA3_BUFFER_STATUS_ERROR;
+                buffer.stream = info.stream;
+                mOutputBufferDispatcher.markBufferReady(pendingBuffer->frame_number, buffer);
+            }
+
+            if (pendingRequest->input_buffer != nullptr) {
+                camera3_capture_result result = {};
+                result.frame_number = pendingRequest->frame_number;
+                result.result = nullptr;
+                result.input_buffer = pendingRequest->input_buffer;
+                orchestrateResult(&result);
+            }
+
+            mShutterDispatcher.clear(pendingRequest->frame_number);
+            pendingBuffer = mPendingBuffersMap.mPendingBuffersInRequest.erase(pendingBuffer);
+            pendingRequest = mPendingRequestsList.erase(pendingRequest);
         }
     }
 
     /* Reset pending frame Drop list and requests list */
     mPendingFrameDropList.clear();
-
-    for (auto &req : mPendingBuffersMap.mPendingBuffersInRequest) {
-        req.mPendingBufferList.clear();
-    }
+    mShutterDispatcher.clear();
+    mOutputBufferDispatcher.clear(/*clearConfiguredStreams*/false);
     mPendingBuffersMap.mPendingBuffersInRequest.clear();
     LOGH("Cleared all the pending buffers ");
 
-    return rc;
+    return NO_ERROR;
 }
 
 bool QCamera3HardwareInterface::isOnEncoder(
@@ -14773,12 +14616,23 @@ void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
                     strerror(-res), res);
         }
 
+        // Find the timestamp
+        camera_metadata_ro_entry_t entry;
+        res = find_camera_metadata_ro_entry(updatedResultMetadata,
+                ANDROID_SENSOR_TIMESTAMP, &entry);
+        if (res != OK) {
+            ALOGE("%s: Cannot find sensor timestamp for frame number %d: %s (%d)",
+                    __FUNCTION__, result->requestId, strerror(-res), res);
+        } else {
+            mShutterDispatcher.markShutterReady(result->requestId, entry.data.i64[0]);
+        }
+
         // Send HDR+ metadata to framework.
         {
             pthread_mutex_lock(&mMutex);
 
-            // updatedResultMetadata will be freed in handlePendingResultsWithLock.
-            handlePendingResultsWithLock(result->requestId, updatedResultMetadata);
+            // updatedResultMetadata will be freed in handlePendingResultMetadataWithLock.
+            handlePendingResultMetadataWithLock(result->requestId, updatedResultMetadata);
             pthread_mutex_unlock(&mMutex);
         }
 
@@ -14871,6 +14725,163 @@ void QCamera3HardwareInterface::onFailedCaptureResult(pbcamera::CaptureResult *f
     }
 
     pthread_mutex_unlock(&mMutex);
+}
+
+
+ShutterDispatcher::ShutterDispatcher(QCamera3HardwareInterface *parent) :
+        mParent(parent) {}
+
+void ShutterDispatcher::expectShutter(uint32_t frameNumber)
+{
+    std::lock_guard<std::mutex> lock(mLock);
+    mShutters.emplace(frameNumber, Shutter());
+}
+
+void ShutterDispatcher::markShutterReady(uint32_t frameNumber, uint64_t timestamp)
+{
+    std::lock_guard<std::mutex> lock(mLock);
+
+    // Make this frame's shutter ready.
+    auto shutter = mShutters.find(frameNumber);
+    if (shutter == mShutters.end()) {
+        // Shutter was already sent.
+        return;
+    }
+
+    shutter->second.ready = true;
+    shutter->second.timestamp = timestamp;
+
+    // Iterate throught the shutters and send out shuters until the one that's not ready yet.
+    shutter = mShutters.begin();
+    while (shutter != mShutters.end()) {
+        if (!shutter->second.ready) {
+            // If this shutter is not ready, the following shutters can't be sent.
+            break;
+        }
+
+        camera3_notify_msg_t msg = {};
+        msg.type = CAMERA3_MSG_SHUTTER;
+        msg.message.shutter.frame_number = shutter->first;
+        msg.message.shutter.timestamp = shutter->second.timestamp;
+        mParent->orchestrateNotify(&msg);
+
+        shutter = mShutters.erase(shutter);
+    }
+}
+
+void ShutterDispatcher::clear(uint32_t frameNumber)
+{
+    std::lock_guard<std::mutex> lock(mLock);
+    mShutters.erase(frameNumber);
+}
+
+void ShutterDispatcher::clear()
+{
+    std::lock_guard<std::mutex> lock(mLock);
+
+    // Log errors for stale shutters.
+    for (auto &shutter : mShutters) {
+        ALOGE("%s: stale shutter: frame number %u, ready %d, timestamp %" PRId64,
+            __FUNCTION__, shutter.first, shutter.second.ready,
+            shutter.second.timestamp);
+    }
+    mShutters.clear();
+}
+
+OutputBufferDispatcher::OutputBufferDispatcher(QCamera3HardwareInterface *parent) :
+        mParent(parent) {}
+
+status_t OutputBufferDispatcher::configureStreams(camera3_stream_configuration_t *streamList)
+{
+    std::lock_guard<std::mutex> lock(mLock);
+    mStreamBuffers.clear();
+    if (!streamList) {
+        ALOGE("%s: streamList is nullptr.", __FUNCTION__);
+        return -EINVAL;
+    }
+
+    // Create a "frame-number -> buffer" map for each stream.
+    for (uint32_t i = 0; i < streamList->num_streams; i++) {
+        mStreamBuffers.emplace(streamList->streams[i], std::map<uint32_t, Buffer>());
+    }
+
+    return OK;
+}
+
+status_t OutputBufferDispatcher::expectBuffer(uint32_t frameNumber, camera3_stream_t *stream)
+{
+    std::lock_guard<std::mutex> lock(mLock);
+
+    // Find the "frame-number -> buffer" map for the stream.
+    auto buffers = mStreamBuffers.find(stream);
+    if (buffers == mStreamBuffers.end()) {
+        ALOGE("%s: Stream %p was not configured.", __FUNCTION__, stream);
+        return -EINVAL;
+    }
+
+    // Create an unready buffer for this frame number.
+    buffers->second.emplace(frameNumber, Buffer());
+    return OK;
+}
+
+void OutputBufferDispatcher::markBufferReady(uint32_t frameNumber,
+        const camera3_stream_buffer_t &buffer)
+{
+    std::lock_guard<std::mutex> lock(mLock);
+
+    // Find the frame number -> buffer map for the stream.
+    auto buffers = mStreamBuffers.find(buffer.stream);
+    if (buffers == mStreamBuffers.end()) {
+        ALOGE("%s: Cannot find pending buffers for stream %p.", __FUNCTION__, buffer.stream);
+        return;
+    }
+
+    // Find the unready buffer this frame number and mark it ready.
+    auto pendingBuffer = buffers->second.find(frameNumber);
+    if (pendingBuffer == buffers->second.end()) {
+        ALOGE("%s: Cannot find the pending buffer for frame number %u.", __FUNCTION__, frameNumber);
+        return;
+    }
+
+    pendingBuffer->second.ready = true;
+    pendingBuffer->second.buffer = buffer;
+
+    // Iterate through the buffers and send out buffers until the one that's not ready yet.
+    pendingBuffer = buffers->second.begin();
+    while (pendingBuffer != buffers->second.end()) {
+        if (!pendingBuffer->second.ready) {
+            // If this buffer is not ready, the following buffers can't be sent.
+            break;
+        }
+
+        camera3_capture_result_t result = {};
+        result.frame_number = pendingBuffer->first;
+        result.num_output_buffers = 1;
+        result.output_buffers = &pendingBuffer->second.buffer;
+
+        // Send out result with buffer errors.
+        mParent->orchestrateResult(&result);
+
+        pendingBuffer = buffers->second.erase(pendingBuffer);
+    }
+}
+
+void OutputBufferDispatcher::clear(bool clearConfiguredStreams)
+{
+    std::lock_guard<std::mutex> lock(mLock);
+
+    // Log errors for stale buffers.
+    for (auto &buffers : mStreamBuffers) {
+        for (auto &buffer : buffers.second) {
+            ALOGE("%s: stale buffer: stream %p, frame number %u, ready %d",
+                __FUNCTION__, buffers.first, buffer.first, buffer.second.ready);
+        }
+        buffers.second.clear();
+    }
+
+    if (clearConfiguredStreams) {
+        mStreamBuffers.clear();
+    }
 }
 
 }; //end namespace qcamera
