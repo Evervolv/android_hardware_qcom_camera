@@ -9480,8 +9480,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
                         gCamCapability[cameraId]->picture_sizes_tbl[i],
                         ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT);
                 /*For below 2 formats we also support i/p streams for reprocessing advertise those*/
-                if (scalar_formats[j] == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED ||
-                        scalar_formats[j] == HAL_PIXEL_FORMAT_YCbCr_420_888) {
+                if ((scalar_formats[j] == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED ||
+                        scalar_formats[j] == HAL_PIXEL_FORMAT_YCbCr_420_888) && i == 0) {
                      if ((gCamCapability[cameraId]->picture_sizes_tbl[i].width
                             >= minInputSize.width) || (gCamCapability[cameraId]->
                             picture_sizes_tbl[i].height >= minInputSize.height)) {
