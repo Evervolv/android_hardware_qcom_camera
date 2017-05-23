@@ -45,6 +45,7 @@
 #define BHIST_STATS_DEBUG_DATA_SIZE       (70000)
 #define TUNING_INFO_DEBUG_DATA_SIZE       (4)
 #define OIS_DATA_MAX_SIZE                 (32)
+#define MAX_OIS_SAMPLE_NUM_PER_FRAME      (10)
 
 #define MAX_DEPTH_DATA_SIZE               (4032*2*756)
 
@@ -975,6 +976,15 @@ typedef struct {
     uint32_t size;
     uint8_t data[OIS_DATA_MAX_SIZE];
 } cam_ois_data_t;
+
+typedef struct {
+    int64_t frame_sof_timestamp_vsync;
+    int64_t frame_sof_timestamp_boottime;
+    int32_t num_ois_sample;
+    int64_t ois_sample_timestamp_boottime[MAX_OIS_SAMPLE_NUM_PER_FRAME];
+    int32_t ois_sample_shift_x[MAX_OIS_SAMPLE_NUM_PER_FRAME];
+    int32_t ois_sample_shift_y[MAX_OIS_SAMPLE_NUM_PER_FRAME];
+} cam_frame_ois_info_t;
 
 typedef struct  {
     int32_t left;
@@ -2509,6 +2519,8 @@ typedef enum {
     CAM_INTF_META_BINNING_CORRECTION_MODE,
     /* Read Sensor OIS data */
     CAM_INTF_META_OIS_READ_DATA,
+    /* OIS data info within frame */
+    CAM_INTF_META_FRAME_OIS_DATA,
     CAM_INTF_META_PDAF_DATA_ENABLE,
     /*event to flush stream buffers*/
     CAM_INTF_PARM_FLUSH_FRAMES,
