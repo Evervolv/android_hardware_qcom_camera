@@ -5850,7 +5850,8 @@ no_error:
                     Mutex::Autolock l(gHdrPlusClientLock);
                     if (EaselManagerClientOpened) {
                         logEaselEvent("EASEL_STARTUP_LATENCY", "Starting MIPI");
-                        rc = gEaselManagerClient.startMipi(mCameraId, mSensorModeInfo.op_pixel_clk);
+                        rc = gEaselManagerClient.startMipi(mCameraId, mSensorModeInfo.op_pixel_clk,
+                                /*enableIpu*/true);
                         if (rc != OK) {
                             ALOGE("%s: Failed to start MIPI rate for camera %u to %u", __FUNCTION__,
                                     mCameraId, mSensorModeInfo.op_pixel_clk);
@@ -14386,6 +14387,10 @@ status_t QCamera3HardwareInterface::openHdrPlusClientAsyncLocked()
 status_t QCamera3HardwareInterface::enableHdrPlusModeLocked()
 {
     status_t res;
+
+    if (mHdrPlusModeEnabled) {
+        return OK;
+    }
 
     // Check if gHdrPlusClient is opened or being opened.
     if (gHdrPlusClient == nullptr) {
