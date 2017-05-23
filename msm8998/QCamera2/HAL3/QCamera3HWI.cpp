@@ -14501,6 +14501,7 @@ status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked()
         inputConfig.sensorMode.activeArrayWidth = mSensorModeInfo.active_array_size.width;
         inputConfig.sensorMode.activeArrayHeight = mSensorModeInfo.active_array_size.height;
         inputConfig.sensorMode.outputPixelClkHz = mSensorModeInfo.op_pixel_clk;
+        inputConfig.sensorMode.timestampOffsetNs = mSensorModeInfo.timestamp_offset;
         if (mSensorModeInfo.num_raw_bits != 10) {
             ALOGE("%s: Only RAW10 is supported but this sensor mode has %d raw bits.", __FUNCTION__,
                     mSensorModeInfo.num_raw_bits);
