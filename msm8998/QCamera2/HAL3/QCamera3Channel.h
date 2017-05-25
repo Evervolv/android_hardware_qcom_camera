@@ -133,7 +133,7 @@ public:
     static bool isUBWCEnabled();
     void setUBWCEnabled(bool val);
     static cam_format_t getStreamDefaultFormat(cam_stream_type_t type,
-            uint32_t width, uint32_t height, bool forcePreviewUBWC);
+            uint32_t width, uint32_t height, bool forcePreviewUBWC, cam_is_type_t isType);
     virtual int32_t timeoutFrame(__unused uint32_t frameNumber) = 0;
 
     void setNRMode(uint8_t nrMode) { mNRMode = nrMode; }
@@ -721,6 +721,8 @@ private:
     cam_dimension_t mDim;
     cam_stream_type_t mStreamType;
     cam_format_t mStreamFormat;
+    uint8_t mHwAnalysisSupported;
+    cam_color_filter_arrangement_t mColorArrangement;
 };
 
 class QCamera3DepthChannel : public QCamera3ProcessingChannel {
