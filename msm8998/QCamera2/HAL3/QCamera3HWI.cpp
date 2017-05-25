@@ -8021,6 +8021,20 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         camMetadata.update(ANDROID_CONTROL_ENABLE_ZSL, &value, 1);
     }
 
+    // OIS Data
+    IF_META_AVAILABLE(cam_frame_ois_info_t, frame_ois_data, CAM_INTF_META_FRAME_OIS_DATA, metadata) {
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_FRAME_TIMESTAMP_VSYNC,
+            &(frame_ois_data->frame_sof_timestamp_vsync), 1);
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_FRAME_TIMESTAMP_BOOTTIME,
+            &(frame_ois_data->frame_sof_timestamp_boottime), 1);
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_TIMESTAMPS_BOOTTIME,
+            frame_ois_data->ois_sample_timestamp_boottime, frame_ois_data->num_ois_sample);
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_X,
+            frame_ois_data->ois_sample_shift_x, frame_ois_data->num_ois_sample);
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_Y,
+            frame_ois_data->ois_sample_shift_y, frame_ois_data->num_ois_sample);
+    }
+
     resultMetadata = camMetadata.release();
     return resultMetadata;
 }
