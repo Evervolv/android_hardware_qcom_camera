@@ -858,11 +858,40 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
     LOGI("[KPI Perf]: E PROFILE_OPEN_CAMERA camera id %d",
              mCameraId);
 
+    if (mCameraHandle) {
+        LOGE("Failure: Camera already opened");
+        return ALREADY_EXISTS;
+    }
+
+    {
+        Mutex::Autolock l(gHdrPlusClientLock);
+        if (gEaselManagerClient.isEaselPresentOnDevice()) {
+            logEaselEvent("EASEL_STARTUP_LATENCY", "Resume");
+            rc = gEaselManagerClient.resume();
+            if (rc != 0) {
+                ALOGE("%s: Resuming Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
+                return rc;
+            }
+        }
+    }
+
     rc = openCamera();
     if (rc == 0) {
         *hw_device = &mCameraDevice.common;
     } else {
         *hw_device = NULL;
+
+        // Suspend Easel because opening camera failed.
+        {
+            Mutex::Autolock l(gHdrPlusClientLock);
+            if (gEaselManagerClient.isEaselPresentOnDevice()) {
+                status_t suspendErr = gEaselManagerClient.suspend();
+                if (suspendErr != 0) {
+                    ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__,
+                            strerror(-suspendErr), suspendErr);
+                }
+            }
+        }
     }
 
     LOGI("[KPI Perf]: X PROFILE_OPEN_CAMERA camera id %d, rc: %d",
@@ -892,22 +921,6 @@ int QCamera3HardwareInterface::openCamera()
     char value[PROPERTY_VALUE_MAX];
 
     KPI_ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_OPENCAMERA);
-    if (mCameraHandle) {
-        LOGE("Failure: Camera already opened");
-        return ALREADY_EXISTS;
-    }
-
-    {
-        Mutex::Autolock l(gHdrPlusClientLock);
-        if (gEaselManagerClient.isEaselPresentOnDevice()) {
-            logEaselEvent("EASEL_STARTUP_LATENCY", "Resume");
-            rc = gEaselManagerClient.resume();
-            if (rc != 0) {
-                ALOGE("%s: Resuming Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
-                return rc;
-            }
-        }
-    }
 
     rc = QCameraFlash::getInstance().reserveFlashForCamera(mCameraId);
     if (rc < 0) {
