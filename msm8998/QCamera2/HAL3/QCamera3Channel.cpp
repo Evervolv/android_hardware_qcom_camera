@@ -2175,7 +2175,7 @@ QCamera3StreamMem* QCamera3MetadataChannel::getStreamBufs(uint32_t len)
             metadata_buffer_t->depth_data.depth_data = nullptr;
             if (mDepthDataPresent) {
                 metadata_buffer_t->depth_data.depth_data =
-                        new uint8_t[MAX_DEPTH_DATA_SIZE];
+                        new uint8_t[PD_DATA_SIZE];
             }
         } else {
             LOGE("Invalid meta buffer at index: %d", i);
@@ -5430,10 +5430,6 @@ int32_t QCamera3DepthChannel::populateDepthData(const cam_depth_data_t &data,
         LOGE("Invalid depth stream!");
         return BAD_VALUE;
     }
-    if (0 == data.length) {
-        LOGE("Empty depth buffer");
-        return BAD_VALUE;
-    }
 
     ssize_t length = data.length;
     int32_t index = mGrallocMem.getBufferIndex(frameNumber);
@@ -5465,7 +5461,10 @@ int32_t QCamera3DepthChannel::populateDepthData(const cam_depth_data_t &data,
                 (length + headerSize), maxBlobSize);
         return BAD_VALUE;
     }
-    memcpy(dst, data.depth_data, length);
+
+    if (0 < length) {
+        memcpy(dst, data.depth_data, length);
+    }
 
     memset(&jpegHeader, 0, headerSize);
     jpegHeader.jpeg_blob_id = CAMERA3_JPEG_BLOB_ID;
