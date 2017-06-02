@@ -1211,7 +1211,7 @@ typedef struct {
     INCLUDE(CAM_INTF_META_BINNING_CORRECTION_MODE,      cam_binning_correction_mode_t,  1);
     INCLUDE(CAM_INTF_META_OIS_READ_DATA,                cam_ois_data_t,              1);
     INCLUDE(CAM_INTF_META_FRAME_OIS_DATA,               cam_frame_ois_info_t,        1);
-    INCLUDE(CAM_INTF_META_PDAF_DATA_ENABLE,             int32_t,                     1);
+    INCLUDE(CAM_INTF_META_PDAF_DATA_ENABLE,             cam_sensor_pd_data_t,        1);
     INCLUDE(CAM_INTF_META_STATS_HISTOGRAM_BINS,         int32_t,                     1);
     INCLUDE(CAM_INTF_META_TRACKING_AF_TRIGGER,          uint8_t,                     1);
     INCLUDE(CAM_INTF_META_AF_REGIONS_CONFIDENCE,        int32_t,                     1);
