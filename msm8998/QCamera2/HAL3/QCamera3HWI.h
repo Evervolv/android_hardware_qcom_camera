@@ -32,10 +32,11 @@
 
 // System dependencies
 #include <CameraMetadata.h>
+#include <map>
+#include <mutex>
 #include <pthread.h>
 #include <utils/KeyedVector.h>
 #include <utils/List.h>
-#include <map>
 // Camera dependencies
 #include "hardware/camera3.h"
 #include "QCamera3Channel.h"
