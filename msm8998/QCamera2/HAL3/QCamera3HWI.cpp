@@ -145,7 +145,7 @@ extern uint8_t gNumCameraSessions;
 
 // Note that this doesn't support concurrent front and back camera b/35960155.
 // The following Easel related variables must be protected by gHdrPlusClientLock.
-EaselManagerClient gEaselManagerClient;
+std::unique_ptr<EaselManagerClient> gEaselManagerClient;
 bool EaselManagerClientOpened = false; // If gEaselManagerClient is opened.
 std::unique_ptr<HdrPlusClient> gHdrPlusClient = nullptr;
 bool gHdrPlusClientOpening = false; // If HDR+ client is being opened.
@@ -874,9 +874,9 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
 
     {
         std::unique_lock<std::mutex> l(gHdrPlusClientLock);
-        if (gEaselManagerClient.isEaselPresentOnDevice()) {
+        if (gEaselManagerClient != nullptr && gEaselManagerClient->isEaselPresentOnDevice()) {
             logEaselEvent("EASEL_STARTUP_LATENCY", "Resume");
-            rc = gEaselManagerClient.resume();
+            rc = gEaselManagerClient->resume();
             if (rc != 0) {
                 ALOGE("%s: Resuming Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
                 return rc;
@@ -893,8 +893,8 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
         // Suspend Easel because opening camera failed.
         {
             std::unique_lock<std::mutex> l(gHdrPlusClientLock);
-            if (gEaselManagerClient.isEaselPresentOnDevice()) {
-                status_t suspendErr = gEaselManagerClient.suspend();
+            if (gEaselManagerClient != nullptr && gEaselManagerClient->isEaselPresentOnDevice()) {
+                status_t suspendErr = gEaselManagerClient->suspend();
                 if (suspendErr != 0) {
                     ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__,
                             strerror(-suspendErr), suspendErr);
@@ -1094,17 +1094,17 @@ int QCamera3HardwareInterface::closeCamera()
             // Disable HDR+ mode.
             disableHdrPlusModeLocked();
             // Disconnect Easel if it's connected.
-            gEaselManagerClient.closeHdrPlusClient(std::move(gHdrPlusClient));
+            gEaselManagerClient->closeHdrPlusClient(std::move(gHdrPlusClient));
             gHdrPlusClient = nullptr;
         }
 
         if (EaselManagerClientOpened) {
-            rc = gEaselManagerClient.stopMipi(mCameraId);
+            rc = gEaselManagerClient->stopMipi(mCameraId);
             if (rc != 0) {
                 ALOGE("%s: Stopping MIPI failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
             }
 
-            rc = gEaselManagerClient.suspend();
+            rc = gEaselManagerClient->suspend();
             if (rc != 0) {
                 ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
             }
@@ -5967,8 +5967,8 @@ no_error:
 
                     if (EaselManagerClientOpened) {
                         logEaselEvent("EASEL_STARTUP_LATENCY", "Starting MIPI");
-                        rc = gEaselManagerClient.startMipi(mCameraId, mSensorModeInfo.op_pixel_clk,
-                                /*enableIpu*/true);
+                        rc = gEaselManagerClient->startMipi(mCameraId, mSensorModeInfo.op_pixel_clk,
+                                /*enableCapture*/true);
                         if (rc != OK) {
                             ALOGE("%s: Failed to start MIPI rate for camera %u to %u", __FUNCTION__,
                                     mCameraId, mSensorModeInfo.op_pixel_clk);
@@ -5994,7 +5994,7 @@ no_error:
     // Enable HDR+ mode for the first PREVIEW_INTENT request.
     {
         std::unique_lock<std::mutex> l(gHdrPlusClientLock);
-        if (gEaselManagerClient.isEaselPresentOnDevice() &&
+        if (gEaselManagerClient != nullptr && gEaselManagerClient->isEaselPresentOnDevice() &&
                 !gEaselBypassOnly && !mFirstPreviewIntentSeen &&
                 meta.exists(ANDROID_CONTROL_CAPTURE_INTENT) &&
                 meta.find(ANDROID_CONTROL_CAPTURE_INTENT).data.u8[0] ==
@@ -10553,7 +10553,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         char *eepromInfo = reinterpret_cast<char *>(gCamCapability[cameraId]->eeprom_version_info);
         if (eepromLength + sizeof(easelInfo) < MAX_EEPROM_VERSION_INFO_LEN) {
             eepromLength += sizeof(easelInfo);
-            strlcat(eepromInfo, (gEaselManagerClient.isEaselPresentOnDevice() ? ",E:Y" : ",E:N"),
+            strlcat(eepromInfo, ((gEaselManagerClient != nullptr &&
+                    gEaselManagerClient->isEaselPresentOnDevice()) ? ",E:Y" : ",E:N"),
                     MAX_EEPROM_VERSION_INFO_LEN);
         }
         staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO,
@@ -10773,7 +10774,15 @@ int32_t QCamera3HardwareInterface::getSensorSensitivity(int32_t iso_mode)
 }
 
 int QCamera3HardwareInterface::initHdrPlusClientLocked() {
-    if (!EaselManagerClientOpened && gEaselManagerClient.isEaselPresentOnDevice()) {
+    if (gEaselManagerClient == nullptr) {
+        gEaselManagerClient = EaselManagerClient::create();
+        if (gEaselManagerClient == nullptr) {
+            ALOGE("%s: Failed to create Easel manager client.", __FUNCTION__);
+            return -ENODEV;
+        }
+    }
+
+    if (!EaselManagerClientOpened && gEaselManagerClient->isEaselPresentOnDevice()) {
         // Check if HAL should not power on Easel even if it's present. This is to allow HDR+ tests
         //  to connect to Easel.
         bool doNotpowerOnEasel =
@@ -10785,7 +10794,7 @@ int QCamera3HardwareInterface::initHdrPlusClientLocked() {
         }
 
         // If Easel is present, power on Easel and suspend it immediately.
-        status_t res = gEaselManagerClient.open();
+        status_t res = gEaselManagerClient->open();
         if (res != OK) {
             ALOGE("%s: Opening Easel manager client failed: %s (%d)", __FUNCTION__, strerror(-res), res);
             return res;
@@ -10793,7 +10802,7 @@ int QCamera3HardwareInterface::initHdrPlusClientLocked() {
 
         EaselManagerClientOpened = true;
 
-        res = gEaselManagerClient.suspend();
+        res = gEaselManagerClient->suspend();
         if (res != OK) {
             ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__, strerror(-res), res);
         }
@@ -14500,7 +14509,7 @@ status_t QCamera3HardwareInterface::openHdrPlusClientAsyncLocked()
         return OK;
     }
 
-    status_t res = gEaselManagerClient.openHdrPlusClientAsync(this);
+    status_t res = gEaselManagerClient->openHdrPlusClientAsync(this);
     if (res != OK) {
         ALOGE("%s: Opening HDR+ client asynchronously failed: %s (%d)", __FUNCTION__,
                 strerror(-res), res);
@@ -14575,7 +14584,7 @@ void QCamera3HardwareInterface::disableHdrPlusModeLocked()
         }
 
         // Close HDR+ client so Easel can enter low power mode.
-        gEaselManagerClient.closeHdrPlusClient(std::move(gHdrPlusClient));
+        gEaselManagerClient->closeHdrPlusClient(std::move(gHdrPlusClient));
         gHdrPlusClient = nullptr;
     }
 
@@ -14677,7 +14686,7 @@ void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
     if (res != OK) {
         LOGE("%s: Failed to set static metadata in HDR+ client: %s (%d). Closing HDR+ client.",
             __FUNCTION__, strerror(-res), res);
-        gEaselManagerClient.closeHdrPlusClient(std::move(gHdrPlusClient));
+        gEaselManagerClient->closeHdrPlusClient(std::move(gHdrPlusClient));
         gHdrPlusClient = nullptr;
         return;
     }
