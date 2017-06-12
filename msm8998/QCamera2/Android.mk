@@ -129,12 +129,13 @@ endif
 LOCAL_CFLAGS += -DUSE_CAMERA_METABUFFER_UTILS
 
 #LOCAL_STATIC_LIBRARIES := libqcamera2_util
+LOCAL_STATIC_LIBRARIES := android.hardware.camera.common@1.0-helper
 LOCAL_C_INCLUDES += \
         $(TARGET_OUT_HEADERS)/mm-core/omxcore \
         $(TARGET_OUT_HEADERS)/qcom/display
 LOCAL_C_INCLUDES += \
         $(SRC_DISPLAY_HAL_DIR)/libqservice
-LOCAL_SHARED_LIBRARIES := libcamera_client liblog libhardware libutils libcutils libdl libsync
+LOCAL_SHARED_LIBRARIES := liblog libhardware libutils libcutils libdl libsync
 LOCAL_SHARED_LIBRARIES += libmmcamera_interface libmmjpeg_interface libui libcamera_metadata
 LOCAL_SHARED_LIBRARIES += libqdMetaData libqservice libbinder
 LOCAL_SHARED_LIBRARIES += libcutils libdl libhdrplusclient libhdrplusmessenger
