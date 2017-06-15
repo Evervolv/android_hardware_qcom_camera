@@ -1525,6 +1525,43 @@ int32_t QCamera3HardwareInterface::getSensorModeInfo(cam_sensor_mode_info_t &sen
 }
 
 /*==============================================================================
+ * FUNCTION   : getCurrentSensorModeInfo
+ *
+ * DESCRIPTION: Get sensor mode information that is currently selected.
+ *
+ * PARAMETERS :
+ *   @sensorModeInfo : sensor mode information (output)
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *
+ *==========================================================================*/
+int32_t QCamera3HardwareInterface::getCurrentSensorModeInfo(cam_sensor_mode_info_t &sensorModeInfo)
+{
+    int32_t rc = NO_ERROR;
+
+    clear_metadata_buffer(mParameters);
+    ADD_GET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_CURRENT_SENSOR_MODE_INFO);
+
+    rc = mCameraHandle->ops->get_parms(mCameraHandle->camera_handle,
+            mParameters);
+    if (rc != NO_ERROR) {
+        LOGE("Failed to get CAM_INTF_PARM_SENSOR_MODE_INFO");
+        return rc;
+    }
+
+    READ_PARAM_ENTRY(mParameters, CAM_INTF_PARM_CURRENT_SENSOR_MODE_INFO, sensorModeInfo);
+    LOGH("%s: active array size %dx%d, pixel array size %dx%d, output pixel clock %u, "
+            "raw bits: %d", __FUNCTION__, sensorModeInfo.active_array_size.width,
+            sensorModeInfo.active_array_size.height, sensorModeInfo.pixel_array_size.width,
+            sensorModeInfo.pixel_array_size.height, sensorModeInfo.op_pixel_clk,
+            sensorModeInfo.num_raw_bits);
+
+    return rc;
+}
+
+/*==============================================================================
  * FUNCTION   : addToPPFeatureMask
  *
  * DESCRIPTION: add additional features to pp feature mask based on
@@ -4967,8 +5004,8 @@ int QCamera3HardwareInterface::processCaptureRequest(
             LOGE("set_parms failed for hal version, stream info");
         }
 
-        memset(&mSensorModeInfo, 0, sizeof(mSensorModeInfo));
-        rc = getSensorModeInfo(mSensorModeInfo);
+        cam_sensor_mode_info_t sensorModeInfo = {};
+        rc = getSensorModeInfo(sensorModeInfo);
         if (rc != NO_ERROR) {
             LOGE("Failed to get sensor output size");
             pthread_mutex_unlock(&mMutex);
@@ -4977,8 +5014,8 @@ int QCamera3HardwareInterface::processCaptureRequest(
 
         mCropRegionMapper.update(gCamCapability[mCameraId]->active_array_size.width,
                 gCamCapability[mCameraId]->active_array_size.height,
-                mSensorModeInfo.active_array_size.width,
-                mSensorModeInfo.active_array_size.height);
+                sensorModeInfo.active_array_size.width,
+                sensorModeInfo.active_array_size.height);
 
         /* Set batchmode before initializing channel. Since registerBuffer
          * internally initializes some of the channels, better set batchmode
@@ -5884,6 +5921,12 @@ no_error:
                 {
                     // Configure Easel for stream on.
                     Mutex::Autolock l(gHdrPlusClientLock);
+
+                    // Now that sensor mode should have been selected, get the selected sensor mode
+                    // info.
+                    memset(&mSensorModeInfo, 0, sizeof(mSensorModeInfo));
+                    getCurrentSensorModeInfo(mSensorModeInfo);
+
                     if (EaselManagerClientOpened) {
                         logEaselEvent("EASEL_STARTUP_LATENCY", "Starting MIPI");
                         rc = gEaselManagerClient.startMipi(mCameraId, mSensorModeInfo.op_pixel_clk,
