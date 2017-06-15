@@ -1344,6 +1344,14 @@ int QCamera3HardwareInterface::validateUsageFlags(
             continue;
         }
 
+        // Here we only care whether it's EIS3 or not
+        char is_type_value[PROPERTY_VALUE_MAX];
+        property_get("persist.camera.is_type", is_type_value, "4");
+        cam_is_type_t isType = atoi(is_type_value) == IS_TYPE_EIS_3_0 ? IS_TYPE_EIS_3_0 : IS_TYPE_NONE;
+        if (gCamCapability[mCameraId]->position == CAM_POSITION_FRONT ||
+                mOpMode == CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE)
+            isType = IS_TYPE_NONE;
+
         bool isVideo = IS_USAGE_VIDEO(newStream->usage);
         bool isPreview = IS_USAGE_PREVIEW(newStream->usage);
         bool isZSL = IS_USAGE_ZSL(newStream->usage);
@@ -1352,11 +1360,11 @@ int QCamera3HardwareInterface::validateUsageFlags(
             forcePreviewUBWC = false;
         }
         cam_format_t videoFormat = QCamera3Channel::getStreamDefaultFormat(
-                CAM_STREAM_TYPE_VIDEO, newStream->width, newStream->height, forcePreviewUBWC);
+                CAM_STREAM_TYPE_VIDEO, newStream->width, newStream->height, forcePreviewUBWC, isType);
         cam_format_t previewFormat = QCamera3Channel::getStreamDefaultFormat(
-                CAM_STREAM_TYPE_PREVIEW, newStream->width, newStream->height, forcePreviewUBWC);
+                CAM_STREAM_TYPE_PREVIEW, newStream->width, newStream->height, forcePreviewUBWC, isType);
         cam_format_t zslFormat = QCamera3Channel::getStreamDefaultFormat(
-                CAM_STREAM_TYPE_SNAPSHOT, newStream->width, newStream->height, forcePreviewUBWC);
+                CAM_STREAM_TYPE_SNAPSHOT, newStream->width, newStream->height, forcePreviewUBWC, isType);
 
         // Color space for this camera device is guaranteed to be ITU_R_601_FR.
         // So color spaces will always match.
@@ -1725,13 +1733,13 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         return BAD_VALUE;
     }
 
+    mOpMode = streamList->operation_mode;
+    LOGD("mOpMode: %d", mOpMode);
+
     rc = validateUsageFlags(streamList);
     if (rc != NO_ERROR) {
         return rc;
     }
-
-    mOpMode = streamList->operation_mode;
-    LOGD("mOpMode: %d", mOpMode);
 
     /* first invalidate all the steams in the mStreamList
      * if they appear again, they will be validated */
@@ -2239,8 +2247,10 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     char property_value[PROPERTY_VALUE_MAX];
     property_get("persist.camera.gzoom.at", property_value, "0");
     int goog_zoom_at = atoi(property_value);
-    bool is_goog_zoom_video_enabled = ((goog_zoom_at & 1) > 0);
-    bool is_goog_zoom_preview_enabled = ((goog_zoom_at & 2) > 0);
+    bool is_goog_zoom_video_enabled = ((goog_zoom_at & 1) > 0) &&
+        gCamCapability[mCameraId]->position == CAM_POSITION_BACK;
+    bool is_goog_zoom_preview_enabled = ((goog_zoom_at & 2) > 0) &&
+        gCamCapability[mCameraId]->position == CAM_POSITION_BACK;
 
     property_get("persist.camera.gzoom.4k", property_value, "0");
     bool is_goog_zoom_4k_enabled = (atoi(property_value) > 0);
@@ -2671,9 +2681,14 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
 
             QCamera3Channel *channel = (QCamera3Channel*) newStream->priv;
             if (channel != NULL && QCamera3Channel::isUBWCEnabled()) {
+                // Here we only care whether it's EIS3 or not
+                cam_is_type_t isType = m_bEis3PropertyEnabled ? IS_TYPE_EIS_3_0 : IS_TYPE_NONE;
+                if (gCamCapability[mCameraId]->position == CAM_POSITION_FRONT ||
+                        mOpMode == CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE)
+                    isType = IS_TYPE_NONE;
                 cam_format_t fmt = QCamera3Channel::getStreamDefaultFormat(
                         mStreamConfigInfo.type[mStreamConfigInfo.num_streams],
-                        newStream->width, newStream->height, forcePreviewUBWC);
+                        newStream->width, newStream->height, forcePreviewUBWC, isType);
                 if(fmt == CAM_FORMAT_YUV_420_NV12_UBWC) {
                     newStream->usage |= GRALLOC_USAGE_PRIVATE_ALLOC_UBWC;
                 }
