@@ -7507,10 +7507,13 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         camMetadata.update(ANDROID_JPEG_THUMBNAIL_SIZE, fwk_thumb_size, 2);
     }
 
-    IF_META_AVAILABLE(int32_t, privateData, CAM_INTF_META_PRIVATE_DATA, metadata) {
-        camMetadata.update(QCAMERA3_PRIVATEDATA_REPROCESS,
-                privateData,
-                MAX_METADATA_PRIVATE_PAYLOAD_SIZE_IN_BYTES / sizeof(int32_t));
+    // Skip reprocess metadata if there is no input stream.
+    if (mInputStreamInfo.dim.width > 0 && mInputStreamInfo.dim.height > 0) {
+        IF_META_AVAILABLE(int32_t, privateData, CAM_INTF_META_PRIVATE_DATA, metadata) {
+            camMetadata.update(QCAMERA3_PRIVATEDATA_REPROCESS,
+                    privateData,
+                    MAX_METADATA_PRIVATE_PAYLOAD_SIZE_IN_BYTES / sizeof(int32_t));
+        }
     }
 
     IF_META_AVAILABLE(int32_t, meteringMode, CAM_INTF_PARM_AEC_ALGO_TYPE, metadata) {
