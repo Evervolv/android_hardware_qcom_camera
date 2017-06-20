@@ -168,7 +168,7 @@ public:
     virtual ~ShutterDispatcher() = default;
 
     // Tell dispatch to expect a shutter for a frame number.
-    void expectShutter(uint32_t frameNumber);
+    void expectShutter(uint32_t frameNumber, bool isReprocess);
     // Mark a shutter callback for a frame ready.
     void markShutterReady(uint32_t frameNumber, uint64_t timestamp);
     // Discard a pending shutter for frame number.
@@ -187,6 +187,7 @@ private:
 
     // frame number -> shutter map. Protected by mLock.
     std::map<uint32_t, Shutter> mShutters;
+    std::map<uint32_t, Shutter> mReprocessShutters;
 
     QCamera3HardwareInterface *mParent;
 };
