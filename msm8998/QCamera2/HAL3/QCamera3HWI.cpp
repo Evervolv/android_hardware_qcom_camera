@@ -134,9 +134,6 @@ namespace qcamera {
 // Max preferred zoom
 #define MAX_PREFERRED_ZOOM_RATIO 7.0
 
-// TODO: Enable HDR+ for front camera after it's supported. b/37100623.
-#define ENABLE_HDRPLUS_FOR_FRONT_CAMERA 0
-
 // Whether to check for the GPU stride padding, or use the default
 //#define CHECK_GPU_PIXEL_ALIGNMENT
 
@@ -5978,7 +5975,7 @@ no_error:
     }
 
     // Enable HDR+ mode for the first PREVIEW_INTENT request.
-    if (ENABLE_HDRPLUS_FOR_FRONT_CAMERA || mCameraId == 0) {
+    {
         Mutex::Autolock l(gHdrPlusClientLock);
         if (gEaselManagerClient.isEaselPresentOnDevice() &&
                 !gEaselBypassOnly && !mFirstPreviewIntentSeen &&
@@ -10077,9 +10074,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     }
 
     if (gExposeEnableZslKey) {
-        if (ENABLE_HDRPLUS_FOR_FRONT_CAMERA || cameraId == 0) {
-            available_request_keys.add(ANDROID_CONTROL_ENABLE_ZSL);
-        }
+        available_request_keys.add(ANDROID_CONTROL_ENABLE_ZSL);
     }
 
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_REQUEST_KEYS,
