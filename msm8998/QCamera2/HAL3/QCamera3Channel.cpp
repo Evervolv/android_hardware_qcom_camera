@@ -4349,6 +4349,11 @@ void QCamera3ReprocessChannel::streamCbRoutine(mm_camera_super_buf_t *super_fram
         stream->getFrameDimension(dim);
         stream->getFrameOffset(offset);
         dumpYUV(frame->bufs[0], dim, offset, QCAMERA_DUMP_FRM_INPUT_JPEG);
+        // Release offline buffers.
+        int32_t rc = obj->releaseOfflineMemory(resultFrameNumber);
+        if (NO_ERROR != rc) {
+            LOGE("Error releasing offline memory %d", rc);
+        }
         /* Since reprocessing is done, send the callback to release the input buffer */
         if (mChannelCB) {
             mChannelCB(NULL, NULL, resultFrameNumber, true, mUserData);
