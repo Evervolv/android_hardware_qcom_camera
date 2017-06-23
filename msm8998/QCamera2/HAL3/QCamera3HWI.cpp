@@ -5510,7 +5510,7 @@ no_error:
 
     // Let shutter dispatcher and buffer dispatcher know shutter and output buffers are expected
     // for the frame number.
-    mShutterDispatcher.expectShutter(frameNumber);
+    mShutterDispatcher.expectShutter(frameNumber, request->input_buffer != nullptr);
     for (size_t i = 0; i < request->num_output_buffers; i++) {
         mOutputBufferDispatcher.expectBuffer(frameNumber, request->output_buffers[i].stream);
     }
@@ -14853,29 +14853,43 @@ void QCamera3HardwareInterface::onFailedCaptureResult(pbcamera::CaptureResult *f
 ShutterDispatcher::ShutterDispatcher(QCamera3HardwareInterface *parent) :
         mParent(parent) {}
 
-void ShutterDispatcher::expectShutter(uint32_t frameNumber)
+void ShutterDispatcher::expectShutter(uint32_t frameNumber, bool isReprocess)
 {
     std::lock_guard<std::mutex> lock(mLock);
-    mShutters.emplace(frameNumber, Shutter());
+
+    if (isReprocess) {
+        mReprocessShutters.emplace(frameNumber, Shutter());
+    } else {
+        mShutters.emplace(frameNumber, Shutter());
+    }
 }
 
 void ShutterDispatcher::markShutterReady(uint32_t frameNumber, uint64_t timestamp)
 {
     std::lock_guard<std::mutex> lock(mLock);
 
-    // Make this frame's shutter ready.
+    std::map<uint32_t, Shutter> *shutters = nullptr;
+
+    // Find the shutter entry.
     auto shutter = mShutters.find(frameNumber);
     if (shutter == mShutters.end()) {
-        // Shutter was already sent.
-        return;
+        shutter = mReprocessShutters.find(frameNumber);
+        if (shutter == mReprocessShutters.end()) {
+            // Shutter was already sent.
+            return;
+        }
+        shutters = &mReprocessShutters;
+    } else {
+        shutters = &mShutters;
     }
 
+    // Make this frame's shutter ready.
     shutter->second.ready = true;
     shutter->second.timestamp = timestamp;
 
     // Iterate throught the shutters and send out shuters until the one that's not ready yet.
-    shutter = mShutters.begin();
-    while (shutter != mShutters.end()) {
+    shutter = shutters->begin();
+    while (shutter != shutters->end()) {
         if (!shutter->second.ready) {
             // If this shutter is not ready, the following shutters can't be sent.
             break;
@@ -14887,7 +14901,7 @@ void ShutterDispatcher::markShutterReady(uint32_t frameNumber, uint64_t timestam
         msg.message.shutter.timestamp = shutter->second.timestamp;
         mParent->orchestrateNotify(&msg);
 
-        shutter = mShutters.erase(shutter);
+        shutter = shutters->erase(shutter);
     }
 }
 
@@ -14895,6 +14909,7 @@ void ShutterDispatcher::clear(uint32_t frameNumber)
 {
     std::lock_guard<std::mutex> lock(mLock);
     mShutters.erase(frameNumber);
+    mReprocessShutters.erase(frameNumber);
 }
 
 void ShutterDispatcher::clear()
@@ -14907,7 +14922,16 @@ void ShutterDispatcher::clear()
             __FUNCTION__, shutter.first, shutter.second.ready,
             shutter.second.timestamp);
     }
+
+    // Log errors for stale reprocess shutters.
+    for (auto &shutter : mReprocessShutters) {
+        ALOGE("%s: stale reprocess shutter: frame number %u, ready %d, timestamp %" PRId64,
+            __FUNCTION__, shutter.first, shutter.second.ready,
+            shutter.second.timestamp);
+    }
+
     mShutters.clear();
+    mReprocessShutters.clear();
 }
 
 OutputBufferDispatcher::OutputBufferDispatcher(QCamera3HardwareInterface *parent) :
