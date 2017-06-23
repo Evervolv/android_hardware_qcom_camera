@@ -520,7 +520,6 @@ private:
     QCamera3HdrPlusRawSrcChannel *mHdrPlusRawSrcChannel;
     QCamera3RegularChannel *mDummyBatchChannel;
     QCamera3DepthChannel *mDepthChannel;
-    cam_sensor_pd_data_t mDepthCloudMode; //Cache last configured mode
     QCameraPerfLockMgr mPerfLockMgr;
 
     uint32_t mChannelHandle;
