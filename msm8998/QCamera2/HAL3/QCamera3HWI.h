@@ -798,6 +798,9 @@ private:
     void updateHdrPlusResultMetadata(CameraMetadata &resultMetadata,
             std::shared_ptr<metadata_buffer_t> settings);
 
+    // Wait until opening HDR+ client completes if it's being opened.
+    void finishHdrPlusClientOpeningLocked(std::unique_lock<std::mutex> &lock);
+
     // HDR+ client callbacks.
     void onOpened(std::unique_ptr<HdrPlusClient> client) override;
     void onOpenFailed(status_t err) override;
