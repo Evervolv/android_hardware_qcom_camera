@@ -47,7 +47,7 @@
 #define OIS_DATA_MAX_SIZE                 (32)
 #define MAX_OIS_SAMPLE_NUM_PER_FRAME      (10)
 
-#define MAX_DEPTH_DATA_SIZE               (4032*2*756)
+#define PD_DATA_SIZE                      (4032*2*758)
 
 #define CEILING64(X) (((X) + 0x0003F) & 0xFFFFFFC0)
 #define CEILING32(X) (((X) + 0x0001F) & 0xFFFFFFE0)
@@ -235,6 +235,12 @@ typedef enum {
     CAM_FLICKER_50_HZ,
     CAM_FLICKER_60_HZ
 } cam_flicker_t;
+
+typedef enum {
+    CAM_PD_DATA_DISABLED = 0,
+    CAM_PD_DATA_ENABLED = 1,
+    CAM_PD_DATA_SKIP = 2,
+} cam_sensor_pd_data_t;
 
 typedef enum {
     CAM_FORMAT_JPEG = 0,
