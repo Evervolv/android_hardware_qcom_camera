@@ -149,13 +149,14 @@ EaselManagerClient gEaselManagerClient;
 bool EaselManagerClientOpened = false; // If gEaselManagerClient is opened.
 std::unique_ptr<HdrPlusClient> gHdrPlusClient = nullptr;
 bool gHdrPlusClientOpening = false; // If HDR+ client is being opened.
+std::condition_variable gHdrPlusClientOpenCond; // Used to synchronize HDR+ client opening.
 bool gEaselProfilingEnabled = false; // If Easel profiling is enabled.
 bool gExposeEnableZslKey = false; // If HAL makes android.control.enableZsl available.
 
 // If Easel is in bypass only mode. If true, Easel HDR+ won't be enabled.
 bool gEaselBypassOnly;
 
-Mutex gHdrPlusClientLock; // Protect above Easel related variables.
+std::mutex gHdrPlusClientLock; // Protect above Easel related variables.
 
 
 const QCamera3HardwareInterface::QCameraPropMap QCamera3HardwareInterface::CDS_MAP [] = {
@@ -871,7 +872,7 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
     }
 
     {
-        Mutex::Autolock l(gHdrPlusClientLock);
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
         if (gEaselManagerClient.isEaselPresentOnDevice()) {
             logEaselEvent("EASEL_STARTUP_LATENCY", "Resume");
             rc = gEaselManagerClient.resume();
@@ -890,7 +891,7 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
 
         // Suspend Easel because opening camera failed.
         {
-            Mutex::Autolock l(gHdrPlusClientLock);
+            std::unique_lock<std::mutex> l(gHdrPlusClientLock);
             if (gEaselManagerClient.isEaselPresentOnDevice()) {
                 status_t suspendErr = gEaselManagerClient.suspend();
                 if (suspendErr != 0) {
@@ -1086,7 +1087,8 @@ int QCamera3HardwareInterface::closeCamera()
          mCameraId, rc);
 
     {
-        Mutex::Autolock l(gHdrPlusClientLock);
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
+        finishHdrPlusClientOpeningLocked(l);
         if (gHdrPlusClient != nullptr) {
             // Disable HDR+ mode.
             disableHdrPlusModeLocked();
@@ -3013,7 +3015,8 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
 
     // Disable HRD+ if it's enabled;
     {
-        Mutex::Autolock l(gHdrPlusClientLock);
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
+        finishHdrPlusClientOpeningLocked(l);
         disableHdrPlusModeLocked();
     }
 
@@ -3514,7 +3517,7 @@ void QCamera3HardwareInterface::sendPartialMetadataWithLock(
     result.partial_result = requestIter->partial_result_cnt;
 
     {
-        Mutex::Autolock l(gHdrPlusClientLock);
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
         if (gHdrPlusClient != nullptr && mHdrPlusModeEnabled) {
             // Notify HDR+ client about the partial metadata.
             gHdrPlusClient->notifyFrameMetadata(result.frame_number, *result.result,
@@ -4181,7 +4184,7 @@ void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t fra
         mPendingLiveRequest--;
 
         {
-            Mutex::Autolock l(gHdrPlusClientLock);
+            std::unique_lock<std::mutex> l(gHdrPlusClientLock);
             // For a live request, send the metadata to HDR+ client.
             if (gHdrPlusClient != nullptr && mHdrPlusModeEnabled) {
                 gHdrPlusClient->notifyFrameMetadata(frameNumber, *resultMetadata,
@@ -5327,7 +5330,7 @@ no_error:
     HdrPlusPendingRequest pendingHdrPlusRequest = {};
 
     {
-        Mutex::Autolock l(gHdrPlusClientLock);
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
         // If this request has a still capture intent, try to submit an HDR+ request.
         if (gHdrPlusClient != nullptr && mHdrPlusModeEnabled &&
                 mCaptureIntent == ANDROID_CONTROL_CAPTURE_INTENT_STILL_CAPTURE) {
@@ -5932,7 +5935,7 @@ no_error:
 
                 {
                     // Configure Easel for stream on.
-                    Mutex::Autolock l(gHdrPlusClientLock);
+                    std::unique_lock<std::mutex> l(gHdrPlusClientLock);
 
                     // Now that sensor mode should have been selected, get the selected sensor mode
                     // info.
@@ -5967,7 +5970,7 @@ no_error:
 
     // Enable HDR+ mode for the first PREVIEW_INTENT request.
     {
-        Mutex::Autolock l(gHdrPlusClientLock);
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
         if (gEaselManagerClient.isEaselPresentOnDevice() &&
                 !gEaselBypassOnly && !mFirstPreviewIntentSeen &&
                 meta.exists(ANDROID_CONTROL_CAPTURE_INTENT) &&
@@ -10797,7 +10800,7 @@ int QCamera3HardwareInterface::getCamInfo(uint32_t cameraId,
     pthread_mutex_lock(&gCamLock);
 
     {
-        Mutex::Autolock l(gHdrPlusClientLock);
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
         rc = initHdrPlusClientLocked();
         if (rc != OK) {
             ALOGE("%s: initHdrPlusClientLocked failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
@@ -14525,6 +14528,13 @@ status_t QCamera3HardwareInterface::enableHdrPlusModeLocked()
     return OK;
 }
 
+void QCamera3HardwareInterface::finishHdrPlusClientOpeningLocked(std::unique_lock<std::mutex> &lock)
+{
+    if (gHdrPlusClientOpening) {
+        gHdrPlusClientOpenCond.wait(lock, [&] { return !gHdrPlusClientOpening; });
+    }
+}
+
 void QCamera3HardwareInterface::disableHdrPlusModeLocked()
 {
     // Disable HDR+ mode.
@@ -14540,7 +14550,6 @@ void QCamera3HardwareInterface::disableHdrPlusModeLocked()
     }
 
     mHdrPlusModeEnabled = false;
-    gHdrPlusClientOpening = false;
     ALOGD("%s: HDR+ mode disabled", __FUNCTION__);
 }
 
@@ -14623,7 +14632,7 @@ void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
     logEaselEvent("EASEL_STARTUP_LATENCY", "HDR+ client opened.");
     ALOGI("%s: HDR+ client opened.", __FUNCTION__);
 
-    Mutex::Autolock l(gHdrPlusClientLock);
+    std::unique_lock<std::mutex> l(gHdrPlusClientLock);
     if (!gHdrPlusClientOpening) {
         ALOGW("%s: HDR+ is disabled while HDR+ client is being opened.", __FUNCTION__);
         return;
@@ -14631,6 +14640,7 @@ void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
 
     gHdrPlusClient = std::move(client);
     gHdrPlusClientOpening = false;
+    gHdrPlusClientOpenCond.notify_one();
 
     // Set static metadata.
     status_t res = gHdrPlusClient->setStaticMetadata(*gStaticMetadata[mCameraId]);
@@ -14652,8 +14662,9 @@ void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
 void QCamera3HardwareInterface::onOpenFailed(status_t err)
 {
     ALOGE("%s: Opening HDR+ client failed: %s (%d)", __FUNCTION__, strerror(-err), err);
-    Mutex::Autolock l(gHdrPlusClientLock);
+    std::unique_lock<std::mutex> l(gHdrPlusClientLock);
     gHdrPlusClientOpening = false;
+    gHdrPlusClientOpenCond.notify_one();
 }
 
 void QCamera3HardwareInterface::onFatalError()
