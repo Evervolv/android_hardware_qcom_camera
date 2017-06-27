@@ -4060,6 +4060,9 @@ void QCamera3HardwareInterface::handleInputBufferWithLock(uint32_t frame_number)
         LOGD("Input request metadata and input buffer frame_number = %u",
                         i->frame_number);
         i = erasePendingRequest(i);
+
+        // Dispatch result metadata that may be just unblocked by this reprocess result.
+        dispatchResultMetadataWithLock(frame_number, /*isLiveRequest*/false);
     } else {
         LOGE("Could not find input request for frame number %d", frame_number);
     }
@@ -4187,6 +4190,11 @@ void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t fra
         }
     }
 
+    dispatchResultMetadataWithLock(frameNumber, liveRequest);
+}
+
+void QCamera3HardwareInterface::dispatchResultMetadataWithLock(uint32_t frameNumber,
+        bool isLiveRequest) {
     // The pending requests are ordered by increasing frame numbers. The result metadata are ready
     // to be sent if all previous pending requests are ready to be sent.
     bool readyToSend = true;
@@ -4219,7 +4227,7 @@ void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t fra
                 iter++;
                 continue;
             }
-        } else if (iter->frame_number < frameNumber && liveRequest && thisLiveRequest) {
+        } else if (iter->frame_number < frameNumber && isLiveRequest && thisLiveRequest) {
             // If the result metadata belongs to a live request, notify errors for previous pending
             // live requests.
             mPendingLiveRequest--;
@@ -4252,7 +4260,7 @@ void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t fra
         iter = erasePendingRequest(iter);
     }
 
-    if (liveRequest) {
+    if (isLiveRequest) {
         for (auto &iter : mPendingRequestsList) {
             // Increment pipeline depth for the following pending requests.
             if (iter.frame_number > frameNumber) {
