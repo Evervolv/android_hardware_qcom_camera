@@ -3144,6 +3144,11 @@ int QCamera3HardwareInterface::validateCaptureRequest(
 void QCamera3HardwareInterface::deriveMinFrameDuration()
 {
     int32_t maxJpegDim, maxProcessedDim, maxRawDim;
+    bool hasRaw = false;
+
+    mMinRawFrameDuration = 0;
+    mMinJpegFrameDuration = 0;
+    mMinProcessedFrameDuration = 0;
 
     maxJpegDim = 0;
     maxProcessedDim = 0;
@@ -3164,6 +3169,7 @@ void QCamera3HardwareInterface::deriveMinFrameDuration()
         } else if ((*it)->stream->format == HAL_PIXEL_FORMAT_RAW_OPAQUE ||
                 (*it)->stream->format == HAL_PIXEL_FORMAT_RAW10 ||
                 (*it)->stream->format == HAL_PIXEL_FORMAT_RAW16) {
+            hasRaw = true;
             if (dimension > maxRawDim)
                 maxRawDim = dimension;
         } else {
@@ -3179,7 +3185,7 @@ void QCamera3HardwareInterface::deriveMinFrameDuration()
     if (maxJpegDim > maxProcessedDim)
         maxProcessedDim = maxJpegDim;
     //Find the smallest raw dimension that is greater or equal to jpeg dimension
-    if (maxProcessedDim > maxRawDim) {
+    if (hasRaw && maxProcessedDim > maxRawDim) {
         maxRawDim = INT32_MAX;
 
         for (size_t i = 0; i < count; i++) {
