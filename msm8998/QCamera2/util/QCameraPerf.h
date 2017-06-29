@@ -34,9 +34,13 @@
 #include <utils/Mutex.h>
 
 // Camera dependencies
-#include "hardware/power.h"
+#include <android/hardware/power/1.0/IPower.h>
 
 using namespace android;
+using android::hardware::power::V1_0::IPower;
+using android::hardware::power::V1_0::PowerHint;
+using ::android::hardware::Return;
+using ::android::hardware::Void;
 
 namespace qcamera {
 
@@ -82,7 +86,7 @@ public:
     bool releasePerfLock();
     bool acquirePerfLock(bool     forceReacquirePerfLock,
                          uint32_t timer = DEFAULT_PERF_LOCK_TIMEOUT_MS);
-    void powerHintInternal(power_hint_t powerHint, bool enable);
+    void powerHintInternal(PowerHint powerHint, bool enable);
 
 protected:
     QCameraPerfLock(PerfLockEnum perfLockType, QCameraPerfLockIntf *perfLockIntf);
@@ -110,7 +114,7 @@ private:
     uint32_t         mRefCount;
     perfLockAcquire  mPerfLockAcq;
     perfLockRelease  mPerfLockRel;
-    power_module_t  *mPowerModule;
+    sp<IPower>       mPowerHal;
     void            *mDlHandle;
 
 protected:
@@ -123,7 +127,9 @@ public:
 
     inline perfLockAcquire perfLockAcq() { return mPerfLockAcq; }
     inline perfLockRelease perfLockRel() { return mPerfLockRel; }
-    inline power_module_t* powerHintIntf() { return mPowerModule; }
+    inline bool powerHint(PowerHint hint, int32_t data) {
+        return ((mPowerHal == nullptr) ? false : mPowerHal->powerHint(hint, data).isOk());
+    }
 };
 
 
@@ -137,7 +143,7 @@ public:
 
     bool acquirePerfLockIfExpired(PerfLockEnum perfLockRnum,
                                   uint32_t     timer = DEFAULT_PERF_LOCK_TIMEOUT_MS);
-    void powerHintInternal(PerfLockEnum perfLockType, power_hint_t powerHint, bool enable);
+    void powerHintInternal(PerfLockEnum perfLockType, PowerHint powerHint, bool enable);
 
 private:
     PerfLockMgrStateEnum mState;
