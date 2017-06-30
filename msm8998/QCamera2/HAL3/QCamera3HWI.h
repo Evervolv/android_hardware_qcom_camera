@@ -792,6 +792,9 @@ private:
     // Disable HDR+ mode. Easel will stop capturing ZSL buffers.
     void disableHdrPlusModeLocked();
 
+    // Return if current session with configured streams is compatible with HDR+ mode.
+    bool isSessionHdrPlusModeCompatible();
+
     // Configure streams for HDR+.
     status_t configureHdrPlusStreamsLocked();
 
