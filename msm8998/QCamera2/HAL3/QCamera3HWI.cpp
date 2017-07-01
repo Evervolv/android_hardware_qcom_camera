@@ -1820,6 +1820,8 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
 
     pthread_mutex_lock(&mMutex);
 
+    mPictureChannel = NULL;
+
     // Check state
     switch (mState) {
         case INITIALIZED:
@@ -5999,11 +6001,14 @@ no_error:
                 meta.exists(ANDROID_CONTROL_CAPTURE_INTENT) &&
                 meta.find(ANDROID_CONTROL_CAPTURE_INTENT).data.u8[0] ==
                 ANDROID_CONTROL_CAPTURE_INTENT_PREVIEW) {
-            rc = enableHdrPlusModeLocked();
-            if (rc != OK) {
-                LOGE("%s: Failed to open HDR+ asynchronously", __FUNCTION__);
-                pthread_mutex_unlock(&mMutex);
-                return rc;
+
+            if (isSessionHdrPlusModeCompatible()) {
+                rc = enableHdrPlusModeLocked();
+                if (rc != OK) {
+                    LOGE("%s: Failed to open HDR+ asynchronously", __FUNCTION__);
+                    pthread_mutex_unlock(&mMutex);
+                    return rc;
+                }
             }
 
             mFirstPreviewIntentSeen = true;
@@ -14605,6 +14610,17 @@ void QCamera3HardwareInterface::disableHdrPlusModeLocked()
 
     mHdrPlusModeEnabled = false;
     ALOGD("%s: HDR+ mode disabled", __FUNCTION__);
+}
+
+bool QCamera3HardwareInterface::isSessionHdrPlusModeCompatible()
+{
+    // Check if mPictureChannel is valid.
+    // TODO: Support YUV (b/36693254) and RAW (b/36690506)
+    if (mPictureChannel == nullptr) {
+        return false;
+    }
+
+    return true;
 }
 
 status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked()
