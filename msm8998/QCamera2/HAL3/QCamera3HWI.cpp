@@ -3710,9 +3710,8 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
     LOGH("valid frame_number = %u, capture_time = %lld",
             frame_number, capture_time);
 
-    if (metadata->is_depth_data_valid) {
-        handleDepthDataLocked(metadata->depth_data, frame_number);
-    }
+    handleDepthDataLocked(metadata->depth_data, frame_number,
+            metadata->is_depth_data_valid);
 
     // Check whether any stream buffer corresponding to this is dropped or not
     // If dropped, then send the ERROR_BUFFER for the corresponding stream
@@ -3890,17 +3889,17 @@ done_metadata:
  *
  * PARAMETERS : @depthData  : Depth data
  *              @frameNumber: Frame number of the incoming depth data
+ *              @valid      : Valid flag for the incoming data
  *
  * RETURN     :
  *
  *==========================================================================*/
 void QCamera3HardwareInterface::handleDepthDataLocked(
-        const cam_depth_data_t &depthData, uint32_t frameNumber) {
+        const cam_depth_data_t &depthData, uint32_t frameNumber, uint8_t valid) {
     uint32_t currentFrameNumber;
     buffer_handle_t *depthBuffer;
 
     if (nullptr == mDepthChannel) {
-        LOGE("Depth channel not present!");
         return;
     }
 
@@ -3918,12 +3917,16 @@ void QCamera3HardwareInterface::handleDepthDataLocked(
 
         resultBuffer.buffer = depthBuffer;
         if (currentFrameNumber == frameNumber) {
-            int32_t rc = mDepthChannel->populateDepthData(depthData,
-                    frameNumber);
-            if (NO_ERROR != rc) {
-                resultBuffer.status = CAMERA3_BUFFER_STATUS_ERROR;
+            if (valid) {
+                int32_t rc = mDepthChannel->populateDepthData(depthData,
+                        frameNumber);
+                if (NO_ERROR != rc) {
+                    resultBuffer.status = CAMERA3_BUFFER_STATUS_ERROR;
+                } else {
+                    resultBuffer.status = CAMERA3_BUFFER_STATUS_OK;
+                }
             } else {
-                resultBuffer.status = CAMERA3_BUFFER_STATUS_OK;
+                resultBuffer.status = CAMERA3_BUFFER_STATUS_ERROR;
             }
         } else if (currentFrameNumber > frameNumber) {
             break;
@@ -5590,6 +5593,7 @@ no_error:
                             pthread_mutex_unlock(&mMutex);
                             return rc;
                         }
+                        continue;
                     } else {
                         LOGD("snapshot request with buffer %p, frame_number %d",
                                  output.buffer, frameNumber);
