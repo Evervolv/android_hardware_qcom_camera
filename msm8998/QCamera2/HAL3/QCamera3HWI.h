@@ -445,7 +445,7 @@ private:
     // isLiveRequest is whether the frame belongs to a live request.
     void dispatchResultMetadataWithLock(uint32_t frameNumber, bool isLiveRequest);
     void handleDepthDataLocked(const cam_depth_data_t &depthData,
-            uint32_t frameNumber);
+            uint32_t frameNumber, uint8_t valid);
     void notifyErrorFoPendingDepthData(QCamera3DepthChannel *depthCh);
     void unblockRequestIfNecessary();
     void dumpMetadataToFile(tuning_params_t &meta, uint32_t &dumpFrameCount,
