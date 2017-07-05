@@ -2993,55 +2993,60 @@ void QCamera3YUVChannel::streamCbRoutine(mm_camera_super_buf_t *super_frame,
     }
 
     if (mBypass) {
-        List<PpInfo>::iterator ppInfo;
+        {
+            List<PpInfo>::iterator ppInfo;
 
-        Mutex::Autolock lock(mOfflinePpLock);
-        resultFrameNumber = mMemory.getFrameNumber(frameIndex);
-        for (ppInfo = mOfflinePpInfoList.begin();
-                ppInfo != mOfflinePpInfoList.end(); ppInfo++) {
-            if (ppInfo->frameNumber == (uint32_t)resultFrameNumber) {
-                break;
+            Mutex::Autolock lock(mOfflinePpLock);
+            resultFrameNumber = mMemory.getFrameNumber(frameIndex);
+            for (ppInfo = mOfflinePpInfoList.begin();
+                    ppInfo != mOfflinePpInfoList.end(); ppInfo++) {
+                if (ppInfo->frameNumber == (uint32_t)resultFrameNumber) {
+                    break;
+                }
             }
-        }
-        LOGD("frame index %d, frame number %d", frameIndex, resultFrameNumber);
-        //check the reprocessing required flag against the frame number
-        if (ppInfo == mOfflinePpInfoList.end()) {
-            LOGE("Error, request for frame number is a reprocess.");
-            stream->bufDone(frameIndex);
-            return;
+            LOGD("frame index %d, frame number %d", frameIndex,
+                    resultFrameNumber);
+            //check the reprocessing required flag against the frame number
+            if (ppInfo == mOfflinePpInfoList.end()) {
+                LOGE("Error, request for frame number is a reprocess.");
+                stream->bufDone(frameIndex);
+                return;
+            }
+
+            if (ppInfo->offlinePpFlag) {
+                mm_camera_super_buf_t *frame =
+                        (mm_camera_super_buf_t *)malloc(sizeof(
+                                mm_camera_super_buf_t));
+                if (frame == NULL) {
+                    LOGE("Error allocating memory to save received_frame structure.");
+                    if(stream) {
+                        stream->bufDone(frameIndex);
+                    }
+                    return;
+                }
+
+                *frame = *super_frame;
+                m_postprocessor.processData(frame, ppInfo->output,
+                        resultFrameNumber);
+                free(super_frame);
+                return;
+            } else {
+                if (ppInfo != mOfflinePpInfoList.begin()) {
+                    // There is pending reprocess buffer, cache current buffer
+                    if (ppInfo->callback_buffer != NULL) {
+                        LOGE("Fatal: cached callback_buffer is already present");
+                    }
+                    ppInfo->callback_buffer = super_frame;
+                    return;
+                } else {
+                    mOfflinePpInfoList.erase(ppInfo);
+                }
+            }
         }
 
         if (IS_BUFFER_ERROR(super_frame->bufs[0]->flags)) {
             mChannelCbBufErr(this, resultFrameNumber,
-                    CAMERA3_BUFFER_STATUS_ERROR, mUserData);
-        }
-
-        if (ppInfo->offlinePpFlag) {
-            mm_camera_super_buf_t *frame =
-                    (mm_camera_super_buf_t *)malloc(sizeof(mm_camera_super_buf_t));
-            if (frame == NULL) {
-                LOGE("Error allocating memory to save received_frame structure.");
-                if(stream) {
-                    stream->bufDone(frameIndex);
-                }
-                return;
-            }
-
-            *frame = *super_frame;
-            m_postprocessor.processData(frame, ppInfo->output, resultFrameNumber);
-            free(super_frame);
-            return;
-        } else {
-            if (ppInfo != mOfflinePpInfoList.begin()) {
-                // There is pending reprocess buffer, cache current buffer
-                if (ppInfo->callback_buffer != NULL) {
-                    LOGE("Fatal: cached callback_buffer is already present");
-                }
-                ppInfo->callback_buffer = super_frame;
-                return;
-            } else {
-                mOfflinePpInfoList.erase(ppInfo);
-            }
+                            CAMERA3_BUFFER_STATUS_ERROR, mUserData);
         }
     }
 
