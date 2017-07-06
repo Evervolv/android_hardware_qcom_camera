@@ -2327,6 +2327,37 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     int32_t video_stream_idx = -1;
     int32_t preview_stream_idx[streamList->num_streams];
     size_t preview_stream_cnt = 0;
+    bool previewTnr[streamList->num_streams];
+    memset(previewTnr, 0, sizeof(bool) * streamList->num_streams);
+    bool isFront = gCamCapability[mCameraId]->position == CAM_POSITION_FRONT;
+    // Loop through once to determine preview TNR conditions before creating channels.
+    for (size_t i = 0; i < streamList->num_streams; i++) {
+        camera3_stream_t *newStream = streamList->streams[i];
+        uint32_t stream_usage = newStream->usage;
+        if (newStream->stream_type == CAMERA3_STREAM_OUTPUT &&
+                newStream->format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED) {
+            if (stream_usage & private_handle_t::PRIV_FLAGS_VIDEO_ENCODER)
+                video_stream_idx = (int32_t)i;
+            else
+                preview_stream_idx[preview_stream_cnt++] = (int32_t)i;
+        }
+    }
+    // By default, preview stream TNR is disabled.
+    // Enable TNR to the preview stream if all conditions below are satisfied:
+    //  1. preview resolution == video resolution.
+    //  2. video stream TNR is enabled.
+    //  3. EIS2.0 OR is front camera (which wouldn't use EIS3 even if it's set)
+    for (size_t i = 0; i < preview_stream_cnt && video_stream_idx != -1; i++) {
+        camera3_stream_t *video_stream = streamList->streams[video_stream_idx];
+        camera3_stream_t *preview_stream = streamList->streams[preview_stream_idx[i]];
+        if (m_bTnrEnabled && m_bTnrVideo &&
+                (isFront || (atoi(is_type_value) == IS_TYPE_EIS_2_0)) &&
+                video_stream->width == preview_stream->width &&
+                video_stream->height == preview_stream->height) {
+            previewTnr[preview_stream_idx[i]] = true;
+        }
+    }
+
     memset(&mStreamConfigInfo, 0, sizeof(cam_stream_size_info_t));
     /* Allocate channel objects for the requested streams */
     for (size_t i = 0; i < streamList->num_streams; i++) {
@@ -2389,11 +2420,10 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                         mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams] |=
                             CAM_QCOM_FEATURE_GOOG_ZOOM;
                     }
-                    video_stream_idx = mStreamConfigInfo.num_streams;
                 } else {
                         mStreamConfigInfo.type[mStreamConfigInfo.num_streams] =
                             CAM_STREAM_TYPE_PREVIEW;
-                    if (m_bTnrEnabled && m_bTnrPreview) {
+                    if (m_bTnrEnabled && (previewTnr[i] || m_bTnrPreview)) {
                         mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams] |=
                                 CAM_QCOM_FEATURE_CPP_TNR;
                         //TNR and CDS are mutually exclusive. So reset CDS from feature mask
@@ -2408,7 +2438,6 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                         mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams] |=
                             CAM_QCOM_FEATURE_GOOG_ZOOM;
                     }
-                    preview_stream_idx[preview_stream_cnt++] = mStreamConfigInfo.num_streams;
                     padding_info.width_padding = mSurfaceStridePadding;
                     padding_info.height_padding = CAM_PAD_TO_2;
                     previewSize.width = (int32_t)newStream->width;
@@ -2760,27 +2789,6 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
 
     // Let buffer dispatcher know the configured streams.
     mOutputBufferDispatcher.configureStreams(streamList);
-
-    // By default, preview stream TNR is disabled.
-    // Enable TNR to the preview stream if all conditions below are satisfied:
-    //  1. resolution <= 1080p.
-    //  2. preview resolution == video resolution.
-    //  3. video stream TNR is enabled.
-    //  4. EIS2.0
-    for (size_t i = 0; i < preview_stream_cnt && video_stream_idx != -1; i++) {
-        camera3_stream_t *video_stream = streamList->streams[video_stream_idx];
-        camera3_stream_t *preview_stream = streamList->streams[preview_stream_idx[i]];
-        if (m_bTnrEnabled && m_bTnrVideo && (atoi(is_type_value) == IS_TYPE_EIS_2_0) &&
-                video_stream->width <= 1920 && video_stream->height <= 1080 &&
-                video_stream->width == preview_stream->width &&
-                video_stream->height == preview_stream->height) {
-                mStreamConfigInfo.postprocess_mask[preview_stream_idx[i]] |=
-                    CAM_QCOM_FEATURE_CPP_TNR;
-                //TNR and CDS are mutually exclusive. So reset CDS from feature mask
-                mStreamConfigInfo.postprocess_mask[preview_stream_idx[i]] &=
-                    ~CAM_QCOM_FEATURE_CDS;
-            }
-    }
 
     if (mOpMode != QCAMERA3_VENDOR_STREAM_CONFIGURATION_RAW_ONLY_MODE) {
         onlyRaw = false;
