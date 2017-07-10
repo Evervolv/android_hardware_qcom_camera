@@ -306,7 +306,7 @@ bool QCameraPerfLockMgr::releasePerfLock(
  *==========================================================================*/
 void QCameraPerfLockMgr::powerHintInternal(
         PerfLockEnum perfLockType,
-        power_hint_t powerHint,
+        PowerHint    powerHint,
         bool         enable)
 {
     if ((mState == LOCK_MGR_STATE_READY) &&
@@ -448,7 +448,7 @@ bool QCameraPerfLock::acquirePerfLock(
 
     if ((mPerfLockType == PERF_LOCK_POWERHINT_PREVIEW) ||
         (mPerfLockType == PERF_LOCK_POWERHINT_ENCODE)) {
-        powerHintInternal(POWER_HINT_VIDEO_ENCODE, true);
+        powerHintInternal(PowerHint::VIDEO_ENCODE, true);
         return true;
     }
 
@@ -498,7 +498,7 @@ bool QCameraPerfLock::releasePerfLock()
 
     if ((mPerfLockType == PERF_LOCK_POWERHINT_PREVIEW) ||
         (mPerfLockType == PERF_LOCK_POWERHINT_ENCODE)) {
-        powerHintInternal(POWER_HINT_VIDEO_ENCODE, false);
+        powerHintInternal(PowerHint::VIDEO_ENCODE, false);
         return true;
     }
 
@@ -539,17 +539,13 @@ bool QCameraPerfLock::releasePerfLock()
  *
  *==========================================================================*/
 void QCameraPerfLock::powerHintInternal(
-        power_hint_t powerHint,
+        PowerHint    powerHint,
         bool         enable)
 {
 #ifdef HAS_MULTIMEDIA_HINTS
-        if (enable == true) {
-            mPerfLockIntf->powerHintIntf()->powerHint(mPerfLockIntf->powerHintIntf(),
-                                                    powerHint, (void *)"state=1");
-        } else {
-            mPerfLockIntf->powerHintIntf()->powerHint(mPerfLockIntf->powerHintIntf(),
-                                                    powerHint, (void *)"state=0");
-        }
+    if (!mPerfLockIntf->powerHint(powerHint, enable)) {
+        LOGE("Send powerhint to PowerHal failed");
+    }
 #endif
 }
 
@@ -584,9 +580,9 @@ QCameraPerfLockIntf* QCameraPerfLockIntf::createSingleton()
             mInstance = new QCameraPerfLockIntf();
             if (mInstance) {
                 #ifdef HAS_MULTIMEDIA_HINTS
-                if (hw_get_module(POWER_HARDWARE_MODULE_ID,
-                        (const hw_module_t **)(&(mInstance->mPowerModule)))) {
-                    LOGE("%s module for powerHAL not found", POWER_HARDWARE_MODULE_ID);
+                mInstance->mPowerHal = IPower::getService();
+                if (mInstance->mPowerHal == nullptr) {
+                    ALOGE("Couldn't load PowerHAL module");
                 }
                 else
                 #endif
