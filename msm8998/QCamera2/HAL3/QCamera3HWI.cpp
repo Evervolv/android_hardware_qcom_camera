@@ -14522,7 +14522,7 @@ bool QCamera3HardwareInterface::trySubmittingHdrPlusRequestLocked(
     pbRequest.outputBuffers.push_back(buffer);
 
     // Submit an HDR+ capture request to HDR+ service.
-    res = gHdrPlusClient->submitCaptureRequest(&pbRequest);
+    res = gHdrPlusClient->submitCaptureRequest(&pbRequest, metadata);
     if (res != OK) {
         ALOGE("%s: %d: Submitting a capture request failed: %s (%d)", __FUNCTION__, __LINE__,
                 strerror(-res), res);
