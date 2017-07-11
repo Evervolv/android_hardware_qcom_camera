@@ -108,6 +108,7 @@ typedef struct {
     stream_status_t status;
     int registered;
     QCamera3ProcessingChannel *channel;
+    uint32_t id; // unique ID
 } stream_info_t;
 
 typedef struct {
@@ -771,23 +772,17 @@ private:
     Mutex mFlushLock;
     bool m60HzZone;
 
-    // Stream IDs used in stream configuration with HDR+ client.
-    const static uint32_t kPbRaw10InputStreamId = 0;
-    const static uint32_t kPbYuvOutputStreamId = 1;
-    const static uint32_t kPbRaw16OutputStreamId = 2;
-
     // Issue an additional RAW for every 10 requests to control RAW capture rate. Requesting RAW
     // too often will cause frame drops due to latency of sending RAW to HDR+ service.
     const static uint32_t kHdrPlusRawPeriod = 10;
 
     // Define a pending HDR+ request submitted to HDR+ service and not yet received by HAL.
     struct HdrPlusPendingRequest {
-        // YUV buffer from QCamera3PicChannel to be filled by HDR+ client with an HDR+ processed
-        // frame.
-        std::shared_ptr<mm_camera_buf_def_t> yuvBuffer;
+        // HDR+ stream ID -> output buffer to be filled by HDR+ client with an HDR+ processed frame.
+        std::map<uint32_t, std::shared_ptr<mm_camera_buf_def_t>> outputBuffers;
 
-        // Output buffers in camera framework's request.
-        std::vector<camera3_stream_buffer_t> frameworkOutputBuffers;
+        // HDR+ stream ID -> output buffers in camera framework's request.
+        std::map<uint32_t, camera3_stream_buffer_t> frameworkOutputBuffers;
 
         // Settings in camera framework's request.
         std::shared_ptr<metadata_buffer_t> settings;
@@ -795,7 +790,7 @@ private:
 
     // Fill pbcamera::StreamConfiguration based on the channel stream.
     status_t fillPbStreamConfig(pbcamera::StreamConfiguration *config, uint32_t pbStreamId,
-            int pbStreamFormat, QCamera3Channel *channel, uint32_t streamIndex);
+            QCamera3Channel *channel, uint32_t streamIndex);
 
     // Open HDR+ client asynchronously.
     status_t openHdrPlusClientAsyncLocked();
@@ -821,6 +816,10 @@ private:
     // gHdrPlusClientLock held.
     bool trySubmittingHdrPlusRequestLocked(HdrPlusPendingRequest *hdrPlusRequest,
         const camera3_capture_request_t &request, const CameraMetadata &metadata);
+
+    // Abort an HDR+ request that was not submitted successfully in
+    // trySubmittingHdrPlusRequestLocked.
+    void abortPendingHdrplusRequest(HdrPlusPendingRequest *hdrPlusRequest);
 
     // Update HDR+ result metadata with the still capture's request settings.
     void updateHdrPlusResultMetadata(CameraMetadata &resultMetadata,
