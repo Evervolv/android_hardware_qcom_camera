@@ -505,6 +505,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mInstantAECSettledFrameNumber(0),
       mAecSkipDisplayFrameBound(0),
       mInstantAecFrameIdxCount(0),
+      mLastRequestedLensShadingMapMode(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF),
       mCurrFeatureState(0),
       mLdafCalibExist(false),
       mLastCustIntentFrmNum(-1),
@@ -4171,7 +4172,7 @@ void QCamera3HardwareInterface::handleBufferWithLock(
 }
 
 void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t frameNumber,
-        const camera_metadata_t *resultMetadata)
+        camera_metadata_t *resultMetadata)
 {
     // Find the pending request for this result metadata.
     auto requestIter = mPendingRequestsList.begin();
@@ -4210,6 +4211,17 @@ void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t fra
                     requestIter->partial_result_cnt == PARTIAL_RESULT_COUNT);
             }
         }
+    }
+
+    // Remove len shading map if it's not requested.
+    if (requestIter->requestedLensShadingMapMode == ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF) {
+        CameraMetadata metadata;
+        metadata.acquire(resultMetadata);
+        metadata.erase(ANDROID_STATISTICS_LENS_SHADING_MAP);
+        metadata.update(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE,
+            &requestIter->requestedLensShadingMapMode, 1);
+
+        requestIter->resultMetadata = metadata.release();
     }
 
     dispatchResultMetadataWithLock(frameNumber, liveRequest);
@@ -5345,6 +5357,15 @@ no_error:
                 meta.find(ANDROID_COLOR_CORRECTION_ABERRATION_MODE).data.u8[0];
     }
 
+    uint8_t requestedLensShadingMapMode;
+    // Get the shading map mode.
+    if (meta.exists(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE)) {
+        mLastRequestedLensShadingMapMode = requestedLensShadingMapMode =
+                meta.find(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE).data.u8[0];
+    } else {
+        requestedLensShadingMapMode = mLastRequestedLensShadingMapMode;
+    }
+
     bool hdrPlusRequest = false;
     HdrPlusPendingRequest pendingHdrPlusRequest = {};
 
@@ -5381,6 +5402,16 @@ no_error:
                 LOGE("fail to set frame parameters");
                 pthread_mutex_unlock(&mMutex);
                 return rc;
+            }
+
+            {
+                // If HDR+ mode is enabled, override lens shading mode to ON so lens shading map
+                // will be reported in result metadata.
+                std::unique_lock<std::mutex> l(gHdrPlusClientLock);
+                if (mHdrPlusModeEnabled) {
+                    ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_LENS_SHADING_MAP_MODE,
+                        ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_ON);
+                }
             }
         }
         /* For batchMode HFR, setFrameParameters is not called for every
@@ -5442,6 +5473,7 @@ no_error:
     pendingRequest.request_id = request_id;
     pendingRequest.blob_request = blob_request;
     pendingRequest.timestamp = 0;
+    pendingRequest.requestedLensShadingMapMode = requestedLensShadingMapMode;
     if (request->input_buffer) {
         pendingRequest.input_buffer =
                 (camera3_stream_buffer_t*)malloc(sizeof(camera3_stream_buffer_t));

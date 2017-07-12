@@ -438,7 +438,7 @@ private:
     // Handle pending results when a new result metadata of a frame is received.
     // metadata callbacks are invoked in the order of frame number.
     void handlePendingResultMetadataWithLock(uint32_t frameNumber,
-            const camera_metadata_t *resultMetadata);
+            camera_metadata_t *resultMetadata);
     // Going through pending request list and send out result metadata for requests
     // that are ready.
     // frameNumber is the lastest frame whose result metadata is ready.
@@ -601,6 +601,7 @@ private:
 
         bool enableZsl; // If ZSL is enabled.
         bool hdrplus; // If this is an HDR+ request.
+        uint8_t requestedLensShadingMapMode; // Lens shading map mode for this request.
     } PendingRequestInfo;
     typedef struct {
         uint32_t frame_number;
@@ -686,6 +687,8 @@ private:
     uint8_t mInstantAecFrameIdxCount;
     /* sensor output size with current stream configuration */
     QCamera3CropRegionMapper mCropRegionMapper;
+    // Last lens shading map mode framework requsted.
+    uint8_t mLastRequestedLensShadingMapMode;
 
     cam_feature_mask_t mCurrFeatureState;
     /* Ldaf calibration data */
