@@ -138,7 +138,7 @@ LOCAL_C_INCLUDES += \
 LOCAL_SHARED_LIBRARIES := liblog libhardware libutils libcutils libdl libsync
 LOCAL_SHARED_LIBRARIES += libmmcamera_interface libmmjpeg_interface libui libcamera_metadata
 LOCAL_SHARED_LIBRARIES += libqdMetaData libqservice libbinder
-LOCAL_SHARED_LIBRARIES += libcutils libdl libhdrplusclient
+LOCAL_SHARED_LIBRARIES += libbase libcutils libdl libhdrplusclient
 LOCAL_SHARED_LIBRARIES += libhidlbase libhwbinder libutils android.hardware.power@1.0
 ifeq ($(TARGET_TS_MAKEUP),true)
 LOCAL_SHARED_LIBRARIES += libts_face_beautify_hal libts_detected_face_hal
