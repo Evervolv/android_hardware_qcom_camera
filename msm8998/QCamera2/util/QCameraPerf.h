@@ -98,6 +98,7 @@ private:
     nsecs_t              mTimeOut;
     PerfLockEnum         mPerfLockType;
     QCameraPerfLockIntf *mPerfLockIntf;
+    bool                 mIsPerfdEnabled;
 
     static PerfLockInfo  mPerfLockInfo[PERF_LOCK_COUNT];
 
