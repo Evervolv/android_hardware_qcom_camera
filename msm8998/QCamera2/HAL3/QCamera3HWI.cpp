@@ -58,7 +58,6 @@
 #include "QCameraTrace.h"
 
 #include "HdrPlusClientUtils.h"
-#include "EaselManagerClient.h"
 
 extern "C" {
 #include "mm_camera_dbg.h"
@@ -878,7 +877,7 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
         Mutex::Autolock l(gHdrPlusClientLock);
         if (gEaselManagerClient != nullptr && gEaselManagerClient->isEaselPresentOnDevice()) {
             logEaselEvent("EASEL_STARTUP_LATENCY", "Resume");
-            rc = gEaselManagerClient->resume();
+            rc = gEaselManagerClient->resume(this);
             if (rc != 0) {
                 ALOGE("%s: Resuming Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
                 return rc;
@@ -14686,6 +14685,17 @@ status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked()
     }
 
     return OK;
+}
+
+void QCamera3HardwareInterface::onEaselFatalError(std::string errMsg)
+{
+    ALOGE("%s: Got an Easel fatal error: %s", __FUNCTION__, errMsg.c_str());
+    // Set HAL state to error.
+    pthread_mutex_lock(&mMutex);
+    mState = ERROR;
+    pthread_mutex_unlock(&mMutex);
+
+    handleCameraDeviceError();
 }
 
 void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
