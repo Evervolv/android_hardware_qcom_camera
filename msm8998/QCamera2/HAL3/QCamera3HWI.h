@@ -48,6 +48,7 @@
 #include "QCamera3VendorTags.h"
 #include "QCameraDualCamSettings.h"
 
+#include "EaselManagerClient.h"
 #include "HdrPlusClient.h"
 
 extern "C" {
@@ -228,7 +229,8 @@ private:
     QCamera3HardwareInterface *mParent;
 };
 
-class QCamera3HardwareInterface : HdrPlusClientListener {
+class QCamera3HardwareInterface : public HdrPlusClientListener,
+                                  public EaselManagerClientListener {
 public:
     /* static variable and functions accessed by camera service */
     static camera3_device_ops_t mCameraOps;
@@ -810,6 +812,8 @@ private:
 
     // Wait until opening HDR+ client completes if it's being opened.
     void finishHdrPlusClientOpeningLocked(std::unique_lock<std::mutex> &lock);
+    // Easel manager client callbacks.
+    void onEaselFatalError(std::string errMsg);
 
     // HDR+ client callbacks.
     void onOpened(std::unique_ptr<HdrPlusClient> client) override;
