@@ -3884,7 +3884,15 @@ QCamera3StreamMem* QCamera3PicChannel::getStreamBufs(uint32_t /*len*/)
 void QCamera3PicChannel::putStreamBufs()
 {
     QCamera3ProcessingChannel::putStreamBufs();
+    Mutex::Autolock lock(mFreeBuffersLock);
     mFreeBufferList.clear();
+
+    if (nullptr != mYuvMemory) {
+        uint32_t count = mYuvMemory->getCnt();
+        for (uint32_t i = 0; i < count; i++) {
+            mFreeBufferList.push_back(i);
+        }
+    }
 }
 
 int32_t QCamera3PicChannel::queueJpegSetting(uint32_t index, metadata_buffer_t *metadata)
