@@ -782,12 +782,18 @@ typedef struct {
     /** stop_channel: fucntion definition for stopping a channel
      *    @camera_handle : camer handler
      *    @ch_id : channel handler
+     *    @stop_immediately : whether to stop channel immediately. If true,
+     *                        streams will be stopped immediately without
+     *                        waiting for frame boundary. If false, streams
+     *                        will be stopped cleanly, which may wait for frame
+     *                        boundary based on stream conditions.
      *  Return value: 0 -- success
      *                -1 -- failure
      * This call will stop all streams belongs to the channel
      **/
     int32_t (*stop_channel) (uint32_t camera_handle,
-                             uint32_t ch_id);
+                             uint32_t ch_id,
+                             bool stop_immediately);
 
     /** qbuf: fucntion definition for queuing a frame buffer back to
      *        kernel for reuse
