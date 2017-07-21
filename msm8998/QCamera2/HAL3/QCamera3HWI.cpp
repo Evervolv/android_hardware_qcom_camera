@@ -14550,7 +14550,7 @@ bool QCamera3HardwareInterface::trySubmittingHdrPlusRequestLocked(
     pbcamera::StreamBuffer buffer;
     buffer.streamId = kPbYuvOutputStreamId;
     buffer.dmaBufFd = yuvBuffer->fd;
-    buffer.data = yuvBuffer->buffer;
+    buffer.data = yuvBuffer->fd == -1 ? yuvBuffer->buffer : nullptr;
     buffer.dataSize = yuvBuffer->frame_len;
 
     pbcamera::CaptureRequest pbRequest;
