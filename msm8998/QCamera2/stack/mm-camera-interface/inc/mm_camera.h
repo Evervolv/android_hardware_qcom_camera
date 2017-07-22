@@ -764,7 +764,7 @@ extern int32_t mm_camera_start_channel(mm_camera_obj_t *my_obj,
 extern int32_t mm_camera_start_sensor_stream_on(mm_camera_obj_t *my_obj,
                                        uint32_t ch_id);
 extern int32_t mm_camera_stop_channel(mm_camera_obj_t *my_obj,
-                                      uint32_t ch_id);
+                                      uint32_t ch_id, bool stop_immediately);
 extern int32_t mm_camera_request_super_buf(mm_camera_obj_t *my_obj,
         uint32_t ch_id, mm_camera_req_buf_t *buf);
 extern int32_t mm_camera_cancel_super_buf_request(mm_camera_obj_t *my_obj,

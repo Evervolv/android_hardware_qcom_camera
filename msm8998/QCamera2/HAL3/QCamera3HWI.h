@@ -411,7 +411,7 @@ private:
 
     int openCamera();
     int closeCamera();
-    int flush(bool restartChannels);
+    int flush(bool restartChannels, bool stopChannelImmediately = false);
     static size_t calcMaxJpegSize(uint32_t camera_id);
     cam_dimension_t getMaxRawSize(uint32_t camera_id);
     static void addStreamConfig(Vector<int32_t> &available_stream_configs,
@@ -489,7 +489,7 @@ private:
     void notifyError(uint32_t frameNumber,
             camera3_error_msg_code_t errorCode);
     int32_t getReprocessibleOutputStreamId(uint32_t &id);
-    int32_t handleCameraDeviceError();
+    int32_t handleCameraDeviceError(bool stopChannelImmediately = false);
 
     bool isOnEncoder(const cam_dimension_t max_viewfinder_size,
             uint32_t width, uint32_t height);
