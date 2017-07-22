@@ -70,7 +70,7 @@ int32_t mm_stream_do_action(mm_stream_t *my_obj,
                             void *in_value);
 int32_t mm_stream_streamon(mm_stream_t *my_obj);
 int32_t mm_stream_start_sensor_streaming(mm_stream_t *my_obj);
-int32_t mm_stream_streamoff(mm_stream_t *my_obj);
+int32_t mm_stream_streamoff(mm_stream_t *my_obj, bool stop_immediately);
 int32_t mm_stream_read_msm_frame(mm_stream_t * my_obj,
                                  mm_camera_buf_info_t* buf_info,
                                  uint8_t num_planes);
@@ -951,9 +951,10 @@ int32_t mm_stream_fsm_active(mm_stream_t * my_obj,
         break;
     case MM_STREAM_EVT_STOP:
         {
+            bool stop_immediately = in_val ? *(bool*)in_val : FALSE;
             uint8_t has_cb = 0;
             uint8_t i;
-            rc = mm_stream_streamoff(my_obj);
+            rc = mm_stream_streamoff(my_obj, stop_immediately);
 
             pthread_mutex_lock(&my_obj->cb_lock);
             for (i = 0; i < MM_CAMERA_STREAM_BUF_CB_MAX; i++) {
@@ -1438,13 +1439,15 @@ error_case:
  * DESCRIPTION: stream off a stream. sending v4l2 request to kernel
  *
  * PARAMETERS :
- *   @my_obj       : stream object
+ *   @my_obj          : stream object
+ *   @stop_immediately: stop stream immediately without waiting for frame
+ *                      boundary.
  *
  * RETURN     : int32_t type of status
  *              0  -- success
  *              -1 -- failure
  *==========================================================================*/
-int32_t mm_stream_streamoff(mm_stream_t *my_obj)
+int32_t mm_stream_streamoff(mm_stream_t *my_obj, bool stop_immediately)
 {
     int32_t rc = 0;
     enum v4l2_buf_type buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -1470,11 +1473,12 @@ int32_t mm_stream_streamoff(mm_stream_t *my_obj)
     cam_shim_packet_t *shim_cmd;
     cam_shim_cmd_data shim_cmd_data;
     mm_camera_obj_t *cam_obj = my_obj->ch_obj->cam_obj;
+    unsigned int value = stop_immediately ? 1 : 0;
 
     memset(&shim_cmd_data, 0, sizeof(shim_cmd_data));
     shim_cmd_data.command = MSM_CAMERA_PRIV_STREAM_OFF;
     shim_cmd_data.stream_id = my_obj->server_stream_id;
-    shim_cmd_data.value = NULL;
+    shim_cmd_data.value = &value;
     shim_cmd = mm_camera_create_shim_cmd_packet(CAM_SHIM_SET_PARM,
             cam_obj->sessionid, &shim_cmd_data);
 
