@@ -74,7 +74,7 @@ int32_t mm_channel_get_bundle_info(mm_channel_t *my_obj,
                                    cam_bundle_config_t *bundle_info);
 int32_t mm_channel_start(mm_channel_t *my_obj);
 int32_t mm_channel_start_sensor_streaming(mm_channel_t *my_obj);
-int32_t mm_channel_stop(mm_channel_t *my_obj);
+int32_t mm_channel_stop(mm_channel_t *my_obj, bool stop_immediately);
 int32_t mm_channel_request_super_buf(mm_channel_t *my_obj,
         mm_camera_req_buf_t *buf);
 int32_t mm_channel_cancel_super_buf_request(mm_channel_t *my_obj);
@@ -1078,7 +1078,8 @@ int32_t mm_channel_fsm_fn_active(mm_channel_t *my_obj,
     switch (evt) {
     case MM_CHANNEL_EVT_STOP:
         {
-            rc = mm_channel_stop(my_obj);
+            bool stop_immediately = in_val ? *(bool*)in_val : FALSE;
+            rc = mm_channel_stop(my_obj, stop_immediately);
             my_obj->state = MM_CHANNEL_STATE_STOPPED;
         }
         break;
@@ -2024,7 +2025,7 @@ int32_t mm_channel_start_sensor_streaming(mm_channel_t *my_obj)
  *              0  -- success
  *              -1 -- failure
  *==========================================================================*/
-int32_t mm_channel_stop(mm_channel_t *my_obj)
+int32_t mm_channel_stop(mm_channel_t *my_obj, bool stopImmediately)
 {
     int32_t rc = 0;
     int i;
@@ -2071,7 +2072,7 @@ int32_t mm_channel_stop(mm_channel_t *my_obj)
         /* stream off */
         mm_stream_fsm_fn(s_objs[i],
                          MM_STREAM_EVT_STOP,
-                         NULL,
+                         &stopImmediately,
                          NULL);
 
         /* unreg buf at kernel */

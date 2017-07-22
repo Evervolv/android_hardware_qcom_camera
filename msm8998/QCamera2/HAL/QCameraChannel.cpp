@@ -437,7 +437,7 @@ int32_t QCameraChannel::stop()
         }
     }
 
-    rc = m_camOps->stop_channel(m_camHandle, m_handle);
+    rc = m_camOps->stop_channel(m_camHandle, m_handle, /*stop_immediately*/false);
 
     m_bIsActive = false;
     return rc;
