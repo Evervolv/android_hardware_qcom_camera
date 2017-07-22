@@ -1246,7 +1246,7 @@ int32_t mm_camera_muxer_stop_channel(uint32_t camera_handle,
     if(my_obj) {
         pthread_mutex_lock(&my_obj->cam_lock);
         pthread_mutex_unlock(&cam_obj->muxer_lock);
-        rc = mm_camera_stop_channel(my_obj, ch_id);
+        rc = mm_camera_stop_channel(my_obj, ch_id, /*stop_immediately*/FALSE);
     } else{
         pthread_mutex_unlock(&cam_obj->muxer_lock);
     }

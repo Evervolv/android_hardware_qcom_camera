@@ -682,7 +682,7 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
     }
     if (mChannelHandle) {
         mCameraHandle->ops->stop_channel(mCameraHandle->camera_handle,
-                mChannelHandle);
+                mChannelHandle, /*stop_immediately*/false);
         LOGD("stopping channel %d", mChannelHandle);
     }
 
@@ -1814,7 +1814,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     }
     if (mChannelHandle) {
         mCameraHandle->ops->stop_channel(mCameraHandle->camera_handle,
-                mChannelHandle);
+                mChannelHandle, /*stop_immediately*/false);
         LOGD("stopping channel %d", mChannelHandle);
     }
 
@@ -6145,13 +6145,15 @@ void QCamera3HardwareInterface::dump(int fd)
  *
  * PARAMETERS :
  *  @ restartChannels: re-start all channels
- *
+ *  @ stopChannelImmediately: stop the channel immediately. This should be used
+ *                            when device encountered an error and MIPI may has
+ *                            been stopped.
  *
  * RETURN     :
  *          0 on success
  *          Error code on failure
  *==========================================================================*/
-int QCamera3HardwareInterface::flush(bool restartChannels)
+int QCamera3HardwareInterface::flush(bool restartChannels, bool stopChannelImmediately)
 {
     KPI_ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_STOP_PREVIEW);
     int32_t rc = NO_ERROR;
@@ -6198,7 +6200,7 @@ int QCamera3HardwareInterface::flush(bool restartChannels)
     }
     if (mChannelHandle) {
         mCameraHandle->ops->stop_channel(mCameraHandle->camera_handle,
-                mChannelHandle);
+                mChannelHandle, stopChannelImmediately);
     }
 
     // Reset bundle info
@@ -6367,12 +6369,14 @@ int QCamera3HardwareInterface::flushPerf()
  * DESCRIPTION: This function calls internal flush and notifies the error to
  *              framework and updates the state variable.
  *
- * PARAMETERS : None
+ * PARAMETERS :
+ *   @stopChannelImmediately : stop channels immediately without waiting for
+ *                             frame boundary.
  *
  * RETURN     : NO_ERROR on Success
  *              Error code on failure
  *==========================================================================*/
-int32_t QCamera3HardwareInterface::handleCameraDeviceError()
+int32_t QCamera3HardwareInterface::handleCameraDeviceError(bool stopChannelImmediately)
 {
     int32_t rc = NO_ERROR;
 
@@ -6386,7 +6390,7 @@ int32_t QCamera3HardwareInterface::handleCameraDeviceError()
         }
         pthread_mutex_unlock(&mMutex);
 
-        rc = flush(false /* restart channels */);
+        rc = flush(false /* restart channels */, stopChannelImmediately);
         if (NO_ERROR != rc) {
             LOGE("internal flush to handle mState = ERROR failed");
         }
@@ -14695,7 +14699,7 @@ void QCamera3HardwareInterface::onEaselFatalError(std::string errMsg)
     mState = ERROR;
     pthread_mutex_unlock(&mMutex);
 
-    handleCameraDeviceError();
+    handleCameraDeviceError(/*stopChannelImmediately*/true);
 }
 
 void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
@@ -14750,7 +14754,7 @@ void QCamera3HardwareInterface::onFatalError()
     mState = ERROR;
     pthread_mutex_unlock(&mMutex);
 
-    handleCameraDeviceError();
+    handleCameraDeviceError(/*stopChannelImmediately*/true);
 }
 
 void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,

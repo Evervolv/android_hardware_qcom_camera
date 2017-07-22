@@ -1290,15 +1290,17 @@ int32_t mm_camera_start_sensor_stream_on(mm_camera_obj_t *my_obj, uint32_t ch_id
  * DESCRIPTION: stop a channel, which will stop all streams in the channel
  *
  * PARAMETERS :
- *   @my_obj       : camera object
- *   @ch_id        : channel handle
+ *   @my_obj           : camera object
+ *   @ch_id            : channel handle
+ *   @stop_immediately : stop channel immediately without waiting for frame
+ *                       boundary.
  *
  * RETURN     : int32_t type of status
  *              0  -- success
  *              -1 -- failure
  *==========================================================================*/
 int32_t mm_camera_stop_channel(mm_camera_obj_t *my_obj,
-                               uint32_t ch_id)
+                               uint32_t ch_id, bool stop_immediately)
 {
     int32_t rc = 0;
     mm_channel_t * ch_obj =
@@ -1307,10 +1309,9 @@ int32_t mm_camera_stop_channel(mm_camera_obj_t *my_obj,
     if (NULL != ch_obj) {
         pthread_mutex_lock(&ch_obj->ch_lock);
         pthread_mutex_unlock(&my_obj->cam_lock);
-
         rc = mm_channel_fsm_fn(ch_obj,
                                MM_CHANNEL_EVT_STOP,
-                               NULL,
+                               &stop_immediately,
                                NULL);
     } else {
         pthread_mutex_unlock(&my_obj->cam_lock);
