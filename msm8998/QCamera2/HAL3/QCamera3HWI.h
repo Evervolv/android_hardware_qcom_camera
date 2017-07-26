@@ -314,18 +314,8 @@ public:
     int translateFwkMetadataToHalMetadata(const camera_metadata_t *frameworkMetadata,
             metadata_buffer_t *hal_metadata, uint32_t snapshotStreamId, int64_t minFrameDuration);
     camera_metadata_t* translateCbUrgentMetadataToResultMetadata (
-                             metadata_buffer_t *metadata, bool lastUrgentMetadataInBatch);
-    camera_metadata_t* translateFromHalMetadata(metadata_buffer_t *metadata,
-                            nsecs_t timestamp, int32_t request_id,
-                            const CameraMetadata& jpegMetadata, uint8_t pipeline_depth,
-                            uint8_t capture_intent,
-                            uint8_t hybrid_ae_enable,
-                            /* DevCamDebug metadata translateFromHalMetadata augment .h */
-                            uint8_t DevCamDebug_meta_enable,
-                            /* DevCamDebug metadata end */
-                            bool pprocDone, uint8_t fwk_cacMode,
-                            bool lastMetadataInBatch,
-                            const bool *enableZsl);
+                             metadata_buffer_t *metadata, bool lastUrgentMetadataInBatch,
+                             uint32_t frame_number);
     camera_metadata_t* saveRequestSettings(const CameraMetadata& jpegMetadata,
                             camera3_capture_request_t *request);
     int initParameters();
@@ -601,6 +591,10 @@ private:
         uint8_t DevCamDebug_meta_enable;
         /* DevCamDebug metadata end */
 
+        bool focusStateSent;
+        bool focusStateValid;
+        uint8_t focusState;
+
         bool enableZsl; // If ZSL is enabled.
         bool hdrplus; // If this is an HDR+ request.
     } PendingRequestInfo;
@@ -748,6 +742,13 @@ private:
             const pendingRequestIterator requestIter,
             bool lastUrgentMetadataInBatch);
 
+    camera_metadata_t* translateFromHalMetadata(metadata_buffer_t *metadata,
+                            const PendingRequestInfo& pendingRequest,
+                            /* DevCamDebug metadata end */
+                            bool pprocDone,
+                            bool lastMetadataInBatch,
+                            const bool *enableZsl);
+
     State mState;
     //Dual camera related params
     bool mIsDeviceLinked;
@@ -838,6 +839,8 @@ private:
     bool mFirstPreviewIntentSeen;
 
     bool m_bSensorHDREnabled;
+
+    cam_trigger_t mAfTrigger;
 };
 
 }; // namespace qcamera
