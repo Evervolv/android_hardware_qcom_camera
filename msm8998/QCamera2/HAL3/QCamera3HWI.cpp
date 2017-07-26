@@ -519,7 +519,8 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mZslEnabled(false),
       mIsApInputUsedForHdrPlus(false),
       mFirstPreviewIntentSeen(false),
-      m_bSensorHDREnabled(false)
+      m_bSensorHDREnabled(false),
+      mAfTrigger()
 {
     getLogLevel();
     mCommon.init(gCamCapability[cameraId]);
@@ -3525,7 +3526,7 @@ void QCamera3HardwareInterface::sendPartialMetadataWithLock(
 
     // Extract 3A metadata
     result.result = translateCbUrgentMetadataToResultMetadata(
-            metadata, lastUrgentMetadataInBatch);
+            metadata, lastUrgentMetadataInBatch, requestIter->frame_number);
     // Populate metadata result
     result.frame_number = requestIter->frame_number;
     result.num_output_buffers = 0;
@@ -3839,14 +3840,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
             }
 
             resultMetadata = translateFromHalMetadata(metadata,
-                    pendingRequest.timestamp, pendingRequest.request_id,
-                    pendingRequest.jpegMetadata, pendingRequest.pipeline_depth,
-                    pendingRequest.capture_intent,
-                    pendingRequest.hybrid_ae_enable,
-                     /* DevCamDebug metadata translateFromHalMetadata function call*/
-                    pendingRequest.DevCamDebug_meta_enable,
-                    /* DevCamDebug metadata end */
-                    internalPproc, pendingRequest.fwkCacMode,
+                    pendingRequest, internalPproc,
                     lastMetadataInBatch, enableZsl);
 
             updateFpsInPreviewBuffer(metadata, pendingRequest.frame_number);
@@ -6631,12 +6625,7 @@ template <class mapType> cam_cds_mode_type_t lookupProp(const mapType *arr,
  *
  * PARAMETERS :
  *   @metadata : metadata information from callback
- *   @timestamp: metadata buffer timestamp
- *   @request_id: request id
- *   @jpegMetadata: additional jpeg metadata
- *   @hybrid_ae_enable: whether hybrid ae is enabled
- *   @DevCamDebug_meta_enable: enable DevCamDebug meta
- *   // DevCamDebug metadata end
+ *   @pendingRequest: pending request for this metadata
  *   @pprocDone: whether internal offline postprocsesing is done
  *   @lastMetadataInBatch: Boolean to indicate whether this is the last metadata
  *                         in a batch. Always true for non-batch mode.
@@ -6647,17 +6636,8 @@ template <class mapType> cam_cds_mode_type_t lookupProp(const mapType *arr,
 camera_metadata_t*
 QCamera3HardwareInterface::translateFromHalMetadata(
                                  metadata_buffer_t *metadata,
-                                 nsecs_t timestamp,
-                                 int32_t request_id,
-                                 const CameraMetadata& jpegMetadata,
-                                 uint8_t pipeline_depth,
-                                 uint8_t capture_intent,
-                                 uint8_t hybrid_ae_enable,
-                                 /* DevCamDebug metadata translateFromHalMetadata argument */
-                                 uint8_t DevCamDebug_meta_enable,
-                                 /* DevCamDebug metadata end */
+                                 const PendingRequestInfo& pendingRequest,
                                  bool pprocDone,
-                                 uint8_t fwk_cacMode,
                                  bool lastMetadataInBatch,
                                  const bool *enableZsl)
 {
@@ -6668,27 +6648,27 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         /* In batch mode, only populate SENSOR_TIMESTAMP if this is not the last in batch.
          * Timestamp is needed because it's used for shutter notify calculation.
          * */
-        camMetadata.update(ANDROID_SENSOR_TIMESTAMP, &timestamp, 1);
+        camMetadata.update(ANDROID_SENSOR_TIMESTAMP, &pendingRequest.timestamp, 1);
         resultMetadata = camMetadata.release();
         return resultMetadata;
     }
 
-    if (jpegMetadata.entryCount())
-        camMetadata.append(jpegMetadata);
+    if (pendingRequest.jpegMetadata.entryCount())
+        camMetadata.append(pendingRequest.jpegMetadata);
 
-    camMetadata.update(ANDROID_SENSOR_TIMESTAMP, &timestamp, 1);
-    camMetadata.update(ANDROID_REQUEST_ID, &request_id, 1);
-    camMetadata.update(ANDROID_REQUEST_PIPELINE_DEPTH, &pipeline_depth, 1);
-    camMetadata.update(ANDROID_CONTROL_CAPTURE_INTENT, &capture_intent, 1);
-    camMetadata.update(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE, &hybrid_ae_enable, 1);
+    camMetadata.update(ANDROID_SENSOR_TIMESTAMP, &pendingRequest.timestamp, 1);
+    camMetadata.update(ANDROID_REQUEST_ID, &pendingRequest.request_id, 1);
+    camMetadata.update(ANDROID_REQUEST_PIPELINE_DEPTH, &pendingRequest.pipeline_depth, 1);
+    camMetadata.update(ANDROID_CONTROL_CAPTURE_INTENT, &pendingRequest.capture_intent, 1);
+    camMetadata.update(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE, &pendingRequest.hybrid_ae_enable, 1);
     if (mBatchSize == 0) {
         // DevCamDebug metadata translateFromHalMetadata. Only update this one for non-HFR mode
-        camMetadata.update(DEVCAMDEBUG_META_ENABLE, &DevCamDebug_meta_enable, 1);
+        camMetadata.update(DEVCAMDEBUG_META_ENABLE, &pendingRequest.DevCamDebug_meta_enable, 1);
     }
 
     // atrace_begin(ATRACE_TAG_ALWAYS, "DevCamDebugInfo");
     // Only update DevCameraDebug metadta conditionally: non-HFR mode and it is enabled.
-    if (mBatchSize == 0 && DevCamDebug_meta_enable != 0) {
+    if (mBatchSize == 0 && pendingRequest.DevCamDebug_meta_enable != 0) {
         // DevCamDebug metadata translateFromHalMetadata AF
         IF_META_AVAILABLE(int32_t, DevCamDebug_af_lens_position,
                 CAM_INTF_META_DEV_CAM_AF_LENS_POSITION, metadata) {
@@ -7722,22 +7702,17 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                 hAeRegions->rect.height);
     }
 
-    IF_META_AVAILABLE(uint32_t, focusMode, CAM_INTF_PARM_FOCUS_MODE, metadata) {
-        int val = lookupFwkName(FOCUS_MODES_MAP, METADATA_MAP_SIZE(FOCUS_MODES_MAP), *focusMode);
-        if (NAME_NOT_FOUND != val) {
-            uint8_t fwkAfMode = (uint8_t)val;
-            camMetadata.update(ANDROID_CONTROL_AF_MODE, &fwkAfMode, 1);
-            LOGD("Metadata : ANDROID_CONTROL_AF_MODE %d", val);
+    if (!pendingRequest.focusStateSent) {
+        if (pendingRequest.focusStateValid) {
+            camMetadata.update(ANDROID_CONTROL_AF_STATE, &pendingRequest.focusState, 1);
+            LOGD("Metadata : ANDROID_CONTROL_AF_STATE %u", pendingRequest.focusState);
         } else {
-            LOGH("Metadata not found : ANDROID_CONTROL_AF_MODE %d",
-                    val);
+            IF_META_AVAILABLE(uint32_t, afState, CAM_INTF_META_AF_STATE, metadata) {
+                uint8_t fwk_afState = (uint8_t) *afState;
+                camMetadata.update(ANDROID_CONTROL_AF_STATE, &fwk_afState, 1);
+                LOGD("Metadata : ANDROID_CONTROL_AF_STATE %u", *afState);
+            }
         }
-    }
-
-    IF_META_AVAILABLE(uint32_t, afState, CAM_INTF_META_AF_STATE, metadata) {
-        uint8_t fwk_afState = (uint8_t) *afState;
-        camMetadata.update(ANDROID_CONTROL_AF_STATE, &fwk_afState, 1);
-        LOGD("Metadata : ANDROID_CONTROL_AF_STATE %u", *afState);
     }
 
     IF_META_AVAILABLE(float, focusDistance, CAM_INTF_META_LENS_FOCUS_DISTANCE, metadata) {
@@ -7752,7 +7727,6 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         uint8_t fwk_lensState = *lensState;
         camMetadata.update(ANDROID_LENS_STATE , &fwk_lensState, 1);
     }
-
 
     IF_META_AVAILABLE(uint32_t, hal_ab_mode, CAM_INTF_PARM_ANTIBANDING, metadata) {
         uint32_t ab_mode = *hal_ab_mode;
@@ -7954,15 +7928,15 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                 uint8_t resultCacMode = (uint8_t)val;
                 // check whether CAC result from CB is equal to Framework set CAC mode
                 // If not equal then set the CAC mode came in corresponding request
-                if (fwk_cacMode != resultCacMode) {
-                    resultCacMode = fwk_cacMode;
+                if (pendingRequest.fwkCacMode != resultCacMode) {
+                    resultCacMode = pendingRequest.fwkCacMode;
                 }
                 //Check if CAC is disabled by property
                 if (m_cacModeDisabled) {
                     resultCacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_OFF;
                 }
 
-                LOGD("fwk_cacMode=%d resultCacMode=%d", fwk_cacMode, resultCacMode);
+                LOGD("fwk_cacMode=%d resultCacMode=%d", pendingRequest.fwkCacMode, resultCacMode);
                 camMetadata.update(ANDROID_COLOR_CORRECTION_ABERRATION_MODE, &resultCacMode, 1);
             } else {
                 LOGE("Invalid CAC camera parameter: %d", *cacMode);
@@ -8198,13 +8172,15 @@ mm_jpeg_exif_params_t QCamera3HardwareInterface::get3AExifParams()
  *   @lastUrgentMetadataInBatch: Boolean to indicate whether this is the last
  *                               urgent metadata in a batch. Always true for
  *                               non-batch mode.
+ *   @frame_number :             frame number for this urgent metadata
  *
  * RETURN     : camera_metadata_t*
  *              metadata in a format specified by fwk
  *==========================================================================*/
 camera_metadata_t*
 QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
-                                (metadata_buffer_t *metadata, bool lastUrgentMetadataInBatch)
+                                (metadata_buffer_t *metadata, bool lastUrgentMetadataInBatch,
+                                 uint32_t frame_number)
 {
     CameraMetadata camMetadata;
     camera_metadata_t *resultMetadata;
@@ -8239,15 +8215,52 @@ QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
         LOGD("urgent Metadata : ANDROID_CONTROL_AE_STATE %u", *ae_state);
     }
 
-    IF_META_AVAILABLE(cam_trigger_t, af_trigger, CAM_INTF_META_AF_TRIGGER, metadata) {
-        camMetadata.update(ANDROID_CONTROL_AF_TRIGGER,
-                &af_trigger->trigger, 1);
-        LOGD("urgent Metadata : CAM_INTF_META_AF_TRIGGER = %d",
-                 af_trigger->trigger);
-        camMetadata.update(ANDROID_CONTROL_AF_TRIGGER_ID, &af_trigger->trigger_id, 1);
-        LOGD("urgent Metadata : ANDROID_CONTROL_AF_TRIGGER_ID = %d",
-                af_trigger->trigger_id);
+    IF_META_AVAILABLE(uint32_t, focusMode, CAM_INTF_PARM_FOCUS_MODE, metadata) {
+        int val = lookupFwkName(FOCUS_MODES_MAP, METADATA_MAP_SIZE(FOCUS_MODES_MAP), *focusMode);
+        if (NAME_NOT_FOUND != val) {
+            uint8_t fwkAfMode = (uint8_t)val;
+            camMetadata.update(ANDROID_CONTROL_AF_MODE, &fwkAfMode, 1);
+            LOGD("urgent Metadata : ANDROID_CONTROL_AF_MODE %d", val);
+        } else {
+            LOGH("urgent Metadata not found : ANDROID_CONTROL_AF_MODE %d",
+                    val);
+        }
     }
+
+    IF_META_AVAILABLE(cam_trigger_t, af_trigger, CAM_INTF_META_AF_TRIGGER, metadata) {
+        LOGD("urgent Metadata : CAM_INTF_META_AF_TRIGGER = %d",
+            af_trigger->trigger);
+        LOGD("urgent Metadata : ANDROID_CONTROL_AF_TRIGGER_ID = %d",
+            af_trigger->trigger_id);
+
+        IF_META_AVAILABLE(uint32_t, afState, CAM_INTF_META_AF_STATE, metadata) {
+            mAfTrigger = *af_trigger;
+            uint32_t fwk_AfState = (uint32_t) *afState;
+
+            // If this is the result for a new trigger, check if there is new early
+            // af state. If there is, use the last af state for all results
+            // preceding current partial frame number.
+            for (auto & pendingRequest : mPendingRequestsList) {
+                if (pendingRequest.frame_number < frame_number) {
+                    pendingRequest.focusStateValid = true;
+                    pendingRequest.focusState = fwk_AfState;
+                } else if (pendingRequest.frame_number == frame_number) {
+                    IF_META_AVAILABLE(uint32_t, earlyAfState, CAM_INTF_META_EARLY_AF_STATE, metadata) {
+                        // Check if early AF state for trigger exists. If yes, send AF state as
+                        // partial result for better latency.
+                        uint8_t fwkEarlyAfState = (uint8_t) *earlyAfState;
+                        pendingRequest.focusStateSent = true;
+                        camMetadata.update(ANDROID_CONTROL_AF_STATE, &fwkEarlyAfState, 1);
+                        LOGD("urgent Metadata(%d) : ANDROID_CONTROL_AF_STATE %u",
+                                 frame_number, fwkEarlyAfState);
+                    }
+                }
+            }
+        }
+    }
+    camMetadata.update(ANDROID_CONTROL_AF_TRIGGER,
+        &mAfTrigger.trigger, 1);
+    camMetadata.update(ANDROID_CONTROL_AF_TRIGGER_ID, &mAfTrigger.trigger_id, 1);
 
     IF_META_AVAILABLE(cam_area_t, hAfRegions, CAM_INTF_META_AF_ROI, metadata) {
         /*af regions*/
