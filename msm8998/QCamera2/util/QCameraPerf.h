@@ -34,10 +34,10 @@
 #include <utils/Mutex.h>
 
 // Camera dependencies
-#include <android/hardware/power/1.0/IPower.h>
+#include <android/hardware/power/1.1/IPower.h>
 
 using namespace android;
-using android::hardware::power::V1_0::IPower;
+using android::hardware::power::V1_1::IPower;
 using android::hardware::power::V1_0::PowerHint;
 using ::android::hardware::Return;
 using ::android::hardware::Void;
@@ -129,7 +129,7 @@ public:
     inline perfLockAcquire perfLockAcq() { return mPerfLockAcq; }
     inline perfLockRelease perfLockRel() { return mPerfLockRel; }
     inline bool powerHint(PowerHint hint, int32_t data) {
-        return ((mPowerHal == nullptr) ? false : mPowerHal->powerHint(hint, data).isOk());
+        return ((mPowerHal == nullptr) ? false : mPowerHal->powerHintAsync(hint, data).isOk());
     }
 };
 
