@@ -1197,6 +1197,10 @@ typedef struct {
     INCLUDE(CAM_INTF_META_DEV_CAM_AEC_LTM_RATIO,             float,                  1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AEC_LA_RATIO,              float,                  1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AEC_GAMMA_RATIO,           float,                  1);
+    /* DevCamDebug metadata CAM_INTF.H AEC MOTION */
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_CAMERA_MOTION_DX,      float,                  1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_CAMERA_MOTION_DY,      float,                  1);
+    INCLUDE(CAM_INTF_META_DEV_CAM_AEC_SUBJECT_MOTION,        float,                  1);
     /* DevCamDebug metadata CAM_INTF.H AWB */
     INCLUDE(CAM_INTF_META_DEV_CAM_AWB_R_GAIN,           float,                       1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AWB_G_GAIN,           float,                       1);
