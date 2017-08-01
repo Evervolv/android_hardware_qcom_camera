@@ -6941,6 +6941,25 @@ QCamera3HardwareInterface::translateFromHalMetadata(
             float fwk_DevCamDebug_aec_gamma_ratio = *DevCamDebug_aec_gamma_ratio;
             camMetadata.update(DEVCAMDEBUG_AEC_GAMMA_RATIO, &fwk_DevCamDebug_aec_gamma_ratio, 1);
         }
+        // DevCamDebug metadata translateFromHalMetadata AEC MOTION
+        IF_META_AVAILABLE(float, DevCamDebug_aec_camera_motion_dx,
+                CAM_INTF_META_DEV_CAM_AEC_CAMERA_MOTION_DX, metadata) {
+            float fwk_DevCamDebug_aec_camera_motion_dx = *DevCamDebug_aec_camera_motion_dx;
+            camMetadata.update(DEVCAMDEBUG_AEC_CAMERA_MOTION_DX,
+                               &fwk_DevCamDebug_aec_camera_motion_dx, 1);
+        }
+        IF_META_AVAILABLE(float, DevCamDebug_aec_camera_motion_dy,
+                CAM_INTF_META_DEV_CAM_AEC_CAMERA_MOTION_DY, metadata) {
+            float fwk_DevCamDebug_aec_camera_motion_dy = *DevCamDebug_aec_camera_motion_dy;
+            camMetadata.update(DEVCAMDEBUG_AEC_CAMERA_MOTION_DY,
+                               &fwk_DevCamDebug_aec_camera_motion_dy, 1);
+        }
+        IF_META_AVAILABLE(float, DevCamDebug_aec_subject_motion,
+                CAM_INTF_META_DEV_CAM_AEC_SUBJECT_MOTION, metadata) {
+            float fwk_DevCamDebug_aec_subject_motion = *DevCamDebug_aec_subject_motion;
+            camMetadata.update(DEVCAMDEBUG_AEC_SUBJECT_MOTION,
+                               &fwk_DevCamDebug_aec_subject_motion, 1);
+        }
         // DevCamDebug metadata translateFromHalMetadata AWB
         IF_META_AVAILABLE(float, DevCamDebug_awb_r_gain,
                 CAM_INTF_META_DEV_CAM_AWB_R_GAIN, metadata) {
@@ -10246,6 +10265,10 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        DEVCAMDEBUG_AEC_LTM_RATIO,
        DEVCAMDEBUG_AEC_LA_RATIO,
        DEVCAMDEBUG_AEC_GAMMA_RATIO,
+       // DevCamDebug metadata result_keys AEC MOTION
+       DEVCAMDEBUG_AEC_CAMERA_MOTION_DX,
+       DEVCAMDEBUG_AEC_CAMERA_MOTION_DY,
+       DEVCAMDEBUG_AEC_SUBJECT_MOTION,
        // DevCamDebug metadata result_keys AWB
        DEVCAMDEBUG_AWB_R_GAIN,
        DEVCAMDEBUG_AWB_G_GAIN,
