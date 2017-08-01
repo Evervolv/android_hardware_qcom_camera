@@ -295,6 +295,10 @@ vendor_tag_info_t nexus_experimental_2016[NEXUS_EXPERIMENTAL_2016_END -
    { "devcamdebug_aec_ltm_ratio",              TYPE_FLOAT },
    { "devcamdebug_aec_la_ratio",               TYPE_FLOAT },
    { "devcamdebug_aec_gamma_ratio",            TYPE_FLOAT },
+   // DevCamDebug vendor AEC MOTION
+   { "devcamdebug_aec_camera_motion_dx",       TYPE_FLOAT },
+   { "devcamdebug_aec_camera_motion_dy",       TYPE_FLOAT },
+   { "devcamdebug_aec_subject_motion",         TYPE_FLOAT },
    // DevCamDebug vendor tag AWB
    { "devcamdebug_awb_r_gain",                 TYPE_FLOAT },
    { "devcamdebug_awb_g_gain",                 TYPE_FLOAT },
@@ -498,6 +502,10 @@ uint32_t qcamera3_all_tags[] = {
     (uint32_t)DEVCAMDEBUG_AEC_LTM_RATIO,
     (uint32_t)DEVCAMDEBUG_AEC_LA_RATIO,
     (uint32_t)DEVCAMDEBUG_AEC_GAMMA_RATIO,
+    // DEVCAMDEBUG AEC MOTION
+    (uint32_t)DEVCAMDEBUG_AEC_CAMERA_MOTION_DX,
+    (uint32_t)DEVCAMDEBUG_AEC_CAMERA_MOTION_DY,
+    (uint32_t)DEVCAMDEBUG_AEC_SUBJECT_MOTION,
     // DEVCAMDEBUG AWB
     (uint32_t)DEVCAMDEBUG_AWB_R_GAIN,
     (uint32_t)DEVCAMDEBUG_AWB_G_GAIN,
