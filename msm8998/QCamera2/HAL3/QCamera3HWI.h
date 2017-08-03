@@ -315,7 +315,7 @@ public:
             metadata_buffer_t *hal_metadata, uint32_t snapshotStreamId, int64_t minFrameDuration);
     camera_metadata_t* translateCbUrgentMetadataToResultMetadata (
                              metadata_buffer_t *metadata, bool lastUrgentMetadataInBatch,
-                             uint32_t frame_number);
+                             uint32_t frame_number, bool isJumpstartMetadata);
     camera_metadata_t* saveRequestSettings(const CameraMetadata& jpegMetadata,
                             camera3_capture_request_t *request);
     int initParameters();
@@ -740,7 +740,7 @@ private:
     bool mFirstMetadataCallback;
     void sendPartialMetadataWithLock(metadata_buffer_t *metadata,
             const pendingRequestIterator requestIter,
-            bool lastUrgentMetadataInBatch);
+            bool lastUrgentMetadataInBatch, bool isJumpstartMetadata);
 
     camera_metadata_t* translateFromHalMetadata(metadata_buffer_t *metadata,
                             const PendingRequestInfo& pendingRequest,
