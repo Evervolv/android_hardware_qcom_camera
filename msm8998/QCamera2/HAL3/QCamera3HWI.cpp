@@ -3509,6 +3509,9 @@ void QCamera3HardwareInterface::notifyError(uint32_t frameNumber,
  *              which the partial result is being sen
  *              @lastUrgentMetadataInBatch: Boolean to indicate whether this is the
  *                  last urgent metadata in a batch. Always true for non-batch mode
+ *              @isJumpstartMetadata: Whether this is a partial metadata for
+ *              jumpstart, i.e. even though it doesn't map to a valid partial
+ *              frame number, its metadata entries should be kept.
  *
  * RETURN     :
  *
@@ -3517,7 +3520,8 @@ void QCamera3HardwareInterface::notifyError(uint32_t frameNumber,
 void QCamera3HardwareInterface::sendPartialMetadataWithLock(
         metadata_buffer_t *metadata,
         const pendingRequestIterator requestIter,
-        bool lastUrgentMetadataInBatch)
+        bool lastUrgentMetadataInBatch,
+        bool isJumpstartMetadata)
 {
     camera3_capture_result_t result;
     memset(&result, 0, sizeof(camera3_capture_result_t));
@@ -3526,7 +3530,8 @@ void QCamera3HardwareInterface::sendPartialMetadataWithLock(
 
     // Extract 3A metadata
     result.result = translateCbUrgentMetadataToResultMetadata(
-            metadata, lastUrgentMetadataInBatch, requestIter->frame_number);
+            metadata, lastUrgentMetadataInBatch, requestIter->frame_number,
+            isJumpstartMetadata);
     // Populate metadata result
     result.frame_number = requestIter->frame_number;
     result.num_output_buffers = 0;
@@ -3675,7 +3680,8 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
         for (pendingRequestIterator i =
                 mPendingRequestsList.begin(); i != mPendingRequestsList.end(); i++) {
             if (i->bUseFirstPartial) {
-                sendPartialMetadataWithLock(metadata, i, lastUrgentMetadataInBatch);
+                sendPartialMetadataWithLock(metadata, i, lastUrgentMetadataInBatch,
+                        true /*isJumpstartMetadata*/);
             }
         }
         mFirstMetadataCallback = false;
@@ -3701,7 +3707,8 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
 
             if (i->frame_number == urgent_frame_number &&
                      i->partial_result_cnt == 0) {
-                sendPartialMetadataWithLock(metadata, i, lastUrgentMetadataInBatch);
+                sendPartialMetadataWithLock(metadata, i, lastUrgentMetadataInBatch,
+                        false /*isJumpstartMetadata*/);
                 if (mResetInstantAEC && mInstantAECSettledFrameNumber == 0) {
                     // Instant AEC settled for this frame.
                     LOGH("instant AEC settled for frame number %d", urgent_frame_number);
@@ -8192,19 +8199,21 @@ mm_jpeg_exif_params_t QCamera3HardwareInterface::get3AExifParams()
  *                               urgent metadata in a batch. Always true for
  *                               non-batch mode.
  *   @frame_number :             frame number for this urgent metadata
- *
+ *   @isJumpstartMetadata: Whether this is a partial metadata for jumpstart,
+ *                         i.e. even though it doesn't map to a valid partial
+ *                         frame number, its metadata entries should be kept.
  * RETURN     : camera_metadata_t*
  *              metadata in a format specified by fwk
  *==========================================================================*/
 camera_metadata_t*
 QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
                                 (metadata_buffer_t *metadata, bool lastUrgentMetadataInBatch,
-                                 uint32_t frame_number)
+                                 uint32_t frame_number, bool isJumpstartMetadata)
 {
     CameraMetadata camMetadata;
     camera_metadata_t *resultMetadata;
 
-    if (!lastUrgentMetadataInBatch) {
+    if (!lastUrgentMetadataInBatch && !isJumpstartMetadata) {
         /* In batch mode, use empty metadata if this is not the last in batch
          */
         resultMetadata = allocate_camera_metadata(0, 0);
