@@ -13107,6 +13107,23 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
         }
     }
 
+    // Makernote
+    camera_metadata_entry entry = frame_settings.find(NEXUS_EXPERIMENTAL_2017_EXIF_MAKERNOTE);
+    if (entry.count != 0) {
+        if (entry.count <= MAX_MAKERNOTE_LENGTH) {
+            cam_makernote_t makernote;
+            makernote.length = entry.count;
+            memcpy(makernote.data, entry.data.u8, makernote.length);
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_MAKERNOTE, makernote)) {
+                rc = BAD_VALUE;
+            }
+        } else {
+            ALOGE("%s: Makernote length %u is larger than %d", __FUNCTION__, entry.count,
+                    MAX_MAKERNOTE_LENGTH);
+            rc = BAD_VALUE;
+        }
+    }
+
     return rc;
 }
 
