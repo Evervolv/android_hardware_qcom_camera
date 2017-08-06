@@ -2547,6 +2547,8 @@ typedef enum {
     CAM_INTF_META_AF_REGIONS_CONFIDENCE,
     /* Early AF state due to trigger */
     CAM_INTF_META_EARLY_AF_STATE,
+    /* Exposure time boost */
+    CAM_INTF_META_EXP_TIME_BOOST,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
