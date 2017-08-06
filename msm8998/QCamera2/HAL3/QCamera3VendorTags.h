@@ -439,6 +439,8 @@ enum qcamera3_ext_tags {
     /* PD plumbing */
     NEXUS_EXPERIMENTAL_2017_PD_DATA_DIMENSIONS,
     NEXUS_EXPERIMENTAL_2017_PD_DATA_ENABLE,
+    /* Exposure time boost */
+    NEXUS_EXPERIMENTAL_2017_EXP_TIME_BOOST,
     NEXUS_EXPERIMENTAL_2017_END,
 
     /* Select sensor mode for tango */
