@@ -7175,6 +7175,11 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         camMetadata.update(ANDROID_SENSOR_EXPOSURE_TIME , sensorExpTime, 1);
     }
 
+    IF_META_AVAILABLE(float, expTimeBoost, CAM_INTF_META_EXP_TIME_BOOST, metadata) {
+        LOGD("expTimeBoost = %f", *expTimeBoost);
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_EXP_TIME_BOOST, expTimeBoost, 1);
+    }
+
     IF_META_AVAILABLE(int64_t, sensorFameDuration,
             CAM_INTF_META_SENSOR_FRAME_DURATION, metadata) {
         LOGD("sensorFameDuration = %lld", *sensorFameDuration);
