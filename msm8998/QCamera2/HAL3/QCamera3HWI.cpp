@@ -96,7 +96,7 @@ namespace qcamera {
 #define MAX_HFR_BATCH_SIZE     (8)
 #define REGIONS_TUPLE_COUNT    5
 // Set a threshold for detection of missing buffers //seconds
-#define MISSING_REQUEST_BUF_TIMEOUT 10
+#define MISSING_REQUEST_BUF_TIMEOUT 5
 #define MISSING_HDRPLUS_REQUEST_BUF_TIMEOUT 30
 #define FLUSH_TIMEOUT 3
 #define METADATA_MAP_SIZE(MAP) (sizeof(MAP)/sizeof(MAP[0]))
@@ -476,6 +476,8 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mMinProcessedFrameDuration(0),
       mMinJpegFrameDuration(0),
       mMinRawFrameDuration(0),
+      mExpectedFrameDuration(0),
+      mExpectedInflightDuration(0),
       mMetaFrameCount(0U),
       mUpdateDebugLevel(false),
       mCallbacks(callbacks),
@@ -798,6 +800,13 @@ QCamera3HardwareInterface::pendingRequestIterator
     }
     if (i->settings != NULL)
         free_camera_metadata((camera_metadata_t*)i->settings);
+
+    mExpectedInflightDuration -= i->expectedFrameDuration;
+    if (mExpectedInflightDuration < 0) {
+        LOGE("Negative expected in-flight duration!");
+        mExpectedInflightDuration = 0;
+    }
+
     return mPendingRequestsList.erase(i);
 }
 
@@ -3025,6 +3034,8 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         req.mPendingBufferList.clear();
     }
     mPendingBuffersMap.mPendingBuffersInRequest.clear();
+    mExpectedInflightDuration = 0;
+    mExpectedFrameDuration = 0;
 
     mCurJpegMeta.clear();
     //Get min frame duration for this streams configuration
@@ -3654,6 +3665,9 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
             // HDR+ request is done. So allow a longer timeout.
             timeout = (mHdrPlusPendingRequests.size() > 0) ?
                     MISSING_HDRPLUS_REQUEST_BUF_TIMEOUT : MISSING_REQUEST_BUF_TIMEOUT;
+            if (timeout < mExpectedInflightDuration) {
+                timeout = mExpectedInflightDuration;
+            }
         }
 
         if ( (currentSysTime - req.timestamp) > s2ns(timeout) ) {
@@ -5516,6 +5530,8 @@ no_error:
     }
     pendingRequest.fwkCacMode = mCacMode;
     pendingRequest.hdrplus = hdrPlusRequest;
+    pendingRequest.expectedFrameDuration = mExpectedFrameDuration;
+    mExpectedInflightDuration += mExpectedFrameDuration;
 
     // extract enableZsl info
     if (gExposeEnableZslKey) {
@@ -10297,6 +10313,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS,
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM,
        NEXUS_EXPERIMENTAL_2017_AF_REGIONS_CONFIDENCE,
+       NEXUS_EXPERIMENTAL_2017_EXP_TIME_BOOST,
        };
 
     size_t result_keys_cnt =
@@ -11477,6 +11494,89 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
 }
 
 /*===========================================================================
+ * FUNCTION   : getExpectedFrameDuration
+ *
+ * DESCRIPTION: Extract the maximum frame duration from either exposure or frame
+ *              duration
+ *
+ * PARAMETERS :
+ *   @request   : request settings
+ *   @frameDuration : The maximum frame duration in nanoseconds
+ *
+ * RETURN     : None
+ *==========================================================================*/
+void QCamera3HardwareInterface::getExpectedFrameDuration(
+        const camera_metadata_t *request, nsecs_t *frameDuration /*out*/) {
+    if (nullptr == frameDuration) {
+        return;
+    }
+
+    camera_metadata_ro_entry_t e = camera_metadata_ro_entry_t();
+    find_camera_metadata_ro_entry(request,
+            ANDROID_SENSOR_EXPOSURE_TIME,
+            &e);
+    if (e.count > 0) {
+        *frameDuration = e.data.i64[0];
+    }
+    find_camera_metadata_ro_entry(request,
+            ANDROID_SENSOR_FRAME_DURATION,
+            &e);
+    if (e.count > 0) {
+        *frameDuration = std::max(e.data.i64[0], *frameDuration);
+    }
+}
+
+/*===========================================================================
+ * FUNCTION   : calculateMaxExpectedDuration
+ *
+ * DESCRIPTION: Calculate the expected frame duration in nanoseconds given the
+ *              current camera settings.
+ *
+ * PARAMETERS :
+ *   @request   : request settings
+ *
+ * RETURN     : Expected frame duration in nanoseconds.
+ *==========================================================================*/
+nsecs_t QCamera3HardwareInterface::calculateMaxExpectedDuration(
+        const camera_metadata_t *request) {
+    nsecs_t maxExpectedDuration = kDefaultExpectedDuration;
+    camera_metadata_ro_entry_t e = camera_metadata_ro_entry_t();
+    find_camera_metadata_ro_entry(request, ANDROID_CONTROL_MODE, &e);
+    if (e.count == 0) {
+        return maxExpectedDuration;
+    }
+
+    if (e.data.u8[0] == ANDROID_CONTROL_MODE_OFF) {
+        getExpectedFrameDuration(request, &maxExpectedDuration /*out*/);
+    }
+
+    if (e.data.u8[0] != ANDROID_CONTROL_MODE_AUTO) {
+        return maxExpectedDuration;
+    }
+
+    find_camera_metadata_ro_entry(request, ANDROID_CONTROL_AE_MODE, &e);
+    if (e.count == 0) {
+        return maxExpectedDuration;
+    }
+
+    switch (e.data.u8[0]) {
+        case ANDROID_CONTROL_AE_MODE_OFF:
+            getExpectedFrameDuration(request, &maxExpectedDuration /*out*/);
+            break;
+        default:
+            find_camera_metadata_ro_entry(request,
+                    ANDROID_CONTROL_AE_TARGET_FPS_RANGE,
+                    &e);
+            if (e.count > 1) {
+                maxExpectedDuration = 1e9 / e.data.u8[0];
+            }
+            break;
+    }
+
+    return maxExpectedDuration;
+}
+
+/*===========================================================================
  * FUNCTION   : setFrameParameters
  *
  * DESCRIPTION: set parameters per frame as requested in the metadata from
@@ -11532,6 +11632,7 @@ int QCamera3HardwareInterface::setFrameParameters(
     }
 
     if(request->settings != NULL){
+        mExpectedFrameDuration = calculateMaxExpectedDuration(request->settings);
         rc = translateToHalMetadata(request, mParameters, snapshotStreamId);
         if (blob_request)
             memcpy(mPrevParameters, mParameters, sizeof(metadata_buffer_t));
@@ -14168,6 +14269,8 @@ int32_t QCamera3HardwareInterface::notifyErrorForPendingRequests()
     mShutterDispatcher.clear();
     mOutputBufferDispatcher.clear(/*clearConfiguredStreams*/false);
     mPendingBuffersMap.mPendingBuffersInRequest.clear();
+    mExpectedFrameDuration = 0;
+    mExpectedInflightDuration = 0;
     LOGH("Cleared all the pending buffers ");
 
     return NO_ERROR;

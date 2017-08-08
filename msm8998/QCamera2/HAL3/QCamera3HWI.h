@@ -579,6 +579,7 @@ private:
         int blob_request;
         uint8_t bUseFirstPartial; // Use first available partial result in case of jumpstart.
         nsecs_t timestamp;
+        nsecs_t expectedFrameDuration;
         camera3_stream_buffer_t *input_buffer;
         const camera_metadata_t *settings;
         const camera_metadata_t *resultMetadata; // Result metadata for this request.
@@ -640,6 +641,9 @@ private:
     int64_t mMinProcessedFrameDuration;
     int64_t mMinJpegFrameDuration;
     int64_t mMinRawFrameDuration;
+    nsecs_t mExpectedFrameDuration;
+    nsecs_t mExpectedInflightDuration;
+    static const nsecs_t kDefaultExpectedDuration = 100000000; // 100 ms
 
     uint32_t mMetaFrameCount;
     bool    mUpdateDebugLevel;
@@ -828,6 +832,9 @@ private:
             const camera_metadata_t &resultMetadata) override;
     void onFailedCaptureResult(pbcamera::CaptureResult *failedResult) override;
     void onShutter(uint32_t requestId, int64_t apSensorTimestampNs) override;
+
+    nsecs_t calculateMaxExpectedDuration(const camera_metadata_t *request);
+    void getExpectedFrameDuration(const camera_metadata_t *request, nsecs_t *frameDuration);
 
     // Map from frame number to frame. Must be protected by mHdrPlusPendingRequestsLock.
     std::map<uint32_t, HdrPlusPendingRequest> mHdrPlusPendingRequests;
