@@ -5737,6 +5737,7 @@ no_error:
             if (channel == NULL) {
                 LOGE("invalid channel pointer for stream");
                 assert(0);
+                pthread_mutex_unlock(&mMutex);
                 return BAD_VALUE;
             }
 
@@ -5797,6 +5798,7 @@ no_error:
             } else {
                 LOGE("Internal requests not supported on this stream type");
                 assert(0);
+                pthread_mutex_unlock(&mMutex);
                 return INVALID_OPERATION;
             }
             latestRequest->internalRequestList.push_back(requestedStream);
