@@ -585,7 +585,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
     m_cacModeDisabled = (uint8_t)atoi(prop);
 
     m_bForceInfinityAf = property_get_bool("persist.camera.af.infinity", 0);
-    m_MobicatMask = property_get_bool("persist.camera.mobicat", 0);
+    m_MobicatMask = (uint8_t)property_get_int32("persist.camera.mobicat", 0);
 
     //Load and read GPU library.
     lib_surface_utils = NULL;
@@ -5771,6 +5771,7 @@ no_error:
             if (channel == NULL) {
                 LOGE("invalid channel pointer for stream");
                 assert(0);
+                pthread_mutex_unlock(&mMutex);
                 return BAD_VALUE;
             }
 
@@ -5831,6 +5832,7 @@ no_error:
             } else {
                 LOGE("Internal requests not supported on this stream type");
                 assert(0);
+                pthread_mutex_unlock(&mMutex);
                 return INVALID_OPERATION;
             }
             latestRequest->internalRequestList.push_back(requestedStream);
