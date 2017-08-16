@@ -101,6 +101,7 @@ QCamera3Channel::QCamera3Channel(uint32_t cam_handle,
     mNRMode = 0;
 
     mYUVDump = property_get_int32("persist.camera.dumpimg", 0);
+    mMapStreamBuffers = mYUVDump;
 }
 
 /*===========================================================================
@@ -185,7 +186,8 @@ int32_t QCamera3Channel::addStream(cam_stream_type_t streamType,
                                                m_handle,
                                                m_camOps,
                                                &mPaddingInfo,
-                                               this);
+                                               this,
+                                               mMapStreamBuffers);
     if (pStream == NULL) {
         LOGE("No mem for Stream");
         return NO_MEMORY;
@@ -1250,7 +1252,7 @@ int32_t QCamera3ProcessingChannel::setFwkInputPPData(qcamera_fwk_input_pp_data_t
 
     src_frame->src_frame = *pInputBuffer;
     rc = mOfflineMemory.getBufDef(reproc_cfg->input_stream_plane_info.plane_info,
-            src_frame->input_buffer, input_index);
+            src_frame->input_buffer, input_index, mMapStreamBuffers);
     if (rc != 0) {
         return rc;
     }
@@ -1281,7 +1283,7 @@ int32_t QCamera3ProcessingChannel::setFwkInputPPData(qcamera_fwk_input_pp_data_t
 
     mm_camera_buf_def_t meta_buf;
     cam_frame_len_offset_t offset = meta_planes.plane_info;
-    rc = mOfflineMetaMemory.getBufDef(offset, meta_buf, metaBufIdx);
+    rc = mOfflineMetaMemory.getBufDef(offset, meta_buf, metaBufIdx, true /*virtualAddr*/);
     if (NO_ERROR != rc) {
         return rc;
     }
@@ -2101,6 +2103,7 @@ QCamera3MetadataChannel::QCamera3MetadataChannel(uint32_t cam_handle,
                                 userData, numBuffers),
                         mMemory(NULL), mDepthDataPresent(false)
 {
+    mMapStreamBuffers = true;
 }
 
 QCamera3MetadataChannel::~QCamera3MetadataChannel()
@@ -2244,6 +2247,7 @@ QCamera3RawChannel::QCamera3RawChannel(uint32_t cam_handle,
     char prop[PROPERTY_VALUE_MAX];
     property_get("persist.camera.raw.debug.dump", prop, "0");
     mRawDump = atoi(prop);
+    mMapStreamBuffers = (mRawDump || mIsRaw16);
 }
 
 QCamera3RawChannel::~QCamera3RawChannel()
@@ -4064,7 +4068,7 @@ int32_t QCamera3PicChannel::getYuvBufferForRequest(mm_camera_buf_def_t *frame,
     mStreams[0]->getFrameOffset(offset);
 
     // Get a buffer from YUV memory.
-    rc = mYuvMemory->getBufDef(offset, *frame, bufIdx);
+    rc = mYuvMemory->getBufDef(offset, *frame, bufIdx, mMapStreamBuffers);
     if (rc != 0) {
         ALOGE("%s: Getting a frame failed: %s (%d).", __FUNCTION__, strerror(-rc), rc);
         return rc;
@@ -4976,7 +4980,7 @@ int32_t QCamera3ReprocessChannel::overrideFwkMetadata(
         return BAD_VALUE;
     }
 
-    if (NULL == frame->input_buffer.buffer) {
+    if (0 > frame->input_buffer.fd) {
         LOGE("No input buffer available");
         return BAD_VALUE;
     }
@@ -5260,7 +5264,8 @@ int32_t QCamera3ReprocessChannel::addReprocStreamsFromSource(cam_pp_feature_conf
             m_handle,
             m_camOps,
             &mPaddingInfo,
-            (QCamera3Channel*)this);
+            (QCamera3Channel*)this,
+            false/*mapStreamBuffers*/);
     if (pStream == NULL) {
         LOGE("No mem for Stream");
         return NO_MEMORY;
