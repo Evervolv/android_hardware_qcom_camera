@@ -32,6 +32,7 @@
 
 // Camera dependencies
 #include "system/camera_metadata.h"
+#include "system/camera_vendor_tags.h"
 
 namespace qcamera {
 
@@ -441,6 +442,9 @@ enum qcamera3_ext_tags {
     NEXUS_EXPERIMENTAL_2017_PD_DATA_ENABLE,
     /* Exposure time boost */
     NEXUS_EXPERIMENTAL_2017_EXP_TIME_BOOST,
+    /* EASEL HDR+ */
+    NEXUS_EXPERIMENTAL_2017_EXIF_MAKERNOTE,
+
     NEXUS_EXPERIMENTAL_2017_END,
 
     /* Select sensor mode for tango */
