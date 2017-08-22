@@ -46,6 +46,7 @@
 #define TUNING_INFO_DEBUG_DATA_SIZE       (4)
 #define OIS_DATA_MAX_SIZE                 (32)
 #define MAX_OIS_SAMPLE_NUM_PER_FRAME      (10)
+#define MAX_MAKERNOTE_LENGTH              (65535)
 
 #define PD_DATA_SIZE                      (4032*2*758)
 
@@ -2549,6 +2550,8 @@ typedef enum {
     CAM_INTF_META_EARLY_AF_STATE,
     /* Exposure time boost */
     CAM_INTF_META_EXP_TIME_BOOST,
+    /* Easel HDR+ makernote */
+    CAM_INTF_META_MAKERNOTE,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
@@ -3172,5 +3175,12 @@ typedef enum {
     CAM_STREAM_ON_TYPE_CONFIG, // Configure modules for stream ON without starting sensor streaming.
     CAM_STREAM_ON_TYPE_START_SENSOR_STREAMING, // Start sensor streaming.
 } cam_stream_on_type_t;
+
+
+// Used with CAM_INTF_META_MAKERNOTE.
+typedef struct {
+    char data[MAX_MAKERNOTE_LENGTH];
+    uint32_t length;
+} cam_makernote_t;
 
 #endif /* __QCAMERA_TYPES_H__ */

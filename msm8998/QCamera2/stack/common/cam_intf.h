@@ -1222,7 +1222,7 @@ typedef struct {
     INCLUDE(CAM_INTF_META_SENSOR_MODE_FULLFOV,          int32_t,                     1);
     INCLUDE(CAM_INTF_META_EARLY_AF_STATE,               uint32_t,                    1);
     INCLUDE(CAM_INTF_META_EXP_TIME_BOOST,               float,                       1);
-
+    INCLUDE(CAM_INTF_META_MAKERNOTE,                    cam_makernote_t,             1);
 } metadata_data_t;
 
 /* Update clear_metadata_buffer() function when a new is_xxx_valid is added to
