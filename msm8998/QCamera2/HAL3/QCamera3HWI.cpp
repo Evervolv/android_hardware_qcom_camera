@@ -14674,39 +14674,113 @@ void QCamera3HardwareInterface::updateHdrPlusResultMetadata(
     }
 }
 
-bool QCamera3HardwareInterface::trySubmittingHdrPlusRequestLocked(
-        HdrPlusPendingRequest *hdrPlusRequest, const camera3_capture_request_t &request,
-        const CameraMetadata &metadata)
-{
-    if (hdrPlusRequest == nullptr) return false;
-
-    // Check noise reduction mode is high quality.
+bool QCamera3HardwareInterface::isRequestHdrPlusCompatible(
+        const camera3_capture_request_t &request, const CameraMetadata &metadata) {
     if (!metadata.exists(ANDROID_NOISE_REDUCTION_MODE) ||
          metadata.find(ANDROID_NOISE_REDUCTION_MODE).data.u8[0] !=
             ANDROID_NOISE_REDUCTION_MODE_HIGH_QUALITY) {
-        ALOGD("%s: Not an HDR+ request: ANDROID_NOISE_REDUCTION_MODE is not HQ: %d", __FUNCTION__,
+        ALOGV("%s: ANDROID_NOISE_REDUCTION_MODE is not HQ: %d", __FUNCTION__,
                 metadata.find(ANDROID_NOISE_REDUCTION_MODE).data.u8[0]);
         return false;
     }
 
-    // Check edge mode is high quality.
     if (!metadata.exists(ANDROID_EDGE_MODE) ||
-         metadata.find(ANDROID_EDGE_MODE).data.u8[0] != ANDROID_EDGE_MODE_HIGH_QUALITY) {
-        ALOGD("%s: Not an HDR+ request: ANDROID_EDGE_MODE is not HQ.", __FUNCTION__);
+            metadata.find(ANDROID_EDGE_MODE).data.u8[0] != ANDROID_EDGE_MODE_HIGH_QUALITY) {
+        ALOGV("%s: ANDROID_EDGE_MODE is not HQ.", __FUNCTION__);
         return false;
     }
 
+    if (!metadata.exists(ANDROID_COLOR_CORRECTION_ABERRATION_MODE) ||
+            metadata.find(ANDROID_COLOR_CORRECTION_ABERRATION_MODE).data.u8[0] !=
+                    ANDROID_COLOR_CORRECTION_ABERRATION_MODE_HIGH_QUALITY) {
+        ALOGV("%s: ANDROID_COLOR_CORRECTION_ABERRATION_MODE is not HQ.", __FUNCTION__);
+        return false;
+    }
+
+    if (!metadata.exists(ANDROID_CONTROL_AE_MODE) ||
+            (metadata.find(ANDROID_CONTROL_AE_MODE).data.u8[0] != ANDROID_CONTROL_AE_MODE_ON &&
+             metadata.find(ANDROID_CONTROL_AE_MODE).data.u8[0] !=
+                    ANDROID_CONTROL_AE_MODE_ON_AUTO_FLASH)) {
+        ALOGV("%s: ANDROID_CONTROL_AE_MODE is not ON or ON_AUTO_FLASH.", __FUNCTION__);
+        return false;
+    }
+
+    if (!metadata.exists(ANDROID_CONTROL_AWB_MODE) ||
+            metadata.find(ANDROID_CONTROL_AWB_MODE).data.u8[0] != ANDROID_CONTROL_AWB_MODE_AUTO) {
+        ALOGV("%s: ANDROID_CONTROL_AWB_MODE is not AUTO.", __FUNCTION__);
+        return false;
+    }
+
+    if (!metadata.exists(ANDROID_CONTROL_EFFECT_MODE) ||
+            metadata.find(ANDROID_CONTROL_EFFECT_MODE).data.u8[0] !=
+                    ANDROID_CONTROL_EFFECT_MODE_OFF) {
+        ALOGV("%s: ANDROID_CONTROL_EFFECT_MODE_OFF is not OFF.", __FUNCTION__);
+        return false;
+    }
+
+    if (!metadata.exists(ANDROID_CONTROL_MODE) ||
+            (metadata.find(ANDROID_CONTROL_MODE).data.u8[0] != ANDROID_CONTROL_MODE_AUTO &&
+             metadata.find(ANDROID_CONTROL_MODE).data.u8[0] !=
+                    ANDROID_CONTROL_MODE_USE_SCENE_MODE)) {
+        ALOGV("%s: ANDROID_CONTROL_MODE is not AUTO or USE_SCENE_MODE.", __FUNCTION__);
+        return false;
+    }
+
+    // TODO (b/32585046): support non-ZSL.
+    if (!metadata.exists(ANDROID_CONTROL_ENABLE_ZSL) ||
+         metadata.find(ANDROID_CONTROL_ENABLE_ZSL).data.u8[0] != ANDROID_CONTROL_ENABLE_ZSL_TRUE) {
+        ALOGV("%s: ANDROID_CONTROL_ENABLE_ZSL is not true.", __FUNCTION__);
+        return false;
+    }
+
+    // TODO (b/32586081): support flash.
+    if (!metadata.exists(ANDROID_FLASH_MODE) ||
+         metadata.find(ANDROID_FLASH_MODE).data.u8[0] != ANDROID_FLASH_MODE_OFF) {
+        ALOGV("%s: ANDROID_FLASH_MODE is not OFF.", __FUNCTION__);
+        return false;
+    }
+
+    // TODO (b/36492953): support digital zoom.
+    if (!metadata.exists(ANDROID_SCALER_CROP_REGION) ||
+         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[0] != 0 ||
+         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[1] != 0 ||
+         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[2] !=
+                gCamCapability[mCameraId]->active_array_size.width ||
+         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[3] !=
+                gCamCapability[mCameraId]->active_array_size.height) {
+        ALOGV("%s: ANDROID_SCALER_CROP_REGION is not the same as active array region.",
+                __FUNCTION__);
+        return false;
+    }
+
+    if (!metadata.exists(ANDROID_TONEMAP_MODE) ||
+         metadata.find(ANDROID_TONEMAP_MODE).data.u8[0] != ANDROID_TONEMAP_MODE_HIGH_QUALITY) {
+        ALOGV("%s: ANDROID_TONEMAP_MODE is not HQ.", __FUNCTION__);
+        return false;
+    }
+
+    // TODO (b/36693254, b/36690506): support other outputs.
     if (request.num_output_buffers != 1 ||
             request.output_buffers[0].stream->format != HAL_PIXEL_FORMAT_BLOB) {
-        ALOGD("%s: Not an HDR+ request: Only Jpeg output is supported.", __FUNCTION__);
+        ALOGV("%s: Not an HDR+ request: Only Jpeg output is supported.", __FUNCTION__);
         for (uint32_t i = 0; i < request.num_output_buffers; i++) {
-            ALOGD("%s: output_buffers[%u]: %dx%d format %d", __FUNCTION__, i,
+            ALOGV("%s: output_buffers[%u]: %dx%d format %d", __FUNCTION__, i,
                     request.output_buffers[0].stream->width,
                     request.output_buffers[0].stream->height,
                     request.output_buffers[0].stream->format);
         }
         return false;
     }
+
+    return true;
+}
+
+bool QCamera3HardwareInterface::trySubmittingHdrPlusRequestLocked(
+        HdrPlusPendingRequest *hdrPlusRequest, const camera3_capture_request_t &request,
+        const CameraMetadata &metadata)
+{
+    if (hdrPlusRequest == nullptr) return false;
+    if (!isRequestHdrPlusCompatible(request, metadata)) return false;
 
     // Get a YUV buffer from pic channel.
     QCamera3PicChannel *picChannel = (QCamera3PicChannel*)request.output_buffers[0].stream->priv;
