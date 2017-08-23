@@ -59,7 +59,8 @@ public:
     int cleanInvalidateCache(uint32_t index);
     int cleanCache(uint32_t index);
     int32_t getBufDef(const cam_frame_len_offset_t &offset,
-            mm_camera_buf_def_t &bufDef, uint32_t index);
+            mm_camera_buf_def_t &bufDef, uint32_t index,
+            bool virtualAddr);
     void *getPtr(uint32_t index);
 
     bool valid(uint32_t index);
