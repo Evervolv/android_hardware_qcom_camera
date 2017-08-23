@@ -184,6 +184,7 @@ protected:
     uint32_t mSkipMode;
     uint32_t mDumpSkipCnt;
     uint8_t mNRMode;
+    bool    mMapStreamBuffers; // Whether to mmap all stream buffers
 };
 
 /* QCamera3ProcessingChannel is used to handle all streams that are directly

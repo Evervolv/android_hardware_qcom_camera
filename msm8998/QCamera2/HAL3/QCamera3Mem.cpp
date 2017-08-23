@@ -218,13 +218,14 @@ uint32_t QCamera3Memory::getCnt()
  *   @offset  : [input] frame buffer offset
  *   @bufDef  : [output] reference to struct to store buffer definition
  *   @index   : [input] index of the buffer
+ *   @virtualAddr : [input] Whether to fill out virtual address
  *
  * RETURN     : int32_t type of status
  *              NO_ERROR  -- success
  *              none-zero failure code
  *==========================================================================*/
 int32_t QCamera3Memory::getBufDef(const cam_frame_len_offset_t &offset,
-        mm_camera_buf_def_t &bufDef, uint32_t index)
+        mm_camera_buf_def_t &bufDef, uint32_t index, bool virtualAddr)
 {
     Mutex::Autolock lock(mLock);
 
@@ -236,7 +237,7 @@ int32_t QCamera3Memory::getBufDef(const cam_frame_len_offset_t &offset,
     bufDef.fd = mMemInfo[index].fd;
     bufDef.frame_len = mMemInfo[index].size;
     bufDef.mem_info = (void *)this;
-    bufDef.buffer = getPtrLocked(index);
+    bufDef.buffer = virtualAddr ? getPtrLocked(index) : nullptr;
     bufDef.planes_buf.num_planes = (int8_t)offset.num_planes;
     bufDef.buf_idx = (uint8_t)index;
 
@@ -745,6 +746,7 @@ QCamera3GrallocMemory::QCamera3GrallocMemory(uint32_t startIdx)
     for (int i = 0; i < MM_CAMERA_MAX_NUM_FRAMES; i ++) {
         mBufferHandle[i] = NULL;
         mPrivateHandle[i] = NULL;
+        mPtr[i] = nullptr;
     }
 }
 
@@ -779,7 +781,6 @@ int QCamera3GrallocMemory::registerBuffer(buffer_handle_t *buffer,
 {
     status_t ret = NO_ERROR;
     struct ion_fd_data ion_info_fd;
-    void *vaddr = NULL;
     int32_t colorSpace = ITU_R_601_FR;
     int32_t idx = -1;
 
@@ -833,18 +834,7 @@ int QCamera3GrallocMemory::registerBuffer(buffer_handle_t *buffer,
             mPrivateHandle[idx]->size;
     mMemInfo[idx].handle = ion_info_fd.handle;
 
-    vaddr = mmap(NULL,
-            mMemInfo[idx].size,
-            PROT_READ | PROT_WRITE,
-            MAP_SHARED,
-            mMemInfo[idx].fd, 0);
-    if (vaddr == MAP_FAILED) {
-        mMemInfo[idx].handle = 0;
-        ret = NO_MEMORY;
-    } else {
-        mPtr[idx] = vaddr;
-        mBufferCount++;
-    }
+    mBufferCount++;
 
 end:
     LOGD("X ");
@@ -865,8 +855,10 @@ end:
  *==========================================================================*/
 int32_t QCamera3GrallocMemory::unregisterBufferLocked(size_t idx)
 {
-    munmap(mPtr[idx], mMemInfo[idx].size);
-    mPtr[idx] = NULL;
+    if (mPtr[idx] != nullptr) {
+        munmap(mPtr[idx], mMemInfo[idx].size);
+        mPtr[idx] = nullptr;
+    }
 
     struct ion_handle_data ion_handle;
     memset(&ion_handle, 0, sizeof(ion_handle));
@@ -1228,6 +1220,23 @@ void *QCamera3GrallocMemory::getPtrLocked(uint32_t index)
     if (0 == mMemInfo[index].handle) {
         LOGE("Buffer at %d not registered", index);
         return NULL;
+    }
+
+    if (mPtr[index] == nullptr) {
+        void *vaddr = NULL;
+        vaddr = mmap(NULL,
+                mMemInfo[index].size,
+                PROT_READ | PROT_WRITE,
+                MAP_SHARED,
+                mMemInfo[index].fd, 0);
+
+        if (vaddr == MAP_FAILED) {
+            LOGE("mmap failed for buffer index %d, size %d: %s(%d)",
+                    index, mMemInfo[index].size, strerror(errno), errno);
+            return NULL;
+        } else {
+            mPtr[index] = vaddr;
+        }
     }
 
     return mPtr[index];
