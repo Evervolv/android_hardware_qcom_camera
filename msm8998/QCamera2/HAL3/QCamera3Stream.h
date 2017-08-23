@@ -59,7 +59,8 @@ public:
                   uint32_t chId,
                   mm_camera_ops_t *camOps,
                   cam_padding_info_t *paddingInfo,
-                  QCamera3Channel *channel);
+                  QCamera3Channel *channel,
+                  bool mapStreamBuffers);
     virtual ~QCamera3Stream();
     virtual int32_t init(cam_stream_type_t streamType,
                          cam_format_t streamFormat,
@@ -136,6 +137,8 @@ private:
                              //currentBatchBufDef
     QCameraQueue mFreeBatchBufQ; //Buffer queue containing empty batch buffers
     uint8_t mNRMode; // Initial noise reduction mode
+
+    bool mMapStreamBuffers; // Whether to mmap every stream buffers
 
     static int32_t get_bufs(
                      cam_frame_len_offset_t *offset,
