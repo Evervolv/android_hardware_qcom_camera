@@ -658,6 +658,14 @@ int process_meta_data(metadata_buffer_t *p_meta, QOMX_EXIF_INFO *exif_info,
     if (rc) {
       LOGE(": Error adding ASD Exif Entry");
     }
+
+    IF_META_AVAILABLE(cam_makernote_t, makernote, CAM_INTF_META_MAKERNOTE, p_meta) {
+      rc = addExifEntry(exif_info, EXIFTAGID_EXIF_MAKER_NOTE, EXIF_UNDEFINED, makernote->length,
+          makernote->data);
+      if (rc) {
+        LOGE(": Error adding makernote");
+      }
+    }
   } else {
     LOGE(": Error adding ASD Exif Entry, no meta");
   }

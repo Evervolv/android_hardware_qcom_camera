@@ -273,7 +273,9 @@ const QCamera3HardwareInterface::QCameraMap<
     { ANDROID_CONTROL_AE_MODE_ON,                   CAM_FLASH_MODE_OFF },
     { ANDROID_CONTROL_AE_MODE_ON_AUTO_FLASH,        CAM_FLASH_MODE_AUTO},
     { ANDROID_CONTROL_AE_MODE_ON_ALWAYS_FLASH,      CAM_FLASH_MODE_ON  },
-    { ANDROID_CONTROL_AE_MODE_ON_AUTO_FLASH_REDEYE, CAM_FLASH_MODE_AUTO}
+    { ANDROID_CONTROL_AE_MODE_ON_AUTO_FLASH_REDEYE, CAM_FLASH_MODE_AUTO},
+    { (camera_metadata_enum_android_control_ae_mode_t)
+      NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH, CAM_FLASH_MODE_OFF }
 };
 
 const QCamera3HardwareInterface::QCameraMap<
@@ -7267,12 +7269,11 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                         faceScores[i] = (uint8_t)faceDetectionInfo->faces[i].score;
                         // Adjust crop region from sensor output coordinate system to active
                         // array coordinate system.
-                        cam_rect_t& rect = faceDetectionInfo->faces[i].face_boundary;
+                        cam_rect_t rect = faceDetectionInfo->faces[i].face_boundary;
                         mCropRegionMapper.toActiveArray(rect.left, rect.top,
                                 rect.width, rect.height);
 
-                        convertToRegions(faceDetectionInfo->faces[i].face_boundary,
-                                faceRectangles+j, -1);
+                        convertToRegions(rect, faceRectangles+j, -1);
 
                         LOGL("FD_DEBUG : Frame[%d] Face[%d] : top-left (%d, %d), "
                                 "bottom-right (%d, %d)",
@@ -7299,19 +7300,20 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                                 CAM_INTF_META_FACE_LANDMARK, metadata) {
 
                             for (size_t i = 0; i < numFaces; i++) {
+                                cam_face_landmarks_info_t face_landmarks = landmarks->face_landmarks[i];
                                 // Map the co-ordinate sensor output coordinate system to active
                                 // array coordinate system.
                                 mCropRegionMapper.toActiveArray(
-                                        landmarks->face_landmarks[i].left_eye_center.x,
-                                        landmarks->face_landmarks[i].left_eye_center.y);
+                                        face_landmarks.left_eye_center.x,
+                                        face_landmarks.left_eye_center.y);
                                 mCropRegionMapper.toActiveArray(
-                                        landmarks->face_landmarks[i].right_eye_center.x,
-                                        landmarks->face_landmarks[i].right_eye_center.y);
+                                        face_landmarks.right_eye_center.x,
+                                        face_landmarks.right_eye_center.y);
                                 mCropRegionMapper.toActiveArray(
-                                        landmarks->face_landmarks[i].mouth_center.x,
-                                        landmarks->face_landmarks[i].mouth_center.y);
+                                        face_landmarks.mouth_center.x,
+                                        face_landmarks.mouth_center.y);
 
-                                convertLandmarks(landmarks->face_landmarks[i], faceLandmarks+k);
+                                convertLandmarks(face_landmarks, faceLandmarks+k);
 
                                 LOGL("FD_DEBUG LANDMARK : Frame[%d] Face[%d] : "
                                         "left-eye (%d, %d), right-eye (%d, %d), mouth (%d, %d)",
@@ -7742,16 +7744,17 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         int32_t aeRegions[REGIONS_TUPLE_COUNT];
         // Adjust crop region from sensor output coordinate system to active
         // array coordinate system.
-        mCropRegionMapper.toActiveArray(hAeRegions->rect.left, hAeRegions->rect.top,
-                hAeRegions->rect.width, hAeRegions->rect.height);
+        cam_rect_t hAeRect = hAeRegions->rect;
+        mCropRegionMapper.toActiveArray(hAeRect.left, hAeRect.top,
+                hAeRect.width, hAeRect.height);
 
-        convertToRegions(hAeRegions->rect, aeRegions, hAeRegions->weight);
+        convertToRegions(hAeRect, aeRegions, hAeRegions->weight);
         camMetadata.update(ANDROID_CONTROL_AE_REGIONS, aeRegions,
                 REGIONS_TUPLE_COUNT);
         LOGD("Metadata : ANDROID_CONTROL_AE_REGIONS: FWK: [%d,%d,%d,%d] HAL: [%d,%d,%d,%d]",
                  aeRegions[0], aeRegions[1], aeRegions[2], aeRegions[3],
-                hAeRegions->rect.left, hAeRegions->rect.top, hAeRegions->rect.width,
-                hAeRegions->rect.height);
+                hAeRect.left, hAeRect.top, hAeRect.width,
+                hAeRect.height);
     }
 
     if (!pendingRequest.focusStateSent) {
@@ -8318,19 +8321,20 @@ QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
 
     IF_META_AVAILABLE(cam_area_t, hAfRegions, CAM_INTF_META_AF_ROI, metadata) {
         /*af regions*/
+        cam_rect_t hAfRect = hAfRegions->rect;
         int32_t afRegions[REGIONS_TUPLE_COUNT];
         // Adjust crop region from sensor output coordinate system to active
         // array coordinate system.
-        mCropRegionMapper.toActiveArray(hAfRegions->rect.left, hAfRegions->rect.top,
-                hAfRegions->rect.width, hAfRegions->rect.height);
+        mCropRegionMapper.toActiveArray(hAfRect.left, hAfRect.top,
+                hAfRect.width, hAfRect.height);
 
-        convertToRegions(hAfRegions->rect, afRegions, hAfRegions->weight);
+        convertToRegions(hAfRect, afRegions, hAfRegions->weight);
         camMetadata.update(ANDROID_CONTROL_AF_REGIONS, afRegions,
                 REGIONS_TUPLE_COUNT);
         LOGD("Metadata : ANDROID_CONTROL_AF_REGIONS: FWK: [%d,%d,%d,%d] HAL: [%d,%d,%d,%d]",
                  afRegions[0], afRegions[1], afRegions[2], afRegions[3],
-                hAfRegions->rect.left, hAfRegions->rect.top, hAfRegions->rect.width,
-                hAfRegions->rect.height);
+                hAfRect.left, hAfRect.top, hAfRect.width,
+                hAfRect.height);
     }
 
     // AF region confidence
@@ -13105,6 +13109,23 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
                 frame_settings.find(NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER).data.u8[0];
         if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_TRACKING_AF_TRIGGER,
                 trackingAfTrigger)) {
+            rc = BAD_VALUE;
+        }
+    }
+
+    // Makernote
+    camera_metadata_entry entry = frame_settings.find(NEXUS_EXPERIMENTAL_2017_EXIF_MAKERNOTE);
+    if (entry.count != 0) {
+        if (entry.count <= MAX_MAKERNOTE_LENGTH) {
+            cam_makernote_t makernote;
+            makernote.length = entry.count;
+            memcpy(makernote.data, entry.data.u8, makernote.length);
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_MAKERNOTE, makernote)) {
+                rc = BAD_VALUE;
+            }
+        } else {
+            ALOGE("%s: Makernote length %u is larger than %d", __FUNCTION__, entry.count,
+                    MAX_MAKERNOTE_LENGTH);
             rc = BAD_VALUE;
         }
     }
