@@ -74,7 +74,7 @@ public:
 
     // Heap buffer related functions
     int allocateAll(size_t size);
-    int allocateOne(size_t size);
+    int allocateOne(size_t size, bool isCached = true);
     void deallocate(); //TODO: replace with unified clear() function?
 
     // Clear function: unregister for gralloc buffer, and deallocate for heap buffer
