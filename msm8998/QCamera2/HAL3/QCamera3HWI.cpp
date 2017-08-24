@@ -565,6 +565,8 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
     memset(&mInputStreamInfo, 0, sizeof(mInputStreamInfo));
     memset(mLdafCalib, 0, sizeof(mLdafCalib));
 
+    memset(mEaselFwVersion, 0, sizeof(mEaselFwVersion));
+
     memset(prop, 0, sizeof(prop));
     property_get("persist.camera.tnr.preview", prop, "0");
     m_bTnrPreview = (uint8_t)atoi(prop);
@@ -10691,7 +10693,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         if (eepromLength + sizeof(easelInfo) < MAX_EEPROM_VERSION_INFO_LEN) {
             eepromLength += sizeof(easelInfo);
             strlcat(eepromInfo, ((gEaselManagerClient != nullptr &&
-                    gEaselManagerClient->isEaselPresentOnDevice()) ? ",E:Y" : ",E:N"),
+                    gEaselManagerClient->isEaselPresentOnDevice()) ? ",E-ver" : ",E:N"),
                     MAX_EEPROM_VERSION_INFO_LEN);
         }
         staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO,
@@ -14011,6 +14013,32 @@ const uint32_t *QCamera3HardwareInterface::getLdafCalib()
     } else {
         return NULL;
     }
+}
+
+/*===========================================================================
+* FUNCTION   : getEaselFwVersion
+*
+* DESCRIPTION: Retrieve Easel firmware version
+*
+* PARAMETERS : None
+*
+* RETURN     : string describing Firmware version
+*              "\0" if Easel manager client is not open
+*==========================================================================*/
+const char *QCamera3HardwareInterface::getEaselFwVersion()
+{
+    int rc = NO_ERROR;
+
+    std::unique_lock<std::mutex> l(gHdrPlusClientLock);
+    ALOGD("%s: Querying Easel firmware version", __FUNCTION__);
+    if (EaselManagerClientOpened) {
+        rc = gEaselManagerClient->getFwVersion(mEaselFwVersion);
+        if (rc != OK)
+            ALOGD("%s: Failed to query Easel firmware version", __FUNCTION__);
+        else
+            return (const char *)&mEaselFwVersion[0];
+    }
+    return NULL;
 }
 
 /*===========================================================================
