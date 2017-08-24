@@ -806,6 +806,10 @@ private:
     // Return if current session with configured streams is compatible with HDR+ mode.
     bool isSessionHdrPlusModeCompatible();
 
+    // Return if the request is compatible with HDR+.
+    bool isRequestHdrPlusCompatible(
+            const camera3_capture_request_t &request, const CameraMetadata &metadata);
+
     // Configure streams for HDR+.
     status_t configureHdrPlusStreamsLocked();
 
