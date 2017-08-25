@@ -8124,6 +8124,10 @@ QCamera3HardwareInterface::translateFromHalMetadata(
             frame_ois_data->ois_sample_shift_x, frame_ois_data->num_ois_sample);
         camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_Y,
             frame_ois_data->ois_sample_shift_y, frame_ois_data->num_ois_sample);
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_X,
+            frame_ois_data->ois_sample_shift_pixel_x, frame_ois_data->num_ois_sample);
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_Y,
+            frame_ois_data->ois_sample_shift_pixel_y, frame_ois_data->num_ois_sample);
     }
 
     resultMetadata = camMetadata.release();
