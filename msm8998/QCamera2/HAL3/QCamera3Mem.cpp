@@ -303,7 +303,7 @@ QCamera3HeapMemory::~QCamera3HeapMemory()
  *              none-zero failure code
  *==========================================================================*/
 int QCamera3HeapMemory::allocOneBuffer(QCamera3MemInfo &memInfo,
-        unsigned int heap_id, size_t size)
+        unsigned int heap_id, size_t size, bool isCached)
 {
     int rc = OK;
     struct ion_handle_data handle_data;
@@ -320,7 +320,9 @@ int QCamera3HeapMemory::allocOneBuffer(QCamera3MemInfo &memInfo,
     /* to make it page size aligned */
     allocData.len = (allocData.len + 4095U) & (~4095U);
     allocData.align = 4096;
-    allocData.flags = ION_FLAG_CACHED;
+    if (isCached) {
+        allocData.flags = ION_FLAG_CACHED;
+    }
     allocData.heap_id_mask = heap_id;
     rc = ioctl(main_ion_fd, ION_IOC_ALLOC, &allocData);
     if (rc < 0) {
@@ -617,7 +619,7 @@ ALLOC_FAILED:
  *              NO_ERROR  -- success
  *              none-zero failure code
  *==========================================================================*/
-int QCamera3HeapMemory::allocateOne(size_t size)
+int QCamera3HeapMemory::allocateOne(size_t size, bool isCached)
 {
     unsigned int heap_id_mask = 0x1 << ION_IOMMU_HEAP_ID;
     int rc = NO_ERROR;
@@ -631,7 +633,7 @@ int QCamera3HeapMemory::allocateOne(size_t size)
         return BAD_INDEX;
     }
 
-    rc = allocOneBuffer(mMemInfo[mBufferCount], heap_id_mask, size);
+    rc = allocOneBuffer(mMemInfo[mBufferCount], heap_id_mask, size, isCached);
     if (rc < 0) {
         LOGE("AllocateIonMemory failed");
         return NO_MEMORY;

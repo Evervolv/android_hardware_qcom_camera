@@ -3715,7 +3715,7 @@ int32_t QCamera3PicChannel::request(buffer_handle_t *buffer,
         Mutex::Autolock lock(mFreeBuffersLock);
         uint32_t bufIdx;
         if (mFreeBufferList.empty()) {
-            rc = mYuvMemory->allocateOne(mFrameLen);
+            rc = mYuvMemory->allocateOne(mFrameLen, /*isCached*/false);
             if (rc < 0) {
                 LOGE("Failed to allocate heap buffer. Fatal");
                 return rc;
@@ -4049,7 +4049,7 @@ int32_t QCamera3PicChannel::getYuvBufferForRequest(mm_camera_buf_def_t *frame,
     // Get an available YUV buffer.
     if (mFreeBufferList.empty()) {
         // Allocate a buffer if no one is available.
-        rc = mYuvMemory->allocateOne(mFrameLen);
+        rc = mYuvMemory->allocateOne(mFrameLen, /*isCached*/false);
         if (rc < 0) {
             LOGE("Failed to allocate heap buffer. Fatal");
             return rc;
@@ -4131,9 +4131,6 @@ int32_t QCamera3PicChannel::returnYuvBufferAndEncode(mm_camera_buf_def_t *frame,
                 frameNumber, index, strerror(-rc), rc);
         return rc;
     }
-
-    // Invalidate YUV buffer cache
-    mYuvMemory->invalidateCache(frame->buf_idx);
 
     // Start postprocessor
     startPostProc(reproc_cfg);
