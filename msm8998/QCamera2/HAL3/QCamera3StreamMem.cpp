@@ -395,10 +395,10 @@ int QCamera3StreamMem::allocateAll(size_t size)
     return mHeapMem.allocate(size);
 }
 
-int QCamera3StreamMem::allocateOne(size_t size)
+int QCamera3StreamMem::allocateOne(size_t size, bool isCached)
 {
     Mutex::Autolock lock(mLock);
-    return mHeapMem.allocateOne(size);
+    return mHeapMem.allocateOne(size, isCached);
 }
 
 /*===========================================================================
