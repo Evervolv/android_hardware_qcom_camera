@@ -832,6 +832,7 @@ private:
             const camera_metadata_t &resultMetadata) override;
     void onFailedCaptureResult(pbcamera::CaptureResult *failedResult) override;
     void onShutter(uint32_t requestId, int64_t apSensorTimestampNs) override;
+    void onNextCaptureReady(uint32_t requestId);
 
     nsecs_t calculateMaxExpectedDuration(const camera_metadata_t *request);
     void getExpectedFrameDuration(const camera_metadata_t *request, nsecs_t *frameDuration);
