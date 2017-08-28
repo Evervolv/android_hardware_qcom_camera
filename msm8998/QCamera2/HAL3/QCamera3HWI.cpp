@@ -10355,6 +10355,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
 
     if (gExposeEnableZslKey) {
         available_result_keys.add(ANDROID_CONTROL_ENABLE_ZSL);
+        available_result_keys.add(NEXUS_EXPERIMENTAL_2017_NEXT_STILL_INTENT_REQUEST_READY);
     }
 
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_RESULT_KEYS,
@@ -15069,6 +15070,44 @@ void QCamera3HardwareInterface::onShutter(uint32_t requestId, int64_t apSensorTi
     mShutterDispatcher.markShutterReady(requestId, apSensorTimestampNs);
 }
 
+void QCamera3HardwareInterface::onNextCaptureReady(uint32_t requestId)
+{
+    pthread_mutex_lock(&mMutex);
+
+    // Find the pending request for this result metadata.
+    auto requestIter = mPendingRequestsList.begin();
+    while (requestIter != mPendingRequestsList.end() && requestIter->frame_number != requestId) {
+        requestIter++;
+    }
+
+    if (requestIter == mPendingRequestsList.end()) {
+        ALOGE("%s: Cannot find a pending request for frame number %u.", __FUNCTION__, requestId);
+        pthread_mutex_unlock(&mMutex);
+        return;
+    }
+
+    requestIter->partial_result_cnt++;
+
+    CameraMetadata metadata;
+    uint8_t ready = true;
+    metadata.update(NEXUS_EXPERIMENTAL_2017_NEXT_STILL_INTENT_REQUEST_READY, &ready, 1);
+
+    // Send it to framework.
+    camera3_capture_result_t result = {};
+
+    result.result = metadata.getAndLock();
+    // Populate metadata result
+    result.frame_number = requestId;
+    result.num_output_buffers = 0;
+    result.output_buffers = NULL;
+    result.partial_result = requestIter->partial_result_cnt;
+
+    orchestrateResult(&result);
+    metadata.unlock(result.result);
+
+    pthread_mutex_unlock(&mMutex);
+}
+
 void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
         const camera_metadata_t &resultMetadata)
 {
@@ -15084,6 +15123,9 @@ void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
                 result->outputBuffers[0].streamId);
             return;
         }
+
+        // TODO (b/34854987): initiate this from HDR+ service.
+        onNextCaptureReady(result->requestId);
 
         // Find the pending HDR+ request.
         HdrPlusPendingRequest pendingRequest;
