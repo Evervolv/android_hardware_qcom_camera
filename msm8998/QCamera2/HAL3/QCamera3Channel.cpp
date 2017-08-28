@@ -3961,18 +3961,24 @@ int32_t QCamera3PicChannel::queueJpegSetting(uint32_t index, metadata_buffer_t *
     // Image description
     const char *eepromVersion = hal_obj->getEepromVersionInfo();
     const uint32_t *ldafCalib = hal_obj->getLdafCalib();
+    const char *easelFwVersion = hal_obj->getEaselFwVersion();
     if ((eepromVersion && strlen(eepromVersion)) ||
             ldafCalib) {
         int len = 0;
         settings->image_desc_valid = true;
         if (eepromVersion && strlen(eepromVersion)) {
             len = snprintf(settings->image_desc, sizeof(settings->image_desc),
-                    "%s ", eepromVersion);
+                    "%s", eepromVersion);
         }
         if (ldafCalib) {
-            snprintf(settings->image_desc + len,
+            len += snprintf(settings->image_desc + len,
                     sizeof(settings->image_desc) - len, "L:%u-%u",
                     ldafCalib[0], ldafCalib[1]);
+        }
+        if (easelFwVersion) {
+            ALOGD("%s: Easel FW version %s", __FUNCTION__, easelFwVersion);
+            len += snprintf(settings->image_desc + len,
+                            sizeof(settings->image_desc) - len, ":%s", easelFwVersion);
         }
     }
 
