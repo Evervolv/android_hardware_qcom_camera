@@ -357,10 +357,13 @@ vendor_tag_info_t nexus_experimental_2017[NEXUS_EXPERIMENTAL_2017_END -
     { "stats.ois_timestamps_boottime", TYPE_INT64 },
     { "stats.ois_shift_x", TYPE_INT32 },
     { "stats.ois_shift_y", TYPE_INT32 },
+    { "stats.ois_shift_pixel_x", TYPE_FLOAT },
+    { "stats.ois_shift_pixel_y", TYPE_FLOAT },
     { "sensor.pd_data_dimensions", TYPE_INT32},
     { "sensor.pd_data_enable", TYPE_BYTE},
     { "control.exposure_time_boost", TYPE_FLOAT},
     { "request.makernote", TYPE_BYTE },
+    { "request.next_still_intent_request_ready", TYPE_BYTE },
 };
 
 vendor_tag_info_t tango_mode_data[TANGO_MODE_DATA_END -
@@ -594,10 +597,13 @@ uint32_t qcamera3_all_tags[] = {
     (uint32_t)NEXUS_EXPERIMENTAL_2017_OIS_TIMESTAMPS_BOOTTIME,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_X,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_Y,
+    (uint32_t)NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_X,
+    (uint32_t)NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_Y,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_PD_DATA_DIMENSIONS,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_PD_DATA_ENABLE,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_EXP_TIME_BOOST,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_EXIF_MAKERNOTE,
+    (uint32_t)NEXUS_EXPERIMENTAL_2017_NEXT_STILL_INTENT_REQUEST_READY,
 
     //TANGO_MODE
     (uint32_t)TANGO_MODE_DATA_SENSOR_FULLFOV,
