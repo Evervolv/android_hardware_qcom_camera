@@ -72,7 +72,9 @@ namespace qcamera {
 #define DATA_PTR(MEM_OBJ,INDEX) MEM_OBJ->getPtr( INDEX )
 
 #define EMPTY_PIPELINE_DELAY 2
-#define PARTIAL_RESULT_COUNT 2
+// mm_camera has 2 partial results: 3A, and final result.
+// HDR+ requests have 3 partial results: postview, next request ready, and final result.
+#define PARTIAL_RESULT_COUNT 3
 #define FRAME_SKIP_DELAY     0
 
 #define MAX_VALUE_8BIT ((1<<8)-1)
@@ -4219,7 +4221,7 @@ void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t fra
         requestIter->partial_result_cnt = PARTIAL_RESULT_COUNT;
     } else {
         liveRequest = true;
-        requestIter->partial_result_cnt++;
+        requestIter->partial_result_cnt = PARTIAL_RESULT_COUNT;
         mPendingLiveRequest--;
 
         {
@@ -10223,6 +10225,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
 
     if (gExposeEnableZslKey) {
         available_request_keys.add(ANDROID_CONTROL_ENABLE_ZSL);
+        available_request_keys.add(NEXUS_EXPERIMENTAL_2017_POSTVIEW);
     }
 
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_REQUEST_KEYS,
@@ -10356,6 +10359,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     if (gExposeEnableZslKey) {
         available_result_keys.add(ANDROID_CONTROL_ENABLE_ZSL);
         available_result_keys.add(NEXUS_EXPERIMENTAL_2017_NEXT_STILL_INTENT_REQUEST_READY);
+        available_result_keys.add(NEXUS_EXPERIMENTAL_2017_POSTVIEW_CONFIG);
+        available_result_keys.add(NEXUS_EXPERIMENTAL_2017_POSTVIEW_DATA);
     }
 
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_RESULT_KEYS,
@@ -11497,6 +11502,8 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
 
     if (gExposeEnableZslKey) {
         settings.update(ANDROID_CONTROL_ENABLE_ZSL, &enableZsl, 1);
+        int32_t postview = 0;
+        settings.update(NEXUS_EXPERIMENTAL_2017_POSTVIEW, &postview, 1);
     }
 
     mDefaultMetadata[type] = settings.release();
@@ -15091,6 +15098,75 @@ void QCamera3HardwareInterface::onNextCaptureReady(uint32_t requestId)
     CameraMetadata metadata;
     uint8_t ready = true;
     metadata.update(NEXUS_EXPERIMENTAL_2017_NEXT_STILL_INTENT_REQUEST_READY, &ready, 1);
+
+    // Send it to framework.
+    camera3_capture_result_t result = {};
+
+    result.result = metadata.getAndLock();
+    // Populate metadata result
+    result.frame_number = requestId;
+    result.num_output_buffers = 0;
+    result.output_buffers = NULL;
+    result.partial_result = requestIter->partial_result_cnt;
+
+    orchestrateResult(&result);
+    metadata.unlock(result.result);
+
+    pthread_mutex_unlock(&mMutex);
+}
+
+void QCamera3HardwareInterface::onPostview(uint32_t requestId,
+        std::unique_ptr<std::vector<uint8_t>> postview, uint32_t width, uint32_t height,
+        uint32_t stride, int32_t format)
+{
+    if (property_get_bool("persist.camera.hdrplus.dump_postview", false)) {
+        ALOGI("%s: %d: Received a postview %dx%d for HDR+ request %d", __FUNCTION__,
+                __LINE__, width, height, requestId);
+        char buf[FILENAME_MAX] = {};
+        snprintf(buf, sizeof(buf), QCAMERA_DUMP_FRM_LOCATION"postview_%d_%dx%d.ppm",
+                requestId, width, height);
+
+        pbcamera::StreamConfiguration config = {};
+        config.image.width = width;
+        config.image.height = height;
+        config.image.format = format;
+
+        pbcamera::PlaneConfiguration plane = {};
+        plane.stride = stride;
+        plane.scanline = height;
+
+        config.image.planes.push_back(plane);
+
+        pbcamera::StreamBuffer buffer = {};
+        buffer.streamId = 0;
+        buffer.dmaBufFd = -1;
+        buffer.data = postview->data();
+        buffer.dataSize = postview->size();
+
+        hdrplus_client_utils::writePpm(buf, config, buffer);
+    }
+
+    pthread_mutex_lock(&mMutex);
+
+    // Find the pending request for this result metadata.
+    auto requestIter = mPendingRequestsList.begin();
+    while (requestIter != mPendingRequestsList.end() && requestIter->frame_number != requestId) {
+        requestIter++;
+    }
+
+    if (requestIter == mPendingRequestsList.end()) {
+        ALOGE("%s: Cannot find a pending request for frame number %u.", __FUNCTION__, requestId);
+        pthread_mutex_unlock(&mMutex);
+        return;
+    }
+
+    requestIter->partial_result_cnt++;
+
+    CameraMetadata metadata;
+    int32_t config[3] = {static_cast<int32_t>(width), static_cast<int32_t>(height),
+            static_cast<int32_t>(stride)};
+    metadata.update(NEXUS_EXPERIMENTAL_2017_POSTVIEW_CONFIG, config, 3);
+    metadata.update(NEXUS_EXPERIMENTAL_2017_POSTVIEW_DATA, postview->data(), postview->size());
 
     // Send it to framework.
     camera3_capture_result_t result = {};
