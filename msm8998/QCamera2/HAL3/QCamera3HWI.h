@@ -343,6 +343,7 @@ public:
             char (&flashNode)[QCAMERA_MAX_FILEPATH_LENGTH]);
     const char *getEepromVersionInfo();
     const uint32_t *getLdafCalib();
+    const char *getEaselFwVersion();
     void get3AVersion(cam_q3a_version_t &swVersion);
     static void setBufferErrorStatus(QCamera3Channel*, uint32_t frameNumber,
             camera3_buffer_status_t err, void *userdata);
@@ -696,7 +697,8 @@ private:
     bool mLdafCalibExist;
     uint32_t mLdafCalib[2];
     int32_t mLastCustIntentFrmNum;
-
+    // Easel firmware version
+    char mEaselFwVersion[FW_VER_SIZE];
     static const QCameraMap<camera_metadata_enum_android_control_effect_mode_t,
             cam_effect_mode_type> EFFECT_MODES_MAP[];
     static const QCameraMap<camera_metadata_enum_android_control_awb_mode_t,
