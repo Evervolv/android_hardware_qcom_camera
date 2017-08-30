@@ -779,6 +779,7 @@ QCamera3ProcessingChannel::QCamera3ProcessingChannel(uint32_t cam_handle,
             mNumBufs(CAM_MAX_NUM_BUFS_PER_STREAM),
             mStreamType(stream_type),
             mPostProcStarted(false),
+            mReprocessType(REPROCESS_TYPE_NONE),
             mInputBufferConfig(false),
             m_pMetaChannel(metadataChannel),
             mMetaFrame(NULL),
@@ -1441,10 +1442,20 @@ int32_t QCamera3ProcessingChannel::stop()
  *==========================================================================*/
 void QCamera3ProcessingChannel::startPostProc(const reprocess_config_t &config)
 {
-    if(!mPostProcStarted) {
-        m_postprocessor.start(config);
-        mPostProcStarted = true;
+    if (mPostProcStarted) {
+        if (config.reprocess_type != mReprocessType) {
+            // If the reprocess type doesn't match, stop and start with the new type
+            m_postprocessor.stop();
+            mPostProcStarted = false;
+        } else {
+            // Return if reprocess type is the same.
+            return;
+        }
     }
+
+    m_postprocessor.start(config);
+    mPostProcStarted = true;
+    mReprocessType = config.reprocess_type;
 }
 
 /*===========================================================================

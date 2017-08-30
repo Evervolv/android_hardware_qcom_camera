@@ -270,6 +270,7 @@ protected:
     uint8_t mIntent;
 
     bool mPostProcStarted;
+    reprocess_type_t mReprocessType; // Only valid when mPostProcStarted is true.
     bool mInputBufferConfig;   // Set when the processing channel is configured
                                // for processing input(framework) buffers
 
