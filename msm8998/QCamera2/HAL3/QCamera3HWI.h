@@ -652,7 +652,6 @@ private:
 
     uint8_t mCaptureIntent;
     uint8_t mCacMode;
-    uint8_t mHybridAeEnable;
     // DevCamDebug metadata internal variable
     uint8_t mDevCamDebugMetaEnable;
     /* DevCamDebug metadata end */
