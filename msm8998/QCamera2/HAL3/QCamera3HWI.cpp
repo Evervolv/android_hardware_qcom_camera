@@ -485,7 +485,6 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mCallbacks(callbacks),
       mCaptureIntent(0),
       mCacMode(0),
-      mHybridAeEnable(0),
       /* DevCamDebug metadata internal m control*/
       mDevCamDebugMetaEnable(0),
       /* DevCamDebug metadata end */
@@ -5512,13 +5511,13 @@ no_error:
     pendingRequest.jpegMetadata = mCurJpegMeta;
     pendingRequest.settings = saveRequestSettings(mCurJpegMeta, request);
     pendingRequest.capture_intent = mCaptureIntent;
+    // Enable hybrid AE if it's enabled in metadata or HDR+ mode is enabled.
+    pendingRequest.hybrid_ae_enable = mHdrPlusModeEnabled;
     if (meta.exists(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE)) {
-        mHybridAeEnable =
+        pendingRequest.hybrid_ae_enable |=
                 meta.find(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE).data.u8[0];
     }
 
-    // Enable hybrid AE if it's enabled in metadata or HDR+ mode is enabled.
-    pendingRequest.hybrid_ae_enable = mHybridAeEnable || mHdrPlusModeEnabled;
     /* DevCamDebug metadata processCaptureRequest */
     if (meta.exists(DEVCAMDEBUG_META_ENABLE)) {
         mDevCamDebugMetaEnable =
@@ -13081,14 +13080,16 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
     }
 
     // Hybrid AE
+    uint8_t hybrid_ae_enable = mHdrPlusModeEnabled;
     if (frame_settings.exists(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE)) {
         uint8_t *hybrid_ae = (uint8_t *)
                 frame_settings.find(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE).data.u8;
 
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata,
-                CAM_INTF_META_HYBRID_AE, *hybrid_ae)) {
-            rc = BAD_VALUE;
-        }
+        hybrid_ae_enable |= *hybrid_ae;
+    }
+    if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata,
+            CAM_INTF_META_HYBRID_AE, hybrid_ae_enable)) {
+        rc = BAD_VALUE;
     }
 
     // Histogram
