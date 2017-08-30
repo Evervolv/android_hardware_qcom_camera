@@ -10227,6 +10227,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     if (gExposeEnableZslKey) {
         available_request_keys.add(ANDROID_CONTROL_ENABLE_ZSL);
         available_request_keys.add(NEXUS_EXPERIMENTAL_2017_POSTVIEW);
+        available_request_keys.add(NEXUS_EXPERIMENTAL_2017_CONTINUOUS_ZSL_CAPTURE);
     }
 
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_REQUEST_KEYS,
@@ -11505,6 +11506,8 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         settings.update(ANDROID_CONTROL_ENABLE_ZSL, &enableZsl, 1);
         int32_t postview = 0;
         settings.update(NEXUS_EXPERIMENTAL_2017_POSTVIEW, &postview, 1);
+        int32_t continuousZslCapture = 0;
+        settings.update(NEXUS_EXPERIMENTAL_2017_CONTINUOUS_ZSL_CAPTURE, &continuousZslCapture, 1);
     }
 
     mDefaultMetadata[type] = settings.release();
