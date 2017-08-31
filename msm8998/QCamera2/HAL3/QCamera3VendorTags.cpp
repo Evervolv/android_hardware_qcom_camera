@@ -364,6 +364,10 @@ vendor_tag_info_t nexus_experimental_2017[NEXUS_EXPERIMENTAL_2017_END -
     { "control.exposure_time_boost", TYPE_FLOAT},
     { "request.makernote", TYPE_BYTE },
     { "request.next_still_intent_request_ready", TYPE_BYTE },
+    { "request.postview", TYPE_INT32},
+    { "request.postview_config", TYPE_INT32},
+    { "request.postview_data", TYPE_BYTE},
+    { "request.continuous_zsl_capture", TYPE_INT32},
 };
 
 vendor_tag_info_t tango_mode_data[TANGO_MODE_DATA_END -
@@ -604,6 +608,10 @@ uint32_t qcamera3_all_tags[] = {
     (uint32_t)NEXUS_EXPERIMENTAL_2017_EXP_TIME_BOOST,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_EXIF_MAKERNOTE,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_NEXT_STILL_INTENT_REQUEST_READY,
+    (uint32_t)NEXUS_EXPERIMENTAL_2017_POSTVIEW,
+    (uint32_t)NEXUS_EXPERIMENTAL_2017_POSTVIEW_CONFIG,
+    (uint32_t)NEXUS_EXPERIMENTAL_2017_POSTVIEW_DATA,
+    (uint32_t)NEXUS_EXPERIMENTAL_2017_CONTINUOUS_ZSL_CAPTURE,
 
     //TANGO_MODE
     (uint32_t)TANGO_MODE_DATA_SENSOR_FULLFOV,
