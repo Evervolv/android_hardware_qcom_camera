@@ -5513,10 +5513,8 @@ no_error:
     pendingRequest.jpegMetadata = mCurJpegMeta;
     pendingRequest.settings = saveRequestSettings(mCurJpegMeta, request);
     pendingRequest.capture_intent = mCaptureIntent;
-    // Enable hybrid AE if it's enabled in metadata or HDR+ mode is enabled.
-    pendingRequest.hybrid_ae_enable = mHdrPlusModeEnabled;
     if (meta.exists(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE)) {
-        pendingRequest.hybrid_ae_enable |=
+        pendingRequest.hybrid_ae_enable =
                 meta.find(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE).data.u8[0];
     }
 
@@ -11102,7 +11100,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     char hybrid_ae_prop[PROPERTY_VALUE_MAX];
     memset(hybrid_ae_prop, 0, sizeof(hybrid_ae_prop));
     property_get("persist.camera.hybrid_ae.enable", hybrid_ae_prop, "0");
-    const uint8_t hybrid_ae = (uint8_t)atoi(hybrid_ae_prop);
+    uint8_t hybrid_ae = (uint8_t)atoi(hybrid_ae_prop);
 
     uint8_t controlIntent = 0;
     uint8_t focusMode;
@@ -11499,16 +11497,21 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     int32_t instant_aec_mode = (int32_t)QCAMERA3_INSTANT_AEC_NORMAL_CONVERGENCE;
     settings.update(QCAMERA3_INSTANT_AEC_MODE, &instant_aec_mode, 1);
 
-    /* hybrid ae */
-    settings.update(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE, &hybrid_ae, 1);
-
     if (gExposeEnableZslKey) {
         settings.update(ANDROID_CONTROL_ENABLE_ZSL, &enableZsl, 1);
         int32_t postview = 0;
         settings.update(NEXUS_EXPERIMENTAL_2017_POSTVIEW, &postview, 1);
         int32_t continuousZslCapture = 0;
         settings.update(NEXUS_EXPERIMENTAL_2017_CONTINUOUS_ZSL_CAPTURE, &continuousZslCapture, 1);
+        // Set hybrid_ae tag in PREVIEW and STILL_CAPTURE templates to 1 so that
+        // hybrid ae is enabled for 3rd party app HDR+.
+        if (type == CAMERA3_TEMPLATE_PREVIEW ||
+                type == CAMERA3_TEMPLATE_STILL_CAPTURE) {
+            hybrid_ae = 1;
+        }
     }
+    /* hybrid ae */
+    settings.update(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE, &hybrid_ae, 1);
 
     mDefaultMetadata[type] = settings.release();
 
@@ -13090,16 +13093,12 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
     }
 
     // Hybrid AE
-    uint8_t hybrid_ae_enable = mHdrPlusModeEnabled;
     if (frame_settings.exists(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE)) {
         uint8_t *hybrid_ae = (uint8_t *)
                 frame_settings.find(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE).data.u8;
-
-        hybrid_ae_enable |= *hybrid_ae;
-    }
-    if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata,
-            CAM_INTF_META_HYBRID_AE, hybrid_ae_enable)) {
-        rc = BAD_VALUE;
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_HYBRID_AE, *hybrid_ae)) {
+            rc = BAD_VALUE;
+        }
     }
 
     // Histogram
