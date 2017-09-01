@@ -474,6 +474,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       m_bEisSupportedSize(false),
       m_bEisEnable(false),
       m_bEis3PropertyEnabled(false),
+      m_bAVTimerEnabled(false),
       m_MobicatMask(0),
       mShutterDispatcher(this),
       mOutputBufferDispatcher(this),
@@ -1709,14 +1710,24 @@ void QCamera3HardwareInterface::updateTimeStampInPendingBuffers(
 {
     for (auto req = mPendingBuffersMap.mPendingBuffersInRequest.begin();
             req != mPendingBuffersMap.mPendingBuffersInRequest.end(); req++) {
+        // WAR: save the av_timestamp to the next frame
+        if(req->frame_number == frameNumber + 1) {
+            req->av_timestamp = timestamp;
+        }
+
         if (req->frame_number != frameNumber)
             continue;
 
         for (auto k = req->mPendingBufferList.begin();
                 k != req->mPendingBufferList.end(); k++ ) {
-            struct private_handle_t *priv_handle =
-                    (struct private_handle_t *) (*(k->buffer));
-            setMetaData(priv_handle, SET_VT_TIMESTAMP, &timestamp);
+            // WAR: update timestamp when it's not VT usecase
+            QCamera3Channel *channel = (QCamera3Channel *)k->stream->priv;
+            if (!((1U << CAM_STREAM_TYPE_VIDEO) == channel->getStreamTypeMask() &&
+                m_bAVTimerEnabled)) {
+                    struct private_handle_t *priv_handle =
+                        (struct private_handle_t *) (*(k->buffer));
+                    setMetaData(priv_handle, SET_VT_TIMESTAMP, &timestamp);
+            }
         }
     }
     return;
@@ -1901,6 +1912,8 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     mInstantAecFrameIdxCount = 0;
     mCurrFeatureState = 0;
     mStreamConfig = true;
+
+    m_bAVTimerEnabled = false;
 
     memset(&mInputStreamInfo, 0, sizeof(mInputStreamInfo));
 
@@ -4171,6 +4184,25 @@ void QCamera3HardwareInterface::handleBufferWithLock(
         }
     }
 
+    // WAR for encoder avtimer timestamp issue
+    QCamera3Channel *channel = (QCamera3Channel *)buffer->stream->priv;
+    if ((1U << CAM_STREAM_TYPE_VIDEO) == channel->getStreamTypeMask() &&
+        m_bAVTimerEnabled) {
+        for (auto req = mPendingBuffersMap.mPendingBuffersInRequest.begin();
+            req != mPendingBuffersMap.mPendingBuffersInRequest.end(); req++) {
+            if (req->frame_number != frame_number)
+                continue;
+            if(req->av_timestamp == 0) {
+                buffer->status |= CAMERA3_BUFFER_STATUS_ERROR;
+            }
+            else {
+                struct private_handle_t *priv_handle =
+                    (struct private_handle_t *) (*(buffer->buffer));
+                setMetaData(priv_handle, SET_VT_TIMESTAMP, &(req->av_timestamp));
+            }
+        }
+    }
+
     buffer->status |= mPendingBuffersMap.getBufErrStatus(buffer->buffer);
     LOGH("result frame_number = %d, buffer = %p",
              frame_number, buffer->buffer);
@@ -4978,11 +5010,13 @@ int QCamera3HardwareInterface::processCaptureRequest(
             if (m_debug_avtimer){
                 LOGI(" Enabling AV timer through setprop");
                 use_av_timer = &m_debug_avtimer;
+                m_bAVTimerEnabled = true;
             }
             else{
                 use_av_timer =
                     meta.find(QCAMERA3_USE_AV_TIMER).data.u8;
                 if (use_av_timer) {
+                    m_bAVTimerEnabled = true;
                     LOGI("Enabling AV timer through Metadata: use_av_timer: %d", *use_av_timer);
                 }
             }
@@ -5550,6 +5584,7 @@ no_error:
     bufsForCurRequest.frame_number = frameNumber;
     // Mark current timestamp for the new request
     bufsForCurRequest.timestamp = systemTime(CLOCK_MONOTONIC);
+    bufsForCurRequest.av_timestamp = 0;
     bufsForCurRequest.hdrplus = hdrPlusRequest;
 
     if (hdrPlusRequest) {

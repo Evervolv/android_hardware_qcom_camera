@@ -124,6 +124,7 @@ typedef struct {
     uint32_t frame_number;
     // Time when request queued into system
     nsecs_t timestamp;
+    nsecs_t av_timestamp;
     List<PendingBufferInfo> mPendingBufferList;
     bool hdrplus;
 } PendingBuffersInRequest;
@@ -544,6 +545,7 @@ private:
     bool m_bEisEnable;
     bool m_bEis3PropertyEnabled;
     bool m_bEisSupported;
+    bool m_bAVTimerEnabled;
     typedef struct {
         cam_dimension_t dim;
         int format;
