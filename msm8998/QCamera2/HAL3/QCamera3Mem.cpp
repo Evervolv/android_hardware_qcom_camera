@@ -289,81 +289,6 @@ QCamera3HeapMemory::~QCamera3HeapMemory()
 }
 
 /*===========================================================================
- * FUNCTION   : tryAllocGoogleBuffer
- *
- * DESCRIPTION: impl of allocating one google heap buffer of certain size
- *
- * PARAMETERS :
- *   @memInfo : [output] reference to struct to store additional memory allocation info
- *   @heap    : [input] heap id to indicate where the buffers will be allocated from
- *   @size    : [input] lenght of the buffer to be allocated
- *   @isCached: [input] flag to indicating buffer should be cacheable or not
- *
- * RETURN     : int32_t type of status
- *              NO_ERROR  -- success
- *              none-zero failure code
- *==========================================================================*/
-int QCamera3HeapMemory::tryAllocGoogleBuffer(QCamera3MemInfo &memInfo,
-        unsigned int heap_id, size_t size, bool isCached)
-{
-    int rc = OK;
-    struct ion_handle_data handle_data;
-    struct ion_allocation_data allocData;
-    struct ion_fd_data ion_info_fd;
-
-    if (heap_id != 0x1 << ION_GOOGLE_HEAP_ID) {
-        ALOGE("%s: Wrong heap type %u", __FUNCTION__, heap_id);
-        goto ION_OPEN_FAILED;
-    }
-
-    ALOGD("%s: Allocate %zu bytes in google heap", __FUNCTION__, size);
-
-    if (main_ion_fd < 0) {
-        LOGE("Ion dev open failed: %s\n", strerror(errno));
-        goto ION_OPEN_FAILED;
-    }
-
-    memset(&allocData, 0, sizeof(allocData));
-    allocData.len = size;
-    /* to make it page size aligned */
-    allocData.len = (allocData.len + 4095U) & (~4095U);
-    allocData.align = 4096;
-    if (isCached) {
-        allocData.flags = ION_FLAG_CACHED;
-    }
-    allocData.heap_id_mask = heap_id;
-    rc = ioctl(main_ion_fd, ION_IOC_ALLOC, &allocData);
-    if (rc < 0) {
-        LOGE("ION allocation for len %d failed: %s\n", allocData.len,
-            strerror(errno));
-        goto ION_ALLOC_FAILED;
-    }
-
-    memset(&ion_info_fd, 0, sizeof(ion_info_fd));
-    ion_info_fd.handle = allocData.handle;
-    rc = ioctl(main_ion_fd, ION_IOC_SHARE, &ion_info_fd);
-    if (rc < 0) {
-        LOGE("ION map failed %s\n", strerror(errno));
-        goto ION_MAP_FAILED;
-    }
-
-    ALOGD("%s: Allocate google heap ..OK", __FUNCTION__);
-
-    memInfo.fd = ion_info_fd.fd;
-    memInfo.handle = ion_info_fd.handle;
-    memInfo.size = allocData.len;
-    return OK;
-
-ION_MAP_FAILED:
-    memset(&handle_data, 0, sizeof(handle_data));
-    handle_data.handle = ion_info_fd.handle;
-    ioctl(main_ion_fd, ION_IOC_FREE, &handle_data);
-ION_ALLOC_FAILED:
-ION_OPEN_FAILED:
-    return NO_MEMORY;
-}
-
-/*===========================================================================
  * FUNCTION   : allocOneBuffer
  *
  * DESCRIPTION: impl of allocating one buffers of certain size
@@ -384,21 +309,6 @@ int QCamera3HeapMemory::allocOneBuffer(QCamera3MemInfo &memInfo,
     struct ion_handle_data handle_data;
     struct ion_allocation_data allocData;
     struct ion_fd_data ion_info_fd;
-
-    // Override heap id to use Google heap (b/65224498)
-    // TODO(gucheng): remove this WR when vmalloc corruption bug is fixed
-    bool use_google_heap = !isCached;
-
-    if (use_google_heap) {
-        int ret = tryAllocGoogleBuffer(memInfo,
-                                       0x1 << ION_GOOGLE_HEAP_ID,
-                                       size,
-                                       isCached);
-        if (ret == OK) {
-            return ret;
-        }
-        ALOGW("%s: Allocate google heap failed; fall back to normal", __FUNCTION__);
-    }
 
     if (main_ion_fd < 0) {
         LOGE("Ion dev open failed: %s\n", strerror(errno));

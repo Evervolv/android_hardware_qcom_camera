@@ -125,8 +125,6 @@ private:
     int allocOneBuffer(struct QCamera3MemInfo &memInfo,
             unsigned int heap_id, size_t size, bool isCached = true);
     void deallocOneBuffer(struct QCamera3MemInfo &memInfo);
-    int tryAllocGoogleBuffer(struct QCamera3MemInfo &memInfo,
-            unsigned int heap_id, size_t size, bool isCached);
     uint32_t mMaxCnt;
 };
 
