@@ -10226,6 +10226,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         available_request_keys.add(ANDROID_CONTROL_ENABLE_ZSL);
         available_request_keys.add(NEXUS_EXPERIMENTAL_2017_POSTVIEW);
         available_request_keys.add(NEXUS_EXPERIMENTAL_2017_CONTINUOUS_ZSL_CAPTURE);
+        available_request_keys.add(NEXUS_EXPERIMENTAL_2017_DISABLE_HDRPLUS);
     }
 
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_REQUEST_KEYS,
@@ -10949,7 +10950,7 @@ int QCamera3HardwareInterface::initHdrPlusClientLocked() {
             ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__, strerror(-res), res);
         }
 
-        gEaselBypassOnly = !property_get_bool("persist.camera.hdrplus.enable", false);
+        gEaselBypassOnly = !property_get_bool("persist.camera.hdrplus.enable", true);
         gEaselProfilingEnabled = property_get_bool("persist.camera.hdrplus.profiling", false);
 
         // Expose enableZsl key only when HDR+ mode is enabled.
@@ -11503,6 +11504,10 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         settings.update(NEXUS_EXPERIMENTAL_2017_POSTVIEW, &postview, 1);
         int32_t continuousZslCapture = 0;
         settings.update(NEXUS_EXPERIMENTAL_2017_CONTINUOUS_ZSL_CAPTURE, &continuousZslCapture, 1);
+        // Disable HDR+ for templates other than CAMERA3_TEMPLATE_STILL_CAPTURE.
+        int32_t disableHdrplus = (type == CAMERA3_TEMPLATE_STILL_CAPTURE) ? 0 : 1;
+        settings.update(NEXUS_EXPERIMENTAL_2017_DISABLE_HDRPLUS, &disableHdrplus, 1);
+
         // Set hybrid_ae tag in PREVIEW and STILL_CAPTURE templates to 1 so that
         // hybrid ae is enabled for 3rd party app HDR+.
         if (type == CAMERA3_TEMPLATE_PREVIEW ||
@@ -14723,6 +14728,12 @@ void QCamera3HardwareInterface::updateHdrPlusResultMetadata(
 
 bool QCamera3HardwareInterface::isRequestHdrPlusCompatible(
         const camera3_capture_request_t &request, const CameraMetadata &metadata) {
+    if (metadata.exists(NEXUS_EXPERIMENTAL_2017_DISABLE_HDRPLUS) &&
+            metadata.find(NEXUS_EXPERIMENTAL_2017_DISABLE_HDRPLUS).data.i32[0] == 1) {
+        ALOGV("%s: NEXUS_EXPERIMENTAL_2017_DISABLE_HDRPLUS is 1", __FUNCTION__);
+        return false;
+    }
+
     if (!metadata.exists(ANDROID_NOISE_REDUCTION_MODE) ||
          metadata.find(ANDROID_NOISE_REDUCTION_MODE).data.u8[0] !=
             ANDROID_NOISE_REDUCTION_MODE_HIGH_QUALITY) {
