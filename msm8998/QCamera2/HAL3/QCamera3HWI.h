@@ -868,6 +868,8 @@ private:
     bool m_bSensorHDREnabled;
 
     cam_trigger_t mAfTrigger;
+
+    int32_t mSceneDistance;
 };
 
 }; // namespace qcamera

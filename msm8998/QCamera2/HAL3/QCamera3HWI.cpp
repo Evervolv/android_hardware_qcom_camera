@@ -525,7 +525,8 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mIsApInputUsedForHdrPlus(false),
       mFirstPreviewIntentSeen(false),
       m_bSensorHDREnabled(false),
-      mAfTrigger()
+      mAfTrigger(),
+      mSceneDistance(-1)
 {
     getLogLevel();
     mCommon.init(gCamCapability[cameraId]);
@@ -6742,12 +6743,12 @@ QCamera3HardwareInterface::translateFromHalMetadata(
             camMetadata.update(DEVCAMDEBUG_AF_LENS_POSITION, &fwk_DevCamDebug_af_lens_position, 1);
         }
         IF_META_AVAILABLE(int32_t, DevCamDebug_af_tof_confidence,
-                CAM_INTF_META_DEV_CAM_AF_TOF_CONFIDENCE, metadata) {
+                CAM_INTF_META_AF_TOF_CONFIDENCE, metadata) {
             int32_t fwk_DevCamDebug_af_tof_confidence = *DevCamDebug_af_tof_confidence;
             camMetadata.update(DEVCAMDEBUG_AF_TOF_CONFIDENCE, &fwk_DevCamDebug_af_tof_confidence, 1);
         }
         IF_META_AVAILABLE(int32_t, DevCamDebug_af_tof_distance,
-                CAM_INTF_META_DEV_CAM_AF_TOF_DISTANCE, metadata) {
+                CAM_INTF_META_AF_TOF_DISTANCE, metadata) {
             int32_t fwk_DevCamDebug_af_tof_distance = *DevCamDebug_af_tof_distance;
             camMetadata.update(DEVCAMDEBUG_AF_TOF_DISTANCE, &fwk_DevCamDebug_af_tof_distance, 1);
         }
@@ -8451,6 +8452,24 @@ QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
             }
         }
     }
+
+    IF_META_AVAILABLE(int32_t, af_tof_confidence,
+            CAM_INTF_META_AF_TOF_CONFIDENCE, metadata) {
+        IF_META_AVAILABLE(int32_t, af_tof_distance,
+                CAM_INTF_META_AF_TOF_DISTANCE, metadata) {
+            int32_t fwk_af_tof_confidence = *af_tof_confidence;
+            int32_t fwk_af_tof_distance = *af_tof_distance;
+            if (fwk_af_tof_confidence == 1) {
+                mSceneDistance = fwk_af_tof_distance;
+            } else {
+                mSceneDistance = -1;
+            }
+            LOGD("tof_distance %d, tof_confidence %d, mSceneDistance %d",
+                     fwk_af_tof_distance, fwk_af_tof_confidence, mSceneDistance);
+        }
+    }
+    camMetadata.update(NEXUS_EXPERIMENTAL_2017_SCENE_DISTANCE, &mSceneDistance, 1);
+
     resultMetadata = camMetadata.release();
     return resultMetadata;
 }
@@ -10363,6 +10382,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM,
        NEXUS_EXPERIMENTAL_2017_AF_REGIONS_CONFIDENCE,
        NEXUS_EXPERIMENTAL_2017_EXP_TIME_BOOST,
+       NEXUS_EXPERIMENTAL_2017_SCENE_DISTANCE,
        };
 
     size_t result_keys_cnt =

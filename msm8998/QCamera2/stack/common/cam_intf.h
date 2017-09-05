@@ -1148,8 +1148,8 @@ typedef struct {
     INCLUDE(CAM_INTF_META_DEV_CAM_ENABLE,               uint8_t,                     1);
     /* DevCamDebug metadata CAM_INTF.H AF */
     INCLUDE(CAM_INTF_META_DEV_CAM_AF_LENS_POSITION,     int32_t,                     1);
-    INCLUDE(CAM_INTF_META_DEV_CAM_AF_TOF_CONFIDENCE,    int32_t,                     1);
-    INCLUDE(CAM_INTF_META_DEV_CAM_AF_TOF_DISTANCE,      int32_t,                     1);
+    INCLUDE(CAM_INTF_META_AF_TOF_CONFIDENCE,            int32_t,                     1);
+    INCLUDE(CAM_INTF_META_AF_TOF_DISTANCE,              int32_t,                     1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AF_LUMA,                    int32_t,               1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AF_HAF_STATE,               int32_t,               1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AF_MONITOR_PDAF_TARGET_POS, int32_t,               1);
