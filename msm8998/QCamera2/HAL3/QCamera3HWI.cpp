@@ -15381,10 +15381,6 @@ void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
         return;
     }
 
-
-    // TODO (b/34854987): initiate this from HDR+ service.
-    onNextCaptureReady(result->requestId);
-
     // Find the pending HDR+ request.
     HdrPlusPendingRequest pendingRequest;
     {
