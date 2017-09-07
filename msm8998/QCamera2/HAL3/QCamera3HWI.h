@@ -838,7 +838,7 @@ private:
             const camera_metadata_t &resultMetadata) override;
     void onFailedCaptureResult(pbcamera::CaptureResult *failedResult) override;
     void onShutter(uint32_t requestId, int64_t apSensorTimestampNs) override;
-    void onNextCaptureReady(uint32_t requestId);
+    void onNextCaptureReady(uint32_t requestId) override;
     void onPostview(uint32_t requestId, std::unique_ptr<std::vector<uint8_t>> postview,
             uint32_t width, uint32_t height, uint32_t stride, int32_t format) override;
 
