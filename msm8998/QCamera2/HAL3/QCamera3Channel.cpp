@@ -1211,6 +1211,58 @@ int32_t QCamera3ProcessingChannel::registerBuffer(buffer_handle_t *buffer,
     return rc;
 }
 
+int32_t QCamera3ProcessingChannel::registerBufferAndGetBufDef(buffer_handle_t *buffer,
+        mm_camera_buf_def_t *frame)
+{
+    if (buffer == nullptr || frame == nullptr) {
+        ALOGE("%s: buffer and frame cannot be nullptr.", __FUNCTION__);
+        return BAD_VALUE;
+    }
+
+    status_t rc;
+
+    // Get the buffer index.
+    int index = mMemory.getMatchBufIndex((void*)buffer);
+    if(index < 0) {
+        // Register the buffer if it was not registered.
+        rc = registerBuffer(buffer, mIsType);
+        if (rc != OK) {
+            ALOGE("%s: Regitering buffer failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
+            return rc;
+        }
+
+        index = mMemory.getMatchBufIndex((void*)buffer);
+        if (index < 0) {
+            ALOGE("%s: Could not find object among registered buffers", __FUNCTION__);
+            return DEAD_OBJECT;
+        }
+    }
+
+    cam_frame_len_offset_t offset = {};
+    mStreams[0]->getFrameOffset(offset);
+
+    // Get the buffer def.
+    rc = mMemory.getBufDef(offset, *frame, index, mMapStreamBuffers);
+    if (rc != 0) {
+        ALOGE("%s: Getting a frame failed: %s (%d).", __FUNCTION__, strerror(-rc), rc);
+        return rc;
+    }
+
+    // Set the frame's stream ID because it's not set in getBufDef.
+    frame->stream_id = mStreams[0]->getMyHandle();
+    return 0;
+}
+
+void QCamera3ProcessingChannel::unregisterBuffer(mm_camera_buf_def_t *frame)
+{
+    if (frame == nullptr) {
+        ALOGE("%s: frame is nullptr", __FUNCTION__);
+        return;
+    }
+
+    mMemory.unregisterBuffer(frame->buf_idx);
+}
+
 /*===========================================================================
  * FUNCTION   : setFwkInputPPData
  *
