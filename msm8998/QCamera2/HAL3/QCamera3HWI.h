@@ -506,6 +506,9 @@ private:
             T output[BLACK_LEVEL_PATTERN_CNT],
             cam_color_filter_arrangement_t color_arrangement);
 
+    int32_t startChannelLocked();
+    void stopChannelLocked(bool stopChannelImmediately);
+
     camera3_device_t   mCameraDevice;
     uint32_t           mCameraId;
     mm_camera_vtbl_t  *mCameraHandle;
@@ -854,6 +857,9 @@ private:
 
     // If ZSL is enabled (android.control.enableZsl).
     bool mZslEnabled;
+
+    // If Easel MIPI has been started.
+    bool mEaselMipiStarted;
 
     // If HAL provides RAW input buffers to Easel. This is just for prototyping.
     bool mIsApInputUsedForHdrPlus;
