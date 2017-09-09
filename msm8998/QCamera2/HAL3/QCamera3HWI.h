@@ -830,6 +830,13 @@ private:
 
     // Wait until opening HDR+ client completes if it's being opened.
     void finishHdrPlusClientOpeningLocked(std::unique_lock<std::mutex> &lock);
+
+    // Handle Easel error asynchronuously in another thread.
+    void handleEaselFatalErrorAsync();
+
+    // Handle Easel error.
+    void handleEaselFatalError();
+
     // Easel manager client callbacks.
     void onEaselFatalError(std::string errMsg);
 
@@ -875,6 +882,8 @@ private:
     cam_trigger_t mAfTrigger;
 
     int32_t mSceneDistance;
+
+    std::future<void> mEaselErrorFuture;
 };
 
 }; // namespace qcamera
