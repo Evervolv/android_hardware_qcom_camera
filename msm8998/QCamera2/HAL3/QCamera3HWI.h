@@ -701,6 +701,7 @@ private:
     int32_t mLastCustIntentFrmNum;
     // Easel firmware version
     char mEaselFwVersion[FW_VER_SIZE];
+    bool mEaselFwUpdated;
     static const QCameraMap<camera_metadata_enum_android_control_effect_mode_t,
             cam_effect_mode_type> EFFECT_MODES_MAP[];
     static const QCameraMap<camera_metadata_enum_android_control_awb_mode_t,
