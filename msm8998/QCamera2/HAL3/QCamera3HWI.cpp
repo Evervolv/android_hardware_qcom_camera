@@ -570,6 +570,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
     memset(mLdafCalib, 0, sizeof(mLdafCalib));
 
     memset(mEaselFwVersion, 0, sizeof(mEaselFwVersion));
+    mEaselFwUpdated = false;
 
     memset(prop, 0, sizeof(prop));
     property_get("persist.camera.tnr.preview", prop, "0");
@@ -901,6 +902,7 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
                 ALOGE("%s: Resuming Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
                 return rc;
             }
+            mEaselFwUpdated = false;
         }
     }
 
@@ -14114,22 +14116,15 @@ const uint32_t *QCamera3HardwareInterface::getLdafCalib()
 * PARAMETERS : None
 *
 * RETURN     : string describing Firmware version
-*              "\0" if Easel manager client is not open
+*              "\0" if version is not up to date
 *==========================================================================*/
 const char *QCamera3HardwareInterface::getEaselFwVersion()
 {
-    int rc = NO_ERROR;
-
-    std::unique_lock<std::mutex> l(gHdrPlusClientLock);
-    ALOGD("%s: Querying Easel firmware version", __FUNCTION__);
-    if (EaselManagerClientOpened) {
-        rc = gEaselManagerClient->getFwVersion(mEaselFwVersion);
-        if (rc != OK)
-            ALOGD("%s: Failed to query Easel firmware version", __FUNCTION__);
-        else
-            return (const char *)&mEaselFwVersion[0];
+    if (mEaselFwUpdated) {
+        return (const char *)&mEaselFwVersion[0];
+    } else {
+        return NULL;
     }
-    return NULL;
 }
 
 /*===========================================================================
@@ -15223,6 +15218,8 @@ void QCamera3HardwareInterface::onEaselFatalError(std::string errMsg)
 
 void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
 {
+    int rc = NO_ERROR;
+
     if (client == nullptr) {
         ALOGE("%s: Opened client is null.", __FUNCTION__);
         return;
@@ -15255,6 +15252,16 @@ void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
     res = enableHdrPlusModeLocked();
     if (res != OK) {
         LOGE("%s: Failed to configure HDR+ streams.", __FUNCTION__);
+    }
+
+    // Get Easel firmware version
+    if (EaselManagerClientOpened) {
+        rc = gEaselManagerClient->getFwVersion(mEaselFwVersion);
+        if (rc != OK) {
+            ALOGD("%s: Failed to query Easel firmware version", __FUNCTION__);
+        } else {
+            mEaselFwUpdated = true;
+        }
     }
 }
 
