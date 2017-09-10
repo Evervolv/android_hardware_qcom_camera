@@ -369,6 +369,7 @@ vendor_tag_info_t nexus_experimental_2017[NEXUS_EXPERIMENTAL_2017_END -
     { "request.postview_data", TYPE_BYTE},
     { "request.continuous_zsl_capture", TYPE_INT32},
     { "request.disable_hdrplus", TYPE_INT32},
+    { "control.scene_distance", TYPE_INT32},
 };
 
 vendor_tag_info_t tango_mode_data[TANGO_MODE_DATA_END -
@@ -614,6 +615,7 @@ uint32_t qcamera3_all_tags[] = {
     (uint32_t)NEXUS_EXPERIMENTAL_2017_POSTVIEW_DATA,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_CONTINUOUS_ZSL_CAPTURE,
     (uint32_t)NEXUS_EXPERIMENTAL_2017_DISABLE_HDRPLUS,
+    (uint32_t)NEXUS_EXPERIMENTAL_2017_SCENE_DISTANCE,
 
     //TANGO_MODE
     (uint32_t)TANGO_MODE_DATA_SENSOR_FULLFOV,

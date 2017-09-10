@@ -108,6 +108,7 @@ typedef struct {
     stream_status_t status;
     int registered;
     QCamera3ProcessingChannel *channel;
+    uint32_t id; // unique ID
 } stream_info_t;
 
 typedef struct {
@@ -505,6 +506,9 @@ private:
             T output[BLACK_LEVEL_PATTERN_CNT],
             cam_color_filter_arrangement_t color_arrangement);
 
+    int32_t startChannelLocked();
+    void stopChannelLocked(bool stopChannelImmediately);
+
     camera3_device_t   mCameraDevice;
     uint32_t           mCameraId;
     mm_camera_vtbl_t  *mCameraHandle;
@@ -700,6 +704,7 @@ private:
     int32_t mLastCustIntentFrmNum;
     // Easel firmware version
     char mEaselFwVersion[FW_VER_SIZE];
+    bool mEaselFwUpdated;
     static const QCameraMap<camera_metadata_enum_android_control_effect_mode_t,
             cam_effect_mode_type> EFFECT_MODES_MAP[];
     static const QCameraMap<camera_metadata_enum_android_control_awb_mode_t,
@@ -771,23 +776,17 @@ private:
     Mutex mFlushLock;
     bool m60HzZone;
 
-    // Stream IDs used in stream configuration with HDR+ client.
-    const static uint32_t kPbRaw10InputStreamId = 0;
-    const static uint32_t kPbYuvOutputStreamId = 1;
-    const static uint32_t kPbRaw16OutputStreamId = 2;
-
     // Issue an additional RAW for every 10 requests to control RAW capture rate. Requesting RAW
     // too often will cause frame drops due to latency of sending RAW to HDR+ service.
     const static uint32_t kHdrPlusRawPeriod = 10;
 
     // Define a pending HDR+ request submitted to HDR+ service and not yet received by HAL.
     struct HdrPlusPendingRequest {
-        // YUV buffer from QCamera3PicChannel to be filled by HDR+ client with an HDR+ processed
-        // frame.
-        std::shared_ptr<mm_camera_buf_def_t> yuvBuffer;
+        // HDR+ stream ID -> output buffer to be filled by HDR+ client with an HDR+ processed frame.
+        std::map<uint32_t, std::shared_ptr<mm_camera_buf_def_t>> outputBuffers;
 
-        // Output buffers in camera framework's request.
-        std::vector<camera3_stream_buffer_t> frameworkOutputBuffers;
+        // HDR+ stream ID -> output buffers in camera framework's request.
+        std::map<uint32_t, camera3_stream_buffer_t> frameworkOutputBuffers;
 
         // Settings in camera framework's request.
         std::shared_ptr<metadata_buffer_t> settings;
@@ -795,7 +794,7 @@ private:
 
     // Fill pbcamera::StreamConfiguration based on the channel stream.
     status_t fillPbStreamConfig(pbcamera::StreamConfiguration *config, uint32_t pbStreamId,
-            int pbStreamFormat, QCamera3Channel *channel, uint32_t streamIndex);
+            QCamera3Channel *channel, uint32_t streamIndex);
 
     // Open HDR+ client asynchronously.
     status_t openHdrPlusClientAsyncLocked();
@@ -822,6 +821,10 @@ private:
     bool trySubmittingHdrPlusRequestLocked(HdrPlusPendingRequest *hdrPlusRequest,
         const camera3_capture_request_t &request, const CameraMetadata &metadata);
 
+    // Abort an HDR+ request that was not submitted successfully in
+    // trySubmittingHdrPlusRequestLocked.
+    void abortPendingHdrplusRequest(HdrPlusPendingRequest *hdrPlusRequest);
+
     // Update HDR+ result metadata with the still capture's request settings.
     void updateHdrPlusResultMetadata(CameraMetadata &resultMetadata,
             std::shared_ptr<metadata_buffer_t> settings);
@@ -839,7 +842,7 @@ private:
             const camera_metadata_t &resultMetadata) override;
     void onFailedCaptureResult(pbcamera::CaptureResult *failedResult) override;
     void onShutter(uint32_t requestId, int64_t apSensorTimestampNs) override;
-    void onNextCaptureReady(uint32_t requestId);
+    void onNextCaptureReady(uint32_t requestId) override;
     void onPostview(uint32_t requestId, std::unique_ptr<std::vector<uint8_t>> postview,
             uint32_t width, uint32_t height, uint32_t stride, int32_t format) override;
 
@@ -856,6 +859,9 @@ private:
     // If ZSL is enabled (android.control.enableZsl).
     bool mZslEnabled;
 
+    // If Easel MIPI has been started.
+    bool mEaselMipiStarted;
+
     // If HAL provides RAW input buffers to Easel. This is just for prototyping.
     bool mIsApInputUsedForHdrPlus;
 
@@ -868,6 +874,8 @@ private:
     bool m_bSensorHDREnabled;
 
     cam_trigger_t mAfTrigger;
+
+    int32_t mSceneDistance;
 };
 
 }; // namespace qcamera
