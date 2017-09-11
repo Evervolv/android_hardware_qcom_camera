@@ -15228,15 +15228,31 @@ status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked()
     return OK;
 }
 
-void QCamera3HardwareInterface::onEaselFatalError(std::string errMsg)
+void QCamera3HardwareInterface::handleEaselFatalError()
 {
-    ALOGE("%s: Got an Easel fatal error: %s", __FUNCTION__, errMsg.c_str());
-    // Set HAL state to error.
     pthread_mutex_lock(&mMutex);
     mState = ERROR;
     pthread_mutex_unlock(&mMutex);
 
     handleCameraDeviceError(/*stopChannelImmediately*/true);
+}
+
+void QCamera3HardwareInterface::handleEaselFatalErrorAsync()
+{
+    if (mEaselErrorFuture.valid()) {
+        // The error future has been invoked.
+        return;
+    }
+
+    // Launch a future to handle the fatal error.
+    mEaselErrorFuture = std::async(std::launch::async,
+            &QCamera3HardwareInterface::handleEaselFatalError, this);
+}
+
+void QCamera3HardwareInterface::onEaselFatalError(std::string errMsg)
+{
+    ALOGE("%s: Got an Easel fatal error: %s", __FUNCTION__, errMsg.c_str());
+    handleEaselFatalErrorAsync();
 }
 
 void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
@@ -15298,14 +15314,8 @@ void QCamera3HardwareInterface::onOpenFailed(status_t err)
 
 void QCamera3HardwareInterface::onFatalError()
 {
-    ALOGE("%s: HDR+ client has a fatal error.", __FUNCTION__);
-
-    // Set HAL state to error.
-    pthread_mutex_lock(&mMutex);
-    mState = ERROR;
-    pthread_mutex_unlock(&mMutex);
-
-    handleCameraDeviceError(/*stopChannelImmediately*/true);
+    ALOGE("%s: HDR+ client encountered a fatal error.", __FUNCTION__);
+    handleEaselFatalErrorAsync();
 }
 
 void QCamera3HardwareInterface::onShutter(uint32_t requestId, int64_t apSensorTimestampNs)
