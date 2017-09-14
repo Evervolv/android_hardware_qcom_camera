@@ -1809,7 +1809,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         return rc;
     }
 
-    // Disable HRD+ if it's enabled;
+    // Disable HDR+ if it's enabled;
     {
         std::unique_lock<std::mutex> l(gHdrPlusClientLock);
         finishHdrPlusClientOpeningLocked(l);
@@ -6304,6 +6304,13 @@ int QCamera3HardwareInterface::flush(bool restartChannels, bool stopChannelImmed
     pthread_mutex_lock(&mMutex);
     mFlush = true;
     pthread_mutex_unlock(&mMutex);
+
+    // Disable HDR+ if it's enabled;
+    {
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
+        finishHdrPlusClientOpeningLocked(l);
+        disableHdrPlusModeLocked();
+    }
 
     rc = stopAllChannels();
     // unlink of dualcam
