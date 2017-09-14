@@ -14899,19 +14899,6 @@ bool QCamera3HardwareInterface::isRequestHdrPlusCompatible(
         return false;
     }
 
-    // TODO (b/36492953): support digital zoom.
-    if (!metadata.exists(ANDROID_SCALER_CROP_REGION) ||
-         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[0] != 0 ||
-         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[1] != 0 ||
-         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[2] !=
-                gCamCapability[mCameraId]->active_array_size.width ||
-         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[3] !=
-                gCamCapability[mCameraId]->active_array_size.height) {
-        ALOGV("%s: ANDROID_SCALER_CROP_REGION is not the same as active array region.",
-                __FUNCTION__);
-        return false;
-    }
-
     if (!metadata.exists(ANDROID_TONEMAP_MODE) ||
          metadata.find(ANDROID_TONEMAP_MODE).data.u8[0] != ANDROID_TONEMAP_MODE_HIGH_QUALITY) {
         ALOGV("%s: ANDROID_TONEMAP_MODE is not HQ.", __FUNCTION__);
