@@ -1809,7 +1809,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         return rc;
     }
 
-    // Disable HRD+ if it's enabled;
+    // Disable HDR+ if it's enabled;
     {
         std::unique_lock<std::mutex> l(gHdrPlusClientLock);
         finishHdrPlusClientOpeningLocked(l);
@@ -6304,6 +6304,13 @@ int QCamera3HardwareInterface::flush(bool restartChannels, bool stopChannelImmed
     pthread_mutex_lock(&mMutex);
     mFlush = true;
     pthread_mutex_unlock(&mMutex);
+
+    // Disable HDR+ if it's enabled;
+    {
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
+        finishHdrPlusClientOpeningLocked(l);
+        disableHdrPlusModeLocked();
+    }
 
     rc = stopAllChannels();
     // unlink of dualcam
@@ -14889,19 +14896,6 @@ bool QCamera3HardwareInterface::isRequestHdrPlusCompatible(
     if (!metadata.exists(ANDROID_FLASH_MODE) ||
          metadata.find(ANDROID_FLASH_MODE).data.u8[0] != ANDROID_FLASH_MODE_OFF) {
         ALOGV("%s: ANDROID_FLASH_MODE is not OFF.", __FUNCTION__);
-        return false;
-    }
-
-    // TODO (b/36492953): support digital zoom.
-    if (!metadata.exists(ANDROID_SCALER_CROP_REGION) ||
-         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[0] != 0 ||
-         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[1] != 0 ||
-         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[2] !=
-                gCamCapability[mCameraId]->active_array_size.width ||
-         metadata.find(ANDROID_SCALER_CROP_REGION).data.i32[3] !=
-                gCamCapability[mCameraId]->active_array_size.height) {
-        ALOGV("%s: ANDROID_SCALER_CROP_REGION is not the same as active array region.",
-                __FUNCTION__);
         return false;
     }
 
