@@ -651,6 +651,9 @@ typedef struct cam_capability{
 
     /* Whether camera timestamp is calibrated with sensor */
     uint8_t timestamp_calibrated;
+
+    /*PDAF calibration data*/
+    cam_pd_calibration_t pdaf_cal;
 } cam_capability_t;
 
 typedef enum {

@@ -9568,6 +9568,18 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         int32_t pd_dimensions [] = {depthWidth, depthHeight, depthStride};
         staticInfo.update(NEXUS_EXPERIMENTAL_2017_PD_DATA_DIMENSIONS,
                 pd_dimensions, sizeof(pd_dimensions) / sizeof(pd_dimensions[0]));
+
+        staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_PDAF_CALIB_RIGHT_GAINS,
+                reinterpret_cast<uint8_t *>(gCamCapability[cameraId]->pdaf_cal.right_gain_map),
+                sizeof(gCamCapability[cameraId]->pdaf_cal.right_gain_map));
+
+        staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_PDAF_CALIB_LEFT_GAINS,
+                reinterpret_cast<uint8_t *>(gCamCapability[cameraId]->pdaf_cal.left_gain_map),
+                sizeof(gCamCapability[cameraId]->pdaf_cal.left_gain_map));
+
+        staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_PDAF_CALIB_CONV_COEFF,
+                reinterpret_cast<uint8_t *>(gCamCapability[cameraId]->pdaf_cal.conversion_coeff),
+                sizeof(gCamCapability[cameraId]->pdaf_cal.conversion_coeff));
     }
 
     int32_t scalar_formats[] = {
