@@ -6084,14 +6084,16 @@ no_error:
         }
     }
 
-    // Enable HDR+ mode for the first PREVIEW_INTENT request.
+    // Enable HDR+ mode for the first PREVIEW_INTENT request that doesn't disable HDR+.
     {
         std::unique_lock<std::mutex> l(gHdrPlusClientLock);
         if (gEaselManagerClient != nullptr && gEaselManagerClient->isEaselPresentOnDevice() &&
                 !gEaselBypassOnly && !mFirstPreviewIntentSeen &&
                 meta.exists(ANDROID_CONTROL_CAPTURE_INTENT) &&
                 meta.find(ANDROID_CONTROL_CAPTURE_INTENT).data.u8[0] ==
-                ANDROID_CONTROL_CAPTURE_INTENT_PREVIEW) {
+                ANDROID_CONTROL_CAPTURE_INTENT_PREVIEW &&
+                meta.exists(NEXUS_EXPERIMENTAL_2017_DISABLE_HDRPLUS) &&
+                meta.find(NEXUS_EXPERIMENTAL_2017_DISABLE_HDRPLUS).data.i32[0] == 0) {
 
             if (isSessionHdrPlusModeCompatible()) {
                 rc = enableHdrPlusModeLocked();
@@ -11624,8 +11626,10 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         settings.update(NEXUS_EXPERIMENTAL_2017_POSTVIEW, &postview, 1);
         int32_t continuousZslCapture = 0;
         settings.update(NEXUS_EXPERIMENTAL_2017_CONTINUOUS_ZSL_CAPTURE, &continuousZslCapture, 1);
-        // Disable HDR+ for templates other than CAMERA3_TEMPLATE_STILL_CAPTURE.
-        int32_t disableHdrplus = (type == CAMERA3_TEMPLATE_STILL_CAPTURE) ? 0 : 1;
+        // Disable HDR+ for templates other than CAMERA3_TEMPLATE_STILL_CAPTURE and
+        // CAMERA3_TEMPLATE_PREVIEW.
+        int32_t disableHdrplus = (type == CAMERA3_TEMPLATE_STILL_CAPTURE ||
+                                  type == CAMERA3_TEMPLATE_PREVIEW) ? 0 : 1;
         settings.update(NEXUS_EXPERIMENTAL_2017_DISABLE_HDRPLUS, &disableHdrplus, 1);
 
         // Set hybrid_ae tag in PREVIEW and STILL_CAPTURE templates to 1 so that
