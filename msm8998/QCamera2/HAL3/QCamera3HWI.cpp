@@ -15545,9 +15545,8 @@ void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
             // Return the buffer to camera framework.
             pthread_mutex_lock(&mMutex);
             handleBufferWithLock(frameworkOutputBuffer, result->requestId);
-            pthread_mutex_unlock(&mMutex);
-
             channel->unregisterBuffer(outputBufferDef.get());
+            pthread_mutex_unlock(&mMutex);
         }
     }
 
