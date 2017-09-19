@@ -3734,9 +3734,10 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                  i->frame_number, urgent_frame_number);
 
             if ((!i->input_buffer) && (!i->hdrplus) && (i->frame_number < urgent_frame_number) &&
-                (i->partial_result_cnt == 0)) {
+                    (i->partial_result_cnt == 0)) {
                 LOGE("Error: HAL missed urgent metadata for frame number %d",
                          i->frame_number);
+                i->partialResultDropped = true;
                 i->partial_result_cnt++;
             }
 
@@ -3835,7 +3836,11 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
 
     for (auto & pendingRequest : mPendingRequestsList) {
         // Find the pending request with the frame number.
-        if (pendingRequest.frame_number == frame_number) {
+        if (pendingRequest.frame_number < frame_number) {
+            // Workaround for case where shutter is missing due to dropped
+            // metadata
+            mShutterDispatcher.markShutterReady(pendingRequest.frame_number, capture_time);
+        } else if (pendingRequest.frame_number == frame_number) {
             // Update the sensor timestamp.
             pendingRequest.timestamp = capture_time;
 
@@ -4300,6 +4305,7 @@ void QCamera3HardwareInterface::dispatchResultMetadataWithLock(uint32_t frameNum
         }
 
         bool thisLiveRequest = iter->hdrplus == false && iter->input_buffer == nullptr;
+        bool errorResult = false;
 
         camera3_capture_result_t result = {};
         result.frame_number = iter->frame_number;
@@ -4316,30 +4322,27 @@ void QCamera3HardwareInterface::dispatchResultMetadataWithLock(uint32_t frameNum
                 iter++;
                 continue;
             }
+            // Notify ERROR_RESULT if partial result was dropped.
+            errorResult = iter->partialResultDropped;
         } else if (iter->frame_number < frameNumber && isLiveRequest && thisLiveRequest) {
             // If the result metadata belongs to a live request, notify errors for previous pending
             // live requests.
             mPendingLiveRequest--;
 
-            CameraMetadata dummyMetadata;
-            dummyMetadata.update(ANDROID_REQUEST_ID, &(iter->request_id), 1);
-            result.result = dummyMetadata.release();
-
-            notifyError(iter->frame_number, CAMERA3_MSG_ERROR_RESULT);
-
-            // partial_result should be PARTIAL_RESULT_CNT in case of
-            // ERROR_RESULT.
-            iter->partial_result_cnt = PARTIAL_RESULT_COUNT;
-            result.partial_result = PARTIAL_RESULT_COUNT;
+            LOGE("Error: HAL missed metadata for frame number %d", iter->frame_number);
+            errorResult = true;
         } else {
             iter++;
             continue;
         }
 
-        result.output_buffers = nullptr;
-        result.num_output_buffers = 0;
-        orchestrateResult(&result);
-
+        if (errorResult) {
+            notifyError(iter->frame_number, CAMERA3_MSG_ERROR_RESULT);
+        } else {
+            result.output_buffers = nullptr;
+            result.num_output_buffers = 0;
+            orchestrateResult(&result);
+        }
         // For reprocessing, result metadata is the same as settings so do not free it here to
         // avoid double free.
         if (result.result != iter->settings) {
@@ -12367,6 +12370,8 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
                     rc = BAD_VALUE;
                 }
             }
+        } else {
+            LOGE("Fatal: Missing ANDROID_CONTROL_AF_MODE");
         }
     } else {
         uint8_t focusMode = (uint8_t)CAM_FOCUS_MODE_INFINITY;
