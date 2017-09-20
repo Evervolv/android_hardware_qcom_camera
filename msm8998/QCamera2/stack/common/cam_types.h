@@ -619,6 +619,7 @@ typedef struct {
     uint32_t op_pixel_clk;             // Sensor output rate.
     uint32_t num_raw_bits;             // Number of bits for RAW. 0 if not RAW.
     int64_t  timestamp_offset;         // Timestamp offset with gyro sensor. 0 if uncalibrated.
+    int64_t  timestamp_crop_offset;    // Timestamp offset due to crop on top of active array.
 } cam_sensor_mode_info_t;
 
 typedef struct {
