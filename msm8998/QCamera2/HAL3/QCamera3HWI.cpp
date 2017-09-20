@@ -2243,7 +2243,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
             stream_info->stream = newStream;
             stream_info->status = VALID;
             stream_info->channel = NULL;
-            stream_info->id = i;
+            stream_info->id = i; // ID will be re-assigned in cleanAndSortStreamInfo().
             mStreamInfo.push_back(stream_info);
         }
         /* Covers Opaque ZSL and API1 F/W ZSL */
@@ -8681,6 +8681,13 @@ void QCamera3HardwareInterface::cleanAndSortStreamInfo()
     }
 
     mStreamInfo = newStreamInfo;
+
+    // Make sure that stream IDs are unique.
+    uint32_t id = 0;
+    for (auto streamInfo : mStreamInfo) {
+        streamInfo->id = id++;
+    }
+
 }
 
 /*===========================================================================
