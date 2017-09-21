@@ -999,12 +999,9 @@ typedef struct {
 } cam_ois_data_t;
 
 typedef struct {
-    int64_t frame_sof_timestamp_vsync;
     int64_t frame_sof_timestamp_boottime;
     int32_t num_ois_sample;
     int64_t ois_sample_timestamp_boottime[MAX_OIS_SAMPLE_NUM_PER_FRAME];
-    int32_t ois_sample_shift_x[MAX_OIS_SAMPLE_NUM_PER_FRAME];
-    int32_t ois_sample_shift_y[MAX_OIS_SAMPLE_NUM_PER_FRAME];
     float ois_sample_shift_pixel_x[MAX_OIS_SAMPLE_NUM_PER_FRAME];
     float ois_sample_shift_pixel_y[MAX_OIS_SAMPLE_NUM_PER_FRAME];
 } cam_frame_ois_info_t;
