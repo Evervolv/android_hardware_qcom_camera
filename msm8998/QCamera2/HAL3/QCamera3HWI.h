@@ -607,6 +607,7 @@ private:
         bool enableZsl; // If ZSL is enabled.
         bool hdrplus; // If this is an HDR+ request.
         uint8_t requestedLensShadingMapMode; // Lens shading map mode for this request.
+        bool partialResultDropped; // Whether partial metadata is dropped.
     } PendingRequestInfo;
     typedef struct {
         uint32_t frame_number;
