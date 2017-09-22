@@ -14811,29 +14811,41 @@ void QCamera3HardwareInterface::updateHdrPlusResultMetadata(
 
     IF_META_AVAILABLE(double, gps_coords, CAM_INTF_META_JPEG_GPS_COORDINATES, settings) {
         resultMetadata.update(ANDROID_JPEG_GPS_COORDINATES, gps_coords, 3);
+    } else {
+        resultMetadata.erase(ANDROID_JPEG_GPS_COORDINATES);
     }
 
     IF_META_AVAILABLE(uint8_t, gps_methods, CAM_INTF_META_JPEG_GPS_PROC_METHODS, settings) {
         String8 str((const char *)gps_methods);
         resultMetadata.update(ANDROID_JPEG_GPS_PROCESSING_METHOD, str);
+    } else {
+        resultMetadata.erase(ANDROID_JPEG_GPS_PROCESSING_METHOD);
     }
 
     IF_META_AVAILABLE(int64_t, gps_timestamp, CAM_INTF_META_JPEG_GPS_TIMESTAMP, settings) {
         resultMetadata.update(ANDROID_JPEG_GPS_TIMESTAMP, gps_timestamp, 1);
+    } else {
+        resultMetadata.erase(ANDROID_JPEG_GPS_TIMESTAMP);
     }
 
     IF_META_AVAILABLE(int32_t, jpeg_orientation, CAM_INTF_META_JPEG_ORIENTATION, settings) {
         resultMetadata.update(ANDROID_JPEG_ORIENTATION, jpeg_orientation, 1);
+    } else {
+        resultMetadata.erase(ANDROID_JPEG_ORIENTATION);
     }
 
     IF_META_AVAILABLE(uint32_t, jpeg_quality, CAM_INTF_META_JPEG_QUALITY, settings) {
         uint8_t fwk_jpeg_quality = static_cast<uint8_t>(*jpeg_quality);
         resultMetadata.update(ANDROID_JPEG_QUALITY, &fwk_jpeg_quality, 1);
+    } else {
+        resultMetadata.erase(ANDROID_JPEG_QUALITY);
     }
 
     IF_META_AVAILABLE(uint32_t, thumb_quality, CAM_INTF_META_JPEG_THUMB_QUALITY, settings) {
         uint8_t fwk_thumb_quality = static_cast<uint8_t>(*thumb_quality);
         resultMetadata.update(ANDROID_JPEG_THUMBNAIL_QUALITY, &fwk_thumb_quality, 1);
+    } else {
+        resultMetadata.erase(ANDROID_JPEG_THUMBNAIL_QUALITY);
     }
 
     IF_META_AVAILABLE(cam_dimension_t, thumb_size, CAM_INTF_META_JPEG_THUMB_SIZE, settings) {
@@ -14841,11 +14853,15 @@ void QCamera3HardwareInterface::updateHdrPlusResultMetadata(
         fwk_thumb_size[0] = thumb_size->width;
         fwk_thumb_size[1] = thumb_size->height;
         resultMetadata.update(ANDROID_JPEG_THUMBNAIL_SIZE, fwk_thumb_size, 2);
+    } else {
+        resultMetadata.erase(ANDROID_JPEG_THUMBNAIL_SIZE);
     }
 
     IF_META_AVAILABLE(uint32_t, intent, CAM_INTF_META_CAPTURE_INTENT, settings) {
         uint8_t fwk_intent = intent[0];
         resultMetadata.update(ANDROID_CONTROL_CAPTURE_INTENT, &fwk_intent, 1);
+    } else {
+        resultMetadata.erase(ANDROID_CONTROL_CAPTURE_INTENT);
     }
 }
 
@@ -14904,6 +14920,13 @@ bool QCamera3HardwareInterface::isRequestHdrPlusCompatible(
              metadata.find(ANDROID_CONTROL_MODE).data.u8[0] !=
                     ANDROID_CONTROL_MODE_USE_SCENE_MODE)) {
         ALOGV("%s: ANDROID_CONTROL_MODE is not AUTO or USE_SCENE_MODE.", __FUNCTION__);
+        return false;
+    }
+
+    // TODO (b/66500626): support AE compensation.
+    if (!metadata.exists(ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION) ||
+            metadata.find(ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION).data.i32[0] != 0) {
+        ALOGV("%s: ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION is not 0.", __FUNCTION__);
         return false;
     }
 
