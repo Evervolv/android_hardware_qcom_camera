@@ -2243,7 +2243,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
             stream_info->stream = newStream;
             stream_info->status = VALID;
             stream_info->channel = NULL;
-            stream_info->id = i;
+            stream_info->id = i; // ID will be re-assigned in cleanAndSortStreamInfo().
             mStreamInfo.push_back(stream_info);
         }
         /* Covers Opaque ZSL and API1 F/W ZSL */
@@ -3734,9 +3734,10 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                  i->frame_number, urgent_frame_number);
 
             if ((!i->input_buffer) && (!i->hdrplus) && (i->frame_number < urgent_frame_number) &&
-                (i->partial_result_cnt == 0)) {
+                    (i->partial_result_cnt == 0)) {
                 LOGE("Error: HAL missed urgent metadata for frame number %d",
                          i->frame_number);
+                i->partialResultDropped = true;
                 i->partial_result_cnt++;
             }
 
@@ -3835,7 +3836,11 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
 
     for (auto & pendingRequest : mPendingRequestsList) {
         // Find the pending request with the frame number.
-        if (pendingRequest.frame_number == frame_number) {
+        if (pendingRequest.frame_number < frame_number) {
+            // Workaround for case where shutter is missing due to dropped
+            // metadata
+            mShutterDispatcher.markShutterReady(pendingRequest.frame_number, capture_time);
+        } else if (pendingRequest.frame_number == frame_number) {
             // Update the sensor timestamp.
             pendingRequest.timestamp = capture_time;
 
@@ -4300,6 +4305,7 @@ void QCamera3HardwareInterface::dispatchResultMetadataWithLock(uint32_t frameNum
         }
 
         bool thisLiveRequest = iter->hdrplus == false && iter->input_buffer == nullptr;
+        bool errorResult = false;
 
         camera3_capture_result_t result = {};
         result.frame_number = iter->frame_number;
@@ -4316,30 +4322,27 @@ void QCamera3HardwareInterface::dispatchResultMetadataWithLock(uint32_t frameNum
                 iter++;
                 continue;
             }
+            // Notify ERROR_RESULT if partial result was dropped.
+            errorResult = iter->partialResultDropped;
         } else if (iter->frame_number < frameNumber && isLiveRequest && thisLiveRequest) {
             // If the result metadata belongs to a live request, notify errors for previous pending
             // live requests.
             mPendingLiveRequest--;
 
-            CameraMetadata dummyMetadata;
-            dummyMetadata.update(ANDROID_REQUEST_ID, &(iter->request_id), 1);
-            result.result = dummyMetadata.release();
-
-            notifyError(iter->frame_number, CAMERA3_MSG_ERROR_RESULT);
-
-            // partial_result should be PARTIAL_RESULT_CNT in case of
-            // ERROR_RESULT.
-            iter->partial_result_cnt = PARTIAL_RESULT_COUNT;
-            result.partial_result = PARTIAL_RESULT_COUNT;
+            LOGE("Error: HAL missed metadata for frame number %d", iter->frame_number);
+            errorResult = true;
         } else {
             iter++;
             continue;
         }
 
-        result.output_buffers = nullptr;
-        result.num_output_buffers = 0;
-        orchestrateResult(&result);
-
+        if (errorResult) {
+            notifyError(iter->frame_number, CAMERA3_MSG_ERROR_RESULT);
+        } else {
+            result.output_buffers = nullptr;
+            result.num_output_buffers = 0;
+            orchestrateResult(&result);
+        }
         // For reprocessing, result metadata is the same as settings so do not free it here to
         // avoid double free.
         if (result.result != iter->settings) {
@@ -8203,16 +8206,10 @@ QCamera3HardwareInterface::translateFromHalMetadata(
 
     // OIS Data
     IF_META_AVAILABLE(cam_frame_ois_info_t, frame_ois_data, CAM_INTF_META_FRAME_OIS_DATA, metadata) {
-        camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_FRAME_TIMESTAMP_VSYNC,
-            &(frame_ois_data->frame_sof_timestamp_vsync), 1);
         camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_FRAME_TIMESTAMP_BOOTTIME,
             &(frame_ois_data->frame_sof_timestamp_boottime), 1);
         camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_TIMESTAMPS_BOOTTIME,
             frame_ois_data->ois_sample_timestamp_boottime, frame_ois_data->num_ois_sample);
-        camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_X,
-            frame_ois_data->ois_sample_shift_x, frame_ois_data->num_ois_sample);
-        camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_Y,
-            frame_ois_data->ois_sample_shift_y, frame_ois_data->num_ois_sample);
         camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_X,
             frame_ois_data->ois_sample_shift_pixel_x, frame_ois_data->num_ois_sample);
         camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_Y,
@@ -8681,6 +8678,13 @@ void QCamera3HardwareInterface::cleanAndSortStreamInfo()
     }
 
     mStreamInfo = newStreamInfo;
+
+    // Make sure that stream IDs are unique.
+    uint32_t id = 0;
+    for (auto streamInfo : mStreamInfo) {
+        streamInfo->id = id++;
+    }
+
 }
 
 /*===========================================================================
@@ -12367,6 +12371,8 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
                     rc = BAD_VALUE;
                 }
             }
+        } else {
+            LOGE("Fatal: Missing ANDROID_CONTROL_AF_MODE");
         }
     } else {
         uint8_t focusMode = (uint8_t)CAM_FOCUS_MODE_INFINITY;
@@ -15193,6 +15199,8 @@ status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked()
     inputConfig.sensorMode.activeArrayHeight = mSensorModeInfo.active_array_size.height;
     inputConfig.sensorMode.outputPixelClkHz = mSensorModeInfo.op_pixel_clk;
     inputConfig.sensorMode.timestampOffsetNs = mSensorModeInfo.timestamp_offset;
+    inputConfig.sensorMode.timestampCropOffsetNs = mSensorModeInfo.timestamp_crop_offset;
+
     if (mSensorModeInfo.num_raw_bits != 10) {
         ALOGE("%s: Only RAW10 is supported but this sensor mode has %d raw bits.", __FUNCTION__,
                 mSensorModeInfo.num_raw_bits);
@@ -15543,9 +15551,8 @@ void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
             // Return the buffer to camera framework.
             pthread_mutex_lock(&mMutex);
             handleBufferWithLock(frameworkOutputBuffer, result->requestId);
-            pthread_mutex_unlock(&mMutex);
-
             channel->unregisterBuffer(outputBufferDef.get());
+            pthread_mutex_unlock(&mMutex);
         }
     }
 
