@@ -607,6 +607,7 @@ private:
         bool enableZsl; // If ZSL is enabled.
         bool hdrplus; // If this is an HDR+ request.
         uint8_t requestedLensShadingMapMode; // Lens shading map mode for this request.
+        uint8_t requestedFaceDetectMode; // Face detect mode for this request.
         bool partialResultDropped; // Whether partial metadata is dropped.
     } PendingRequestInfo;
     typedef struct {
@@ -697,6 +698,8 @@ private:
     QCamera3CropRegionMapper mCropRegionMapper;
     // Last lens shading map mode framework requsted.
     uint8_t mLastRequestedLensShadingMapMode;
+    // Last face detect mode framework requsted.
+    uint8_t mLastRequestedFaceDetectMode;
 
     cam_feature_mask_t mCurrFeatureState;
     /* Ldaf calibration data */
@@ -749,6 +752,11 @@ private:
     static const QCameraPropMap CDS_MAP[];
 
     pendingRequestIterator erasePendingRequest(pendingRequestIterator i);
+
+    // Remove unrequested metadata due to Easel HDR+.
+    void removeUnrequestedMetadata(pendingRequestIterator requestIter,
+            camera_metadata_t *resultMetadata);
+
     //GPU library to read buffer padding details.
     void *lib_surface_utils;
     int (*LINK_get_surface_pixel_alignment)();
