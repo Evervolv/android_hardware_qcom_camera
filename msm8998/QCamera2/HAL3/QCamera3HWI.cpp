@@ -3839,7 +3839,9 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
         if (pendingRequest.frame_number < frame_number) {
             // Workaround for case where shutter is missing due to dropped
             // metadata
-            mShutterDispatcher.markShutterReady(pendingRequest.frame_number, capture_time);
+            if (!pendingRequest.hdrplus) {
+                mShutterDispatcher.markShutterReady(pendingRequest.frame_number, capture_time);
+            }
         } else if (pendingRequest.frame_number == frame_number) {
             // Update the sensor timestamp.
             pendingRequest.timestamp = capture_time;
@@ -15751,6 +15753,11 @@ void ShutterDispatcher::markShutterReady(uint32_t frameNumber, uint64_t timestam
         shutters = &mReprocessShutters;
     } else {
         shutters = &mShutters;
+    }
+
+    if (shutter->second.ready) {
+        // If shutter is already ready, don't update timestamp again.
+        return;
     }
 
     // Make this frame's shutter ready.
