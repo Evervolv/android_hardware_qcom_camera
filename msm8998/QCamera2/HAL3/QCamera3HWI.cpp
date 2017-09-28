@@ -152,7 +152,6 @@ bool gHdrPlusClientOpening = false; // If HDR+ client is being opened.
 std::condition_variable gHdrPlusClientOpenCond; // Used to synchronize HDR+ client opening.
 bool gEaselProfilingEnabled = false; // If Easel profiling is enabled.
 bool gExposeEnableZslKey = false; // If HAL makes android.control.enableZsl available.
-bool gEnableMultipleHdrplusOutputs = false; // Whether to enable multiple output from Easel HDR+.
 
 // If Easel is in bypass only mode. If true, Easel HDR+ won't be enabled.
 bool gEaselBypassOnly;
@@ -11108,8 +11107,6 @@ int QCamera3HardwareInterface::initHdrPlusClientLocked() {
 
         gEaselBypassOnly = !property_get_bool("persist.camera.hdrplus.enable", false);
         gEaselProfilingEnabled = property_get_bool("persist.camera.hdrplus.profiling", false);
-        gEnableMultipleHdrplusOutputs =
-                property_get_bool("persist.camera.hdrplus.multiple_outputs", false);
 
         // Expose enableZsl key only when HDR+ mode is enabled.
         gExposeEnableZslKey = !gEaselBypassOnly;
@@ -14982,28 +14979,10 @@ bool QCamera3HardwareInterface::isRequestHdrPlusCompatible(
         return false;
     }
 
-
-    // TODO (b/36693254, b/36690506): support other outputs.
-    if (!gEnableMultipleHdrplusOutputs && request.num_output_buffers != 1) {
-        ALOGV("%s: Only support 1 output: %d", __FUNCTION__, request.num_output_buffers);
-        return false;
-    }
-
     switch (request.output_buffers[0].stream->format) {
         case HAL_PIXEL_FORMAT_BLOB:
-            break;
         case HAL_PIXEL_FORMAT_YCbCr_420_888:
         case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
-            // TODO (b/36693254): Only support full size.
-            if (!gEnableMultipleHdrplusOutputs) {
-                if (static_cast<int>(request.output_buffers[0].stream->width) !=
-                        gCamCapability[mCameraId]->picture_sizes_tbl[0].width ||
-                    static_cast<int>(request.output_buffers[0].stream->height) !=
-                        gCamCapability[mCameraId]->picture_sizes_tbl[0].height) {
-                    ALOGV("%s: Only full size is supported.", __FUNCTION__);
-                    return false;
-                }
-            }
             break;
         default:
             ALOGV("%s: Not an HDR+ request: Only Jpeg and YUV output is supported.", __FUNCTION__);
