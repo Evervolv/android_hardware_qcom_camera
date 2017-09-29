@@ -152,7 +152,6 @@ bool gHdrPlusClientOpening = false; // If HDR+ client is being opened.
 std::condition_variable gHdrPlusClientOpenCond; // Used to synchronize HDR+ client opening.
 bool gEaselProfilingEnabled = false; // If Easel profiling is enabled.
 bool gExposeEnableZslKey = false; // If HAL makes android.control.enableZsl available.
-bool gEnableMultipleHdrplusOutputs = false; // Whether to enable multiple output from Easel HDR+.
 
 // If Easel is in bypass only mode. If true, Easel HDR+ won't be enabled.
 bool gEaselBypassOnly;
@@ -511,6 +510,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mAecSkipDisplayFrameBound(0),
       mInstantAecFrameIdxCount(0),
       mLastRequestedLensShadingMapMode(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF),
+      mLastRequestedFaceDetectMode(ANDROID_STATISTICS_FACE_DETECT_MODE_OFF),
       mCurrFeatureState(0),
       mLdafCalibExist(false),
       mLastCustIntentFrmNum(-1),
@@ -4233,6 +4233,34 @@ void QCamera3HardwareInterface::handleBufferWithLock(
     }
 }
 
+void QCamera3HardwareInterface::removeUnrequestedMetadata(pendingRequestIterator requestIter,
+        camera_metadata_t *resultMetadata) {
+    CameraMetadata metadata;
+    metadata.acquire(resultMetadata);
+
+    // Remove len shading map if it's not requested.
+    if (requestIter->requestedLensShadingMapMode == ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF &&
+            metadata.exists(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE) &&
+            metadata.find(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF).data.u8[0] !=
+            ANDROID_STATISTICS_FACE_DETECT_MODE_OFF) {
+        metadata.erase(ANDROID_STATISTICS_LENS_SHADING_MAP);
+        metadata.update(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE,
+            &requestIter->requestedLensShadingMapMode, 1);
+    }
+
+    // Remove face information if it's not requested.
+    if (requestIter->requestedFaceDetectMode == ANDROID_STATISTICS_FACE_DETECT_MODE_OFF &&
+            metadata.exists(ANDROID_STATISTICS_FACE_DETECT_MODE) &&
+            metadata.find(ANDROID_STATISTICS_FACE_DETECT_MODE).data.u8[0] !=
+            ANDROID_STATISTICS_FACE_DETECT_MODE_OFF) {
+        metadata.erase(ANDROID_STATISTICS_FACE_RECTANGLES);
+        metadata.update(ANDROID_STATISTICS_FACE_DETECT_MODE,
+                &requestIter->requestedFaceDetectMode, 1);
+    }
+
+    requestIter->resultMetadata = metadata.release();
+}
+
 void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t frameNumber,
         camera_metadata_t *resultMetadata)
 {
@@ -4275,15 +4303,8 @@ void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t fra
         }
     }
 
-    // Remove len shading map if it's not requested.
-    if (requestIter->requestedLensShadingMapMode == ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF) {
-        CameraMetadata metadata;
-        metadata.acquire(resultMetadata);
-        metadata.erase(ANDROID_STATISTICS_LENS_SHADING_MAP);
-        metadata.update(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE,
-            &requestIter->requestedLensShadingMapMode, 1);
-
-        requestIter->resultMetadata = metadata.release();
+    if (requestIter->input_buffer == nullptr) {
+        removeUnrequestedMetadata(requestIter, resultMetadata);
     }
 
     dispatchResultMetadataWithLock(frameNumber, liveRequest);
@@ -5444,6 +5465,11 @@ no_error:
         requestedLensShadingMapMode = mLastRequestedLensShadingMapMode;
     }
 
+    if (meta.exists(ANDROID_STATISTICS_FACE_DETECT_MODE)) {
+        mLastRequestedFaceDetectMode =
+                meta.find(ANDROID_STATISTICS_FACE_DETECT_MODE).data.u8[0];
+    }
+
     bool hdrPlusRequest = false;
     HdrPlusPendingRequest pendingHdrPlusRequest = {};
 
@@ -5483,12 +5509,14 @@ no_error:
             }
 
             {
-                // If HDR+ mode is enabled, override lens shading mode to ON so lens shading map
-                // will be reported in result metadata.
+                // If HDR+ mode is enabled, override the following modes so the necessary metadata
+                // will be included in the result metadata sent to Easel HDR+.
                 std::unique_lock<std::mutex> l(gHdrPlusClientLock);
                 if (mHdrPlusModeEnabled) {
                     ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_LENS_SHADING_MAP_MODE,
                         ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_ON);
+                    ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STATS_FACEDETECT_MODE,
+                        ANDROID_STATISTICS_FACE_DETECT_MODE_SIMPLE);
                 }
             }
         }
@@ -5552,6 +5580,7 @@ no_error:
     pendingRequest.blob_request = blob_request;
     pendingRequest.timestamp = 0;
     pendingRequest.requestedLensShadingMapMode = requestedLensShadingMapMode;
+    pendingRequest.requestedFaceDetectMode = mLastRequestedFaceDetectMode;
     if (request->input_buffer) {
         pendingRequest.input_buffer =
                 (camera3_stream_buffer_t*)malloc(sizeof(camera3_stream_buffer_t));
@@ -11078,8 +11107,6 @@ int QCamera3HardwareInterface::initHdrPlusClientLocked() {
 
         gEaselBypassOnly = !property_get_bool("persist.camera.hdrplus.enable", false);
         gEaselProfilingEnabled = property_get_bool("persist.camera.hdrplus.profiling", false);
-        gEnableMultipleHdrplusOutputs =
-                property_get_bool("persist.camera.hdrplus.multiple_outputs", false);
 
         // Expose enableZsl key only when HDR+ mode is enabled.
         gExposeEnableZslKey = !gEaselBypassOnly;
@@ -14952,28 +14979,10 @@ bool QCamera3HardwareInterface::isRequestHdrPlusCompatible(
         return false;
     }
 
-
-    // TODO (b/36693254, b/36690506): support other outputs.
-    if (!gEnableMultipleHdrplusOutputs && request.num_output_buffers != 1) {
-        ALOGV("%s: Only support 1 output: %d", __FUNCTION__, request.num_output_buffers);
-        return false;
-    }
-
     switch (request.output_buffers[0].stream->format) {
         case HAL_PIXEL_FORMAT_BLOB:
-            break;
         case HAL_PIXEL_FORMAT_YCbCr_420_888:
         case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
-            // TODO (b/36693254): Only support full size.
-            if (!gEnableMultipleHdrplusOutputs) {
-                if (static_cast<int>(request.output_buffers[0].stream->width) !=
-                        gCamCapability[mCameraId]->picture_sizes_tbl[0].width ||
-                    static_cast<int>(request.output_buffers[0].stream->height) !=
-                        gCamCapability[mCameraId]->picture_sizes_tbl[0].height) {
-                    ALOGV("%s: Only full size is supported.", __FUNCTION__);
-                    return false;
-                }
-            }
             break;
         default:
             ALOGV("%s: Not an HDR+ request: Only Jpeg and YUV output is supported.", __FUNCTION__);
