@@ -47,6 +47,7 @@
 #include "QCameraCommon.h"
 #include "QCamera3VendorTags.h"
 #include "QCameraDualCamSettings.h"
+#include "QCamera3HdrPlusListenerThread.h"
 
 #include "EaselManagerClient.h"
 #include "HdrPlusClient.h"
@@ -894,6 +895,9 @@ private:
     int32_t mSceneDistance;
 
     std::future<void> mEaselErrorFuture;
+
+    // Thread to handle callbacks from HDR+ client. Protected by gHdrPlusClientLock.
+    sp<QCamera3HdrPlusListenerThread> mQCamera3HdrPlusListenerThread;
 };
 
 }; // namespace qcamera
