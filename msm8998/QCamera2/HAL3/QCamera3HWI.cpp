@@ -3839,7 +3839,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
         if (pendingRequest.frame_number < frame_number) {
             // Workaround for case where shutter is missing due to dropped
             // metadata
-            if (!pendingRequest.hdrplus) {
+            if (!pendingRequest.hdrplus && (pendingRequest.input_buffer == nullptr)) {
                 mShutterDispatcher.markShutterReady(pendingRequest.frame_number, capture_time);
             }
         } else if (pendingRequest.frame_number == frame_number) {
