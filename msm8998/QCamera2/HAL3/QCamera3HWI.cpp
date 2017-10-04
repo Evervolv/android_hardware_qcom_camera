@@ -9400,6 +9400,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     bool limitedDevice = false;
     char prop[PROPERTY_VALUE_MAX];
     bool supportBurst = false;
+    Vector<int32_t> available_characteristics_keys;
 
     supportBurst = supportBurstCapture(cameraId);
 
@@ -9552,6 +9553,9 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     }
     staticInfo.update(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_SUPPORTED_BINS,
             histBins.data(), histBins.size());
+    if (!histBins.empty()) {
+        available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_HISTOGRAM_SUPPORTED_BINS);
+    }
 
     int32_t sharpness_map_size[] = {
             gCamCapability[cameraId]->sharpness_map_size.width,
@@ -9605,18 +9609,23 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         int32_t pd_dimensions [] = {depthWidth, depthHeight, depthStride};
         staticInfo.update(NEXUS_EXPERIMENTAL_2017_PD_DATA_DIMENSIONS,
                 pd_dimensions, sizeof(pd_dimensions) / sizeof(pd_dimensions[0]));
+        available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_PD_DATA_DIMENSIONS);
 
         staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_PDAF_CALIB_RIGHT_GAINS,
                 reinterpret_cast<uint8_t *>(gCamCapability[cameraId]->pdaf_cal.right_gain_map),
                 sizeof(gCamCapability[cameraId]->pdaf_cal.right_gain_map));
+        available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_EEPROM_PDAF_CALIB_RIGHT_GAINS);
 
         staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_PDAF_CALIB_LEFT_GAINS,
                 reinterpret_cast<uint8_t *>(gCamCapability[cameraId]->pdaf_cal.left_gain_map),
                 sizeof(gCamCapability[cameraId]->pdaf_cal.left_gain_map));
+        available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_EEPROM_PDAF_CALIB_LEFT_GAINS);
 
         staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_PDAF_CALIB_CONV_COEFF,
                 reinterpret_cast<uint8_t *>(gCamCapability[cameraId]->pdaf_cal.conversion_coeff),
                 sizeof(gCamCapability[cameraId]->pdaf_cal.conversion_coeff));
+        available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_EEPROM_PDAF_CALIB_CONV_COEFF);
+
     }
 
     int32_t scalar_formats[] = {
@@ -10357,6 +10366,23 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_LENS_SHADING_MAP_MODE, ANDROID_TONEMAP_CURVE_BLUE,
        ANDROID_TONEMAP_CURVE_GREEN, ANDROID_TONEMAP_CURVE_RED, ANDROID_TONEMAP_MODE,
        ANDROID_BLACK_LEVEL_LOCK, NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
+       QCAMERA3_PRIVATEDATA_REPROCESS, QCAMERA3_CDS_MODE, QCAMERA3_CDS_INFO,
+       QCAMERA3_CROP_COUNT_REPROCESS, QCAMERA3_CROP_REPROCESS,
+       QCAMERA3_CROP_ROI_MAP_REPROCESS, QCAMERA3_TEMPORAL_DENOISE_ENABLE,
+       QCAMERA3_TEMPORAL_DENOISE_PROCESS_TYPE, QCAMERA3_USE_ISO_EXP_PRIORITY,
+       QCAMERA3_SELECT_PRIORITY, QCAMERA3_USE_SATURATION,
+       QCAMERA3_EXPOSURE_METER, QCAMERA3_USE_AV_TIMER,
+       QCAMERA3_DUALCAM_LINK_ENABLE, QCAMERA3_DUALCAM_LINK_IS_MAIN,
+       QCAMERA3_DUALCAM_LINK_RELATED_CAMERA_ID,
+       QCAMERA3_HAL_PRIVATEDATA_REPROCESS_FLAGS,
+       QCAMERA3_HAL_PRIVATEDATA_REPROCESS_DATA_BLOB,
+       QCAMERA3_HAL_PRIVATEDATA_EXIF_DEBUG_DATA_BLOB,
+       QCAMERA3_JPEG_ENCODE_CROP_ENABLE, QCAMERA3_JPEG_ENCODE_CROP_RECT,
+       QCAMERA3_JPEG_ENCODE_CROP_ROI, QCAMERA3_VIDEO_HDR_MODE,
+       QCAMERA3_IR_MODE, QCAMERA3_AEC_CONVERGENCE_SPEED,
+       QCAMERA3_AWB_CONVERGENCE_SPEED, QCAMERA3_INSTANT_AEC_MODE,
+       QCAMERA3_SHARPNESS_STRENGTH, QCAMERA3_HISTOGRAM_MODE,
+       QCAMERA3_BINNING_CORRECTION_MODE,
        /* DevCamDebug metadata request_keys_basic */
        DEVCAMDEBUG_META_ENABLE,
        /* DevCamDebug metadata end */
@@ -10365,6 +10391,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        TANGO_MODE_DATA_SENSOR_FULLFOV,
        NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER,
        NEXUS_EXPERIMENTAL_2017_PD_DATA_ENABLE,
+       NEXUS_EXPERIMENTAL_2017_EXIF_MAKERNOTE
        };
 
     size_t request_keys_cnt =
@@ -10412,6 +10439,24 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
 #endif
        NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
        NEXUS_EXPERIMENTAL_2016_AF_SCENE_CHANGE,
+       QCAMERA3_PRIVATEDATA_REPROCESS, QCAMERA3_CDS_MODE, QCAMERA3_CDS_INFO,
+       QCAMERA3_CROP_COUNT_REPROCESS, QCAMERA3_CROP_REPROCESS,
+       QCAMERA3_CROP_ROI_MAP_REPROCESS, QCAMERA3_TUNING_META_DATA_BLOB,
+       QCAMERA3_TEMPORAL_DENOISE_ENABLE, QCAMERA3_TEMPORAL_DENOISE_PROCESS_TYPE,
+       QCAMERA3_EXPOSURE_METER, QCAMERA3_SENSOR_DYNAMIC_BLACK_LEVEL_PATTERN,
+       QCAMERA3_DUALCAM_LINK_ENABLE, QCAMERA3_DUALCAM_LINK_IS_MAIN,
+       QCAMERA3_DUALCAM_LINK_RELATED_CAMERA_ID,
+       QCAMERA3_HAL_PRIVATEDATA_REPROCESS_FLAGS,
+       QCAMERA3_HAL_PRIVATEDATA_REPROCESS_DATA_BLOB,
+       QCAMERA3_HAL_PRIVATEDATA_EXIF_DEBUG_DATA_BLOB, QCAMERA3_VIDEO_HDR_MODE,
+       QCAMERA3_IR_MODE, QCAMERA3_AEC_CONVERGENCE_SPEED,
+       QCAMERA3_AWB_CONVERGENCE_SPEED, QCAMERA3_INSTANT_AEC_MODE,
+       QCAMERA3_HISTOGRAM_MODE, QCAMERA3_BINNING_CORRECTION_MODE,
+       QCAMERA3_STATS_IS_HDR_SCENE, QCAMERA3_STATS_IS_HDR_SCENE_CONFIDENCE,
+       QCAMERA3_STATS_BLINK_DETECTED, QCAMERA3_STATS_BLINK_DEGREE,
+       QCAMERA3_STATS_SMILE_DEGREE, QCAMERA3_STATS_SMILE_CONFIDENCE,
+       QCAMERA3_STATS_GAZE_ANGLE, QCAMERA3_STATS_GAZE_DIRECTION,
+       QCAMERA3_STATS_GAZE_DEGREE,
        // DevCamDebug metadata result_keys_basic
        DEVCAMDEBUG_META_ENABLE,
        // DevCamDebug metadata result_keys AF
@@ -10480,8 +10525,16 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM_BINS,
        NEXUS_EXPERIMENTAL_2017_HISTOGRAM,
        NEXUS_EXPERIMENTAL_2017_AF_REGIONS_CONFIDENCE,
+       NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER,
        NEXUS_EXPERIMENTAL_2017_EXP_TIME_BOOST,
        NEXUS_EXPERIMENTAL_2017_SCENE_DISTANCE,
+       NEXUS_EXPERIMENTAL_2017_OIS_FRAME_TIMESTAMP_VSYNC,
+       NEXUS_EXPERIMENTAL_2017_OIS_FRAME_TIMESTAMP_BOOTTIME,
+       NEXUS_EXPERIMENTAL_2017_OIS_TIMESTAMPS_BOOTTIME,
+       NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_X,
+       NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_Y,
+       NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_X,
+       NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_Y
        };
 
     size_t result_keys_cnt =
@@ -10579,9 +10632,14 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_SENSOR_OPAQUE_RAW_SIZE,
        ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST_RANGE,
 #endif
+       QCAMERA3_OPAQUE_RAW_FORMAT, QCAMERA3_EXP_TIME_RANGE,
+       QCAMERA3_SATURATION_RANGE, QCAMERA3_SENSOR_IS_MONO_ONLY,
+       QCAMERA3_DUALCAM_CALIB_META_DATA_BLOB,
+       QCAMERA3_SHARPNESS_RANGE,
+       QCAMERA3_HISTOGRAM_BUCKETS, QCAMERA3_HISTOGRAM_MAX_COUNT,
+       QCAMERA3_STATS_BSGC_AVAILABLE
        };
 
-    Vector<int32_t> available_characteristics_keys;
     available_characteristics_keys.appendArray(characteristics_keys_basic,
             sizeof(characteristics_keys_basic)/sizeof(int32_t));
 #ifndef USE_HAL_3_3
@@ -10601,10 +10659,6 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         available_characteristics_keys.appendArray(depthKeys,
                 sizeof(depthKeys) / sizeof(depthKeys[0]));
     }
-
-    staticInfo.update(ANDROID_REQUEST_AVAILABLE_CHARACTERISTICS_KEYS,
-                      available_characteristics_keys.array(),
-                      available_characteristics_keys.size());
 
     /*available stall durations depend on the hw + sw and will be different for different devices */
     /*have to add for raw after implementation*/
@@ -10674,8 +10728,12 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
             &gCamCapability[cameraId]->padding_info, &buf_planes);
         strides.add(buf_planes.plane_info.mp[0].stride);
     }
-    staticInfo.update(QCAMERA3_OPAQUE_RAW_STRIDES, strides.array(),
-            strides.size());
+
+    if (!strides.isEmpty()) {
+        staticInfo.update(QCAMERA3_OPAQUE_RAW_STRIDES, strides.array(),
+                strides.size());
+        available_characteristics_keys.add(QCAMERA3_OPAQUE_RAW_STRIDES);
+    }
 
     //TBD: remove the following line once backend advertises zzHDR in feature mask
     gCamCapability[cameraId]->qcom_supported_feature_mask |= CAM_QCOM_FEATURE_ZIGZAG_HDR;
@@ -10690,6 +10748,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         size_t vhdr_mode_count = sizeof(vhdr_mode) / sizeof(int32_t);
         staticInfo.update(QCAMERA3_AVAILABLE_VIDEO_HDR_MODES,
                     vhdr_mode, vhdr_mode_count);
+        available_characteristics_keys.add(QCAMERA3_AVAILABLE_VIDEO_HDR_MODES);
     }
 
     staticInfo.update(QCAMERA3_DUALCAM_CALIB_META_DATA_BLOB,
@@ -10745,6 +10804,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         }
         staticInfo.update(QCAMERA3_IR_AVAILABLE_MODES,
                 avail_ir_modes, size);
+        available_characteristics_keys.add(QCAMERA3_IR_AVAILABLE_MODES);
     }
 
     if (gCamCapability[cameraId]->supported_instant_aec_modes_cnt > 0) {
@@ -10762,6 +10822,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         }
         staticInfo.update(QCAMERA3_INSTANT_AEC_AVAILABLE_MODES,
                 available_instant_aec_modes, size);
+        available_characteristics_keys.add(QCAMERA3_INSTANT_AEC_AVAILABLE_MODES);
     }
 
     int32_t sharpness_range[] = {
@@ -10785,6 +10846,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         }
         staticInfo.update(QCAMERA3_AVAILABLE_BINNING_CORRECTION_MODES,
                 avail_binning_modes, size);
+        available_characteristics_keys.add(QCAMERA3_AVAILABLE_BINNING_CORRECTION_MODES);
     }
 
     if (gCamCapability[cameraId]->supported_aec_modes_cnt > 0) {
@@ -10799,6 +10861,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         }
         staticInfo.update(QCAMERA3_EXPOSURE_METER_AVAILABLE_MODES,
                 available_aec_modes, size);
+        available_characteristics_keys.add(QCAMERA3_EXPOSURE_METER_AVAILABLE_MODES);
     }
 
     if (gCamCapability[cameraId]->supported_iso_modes_cnt > 0) {
@@ -10813,6 +10876,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         }
         staticInfo.update(QCAMERA3_ISO_AVAILABLE_MODES,
                 available_iso_modes, size);
+        available_characteristics_keys.add(QCAMERA3_ISO_AVAILABLE_MODES);
     }
 
     int64_t available_exp_time_range[EXPOSURE_TIME_RANGE_CNT];
@@ -10856,7 +10920,12 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         }
         staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO,
                 gCamCapability[cameraId]->eeprom_version_info, eepromLength);
+        available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO);
     }
+
+    staticInfo.update(ANDROID_REQUEST_AVAILABLE_CHARACTERISTICS_KEYS,
+                      available_characteristics_keys.array(),
+                      available_characteristics_keys.size());
 
     gStaticMetadata[cameraId] = staticInfo.release();
     return rc;
