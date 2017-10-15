@@ -6207,13 +6207,16 @@ int32_t QCamera3HardwareInterface::startChannelLocked()
     {
         // Configure Easel for stream on.
         std::unique_lock<std::mutex> l(gHdrPlusClientLock);
-
-        // Now that sensor mode should have been selected, get the selected sensor mode
-        // info.
-        memset(&mSensorModeInfo, 0, sizeof(mSensorModeInfo));
-        getCurrentSensorModeInfo(mSensorModeInfo);
-
         if (EaselManagerClientOpened) {
+            // Now that sensor mode should have been selected, get the selected sensor mode
+            // info.
+            memset(&mSensorModeInfo, 0, sizeof(mSensorModeInfo));
+            rc = getCurrentSensorModeInfo(mSensorModeInfo);
+            if (rc != NO_ERROR) {
+                ALOGE("%s: Get current sensor mode failed, bail out: %s (%d).", __FUNCTION__,
+                        strerror(-rc), rc);
+                return rc;
+            }
             logEaselEvent("EASEL_STARTUP_LATENCY", "Starting MIPI");
             rc = gEaselManagerClient->startMipi(mCameraId, mSensorModeInfo.op_pixel_clk,
                     /*enableCapture*/true);
