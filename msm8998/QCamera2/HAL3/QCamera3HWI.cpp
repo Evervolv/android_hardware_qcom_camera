@@ -147,6 +147,7 @@ extern uint8_t gNumCameraSessions;
 // The following Easel related variables must be protected by gHdrPlusClientLock.
 std::unique_ptr<EaselManagerClient> gEaselManagerClient;
 bool EaselManagerClientOpened = false; // If gEaselManagerClient is opened.
+int32_t gActiveEaselClient = 0; // The number of active cameras on Easel.
 std::unique_ptr<HdrPlusClient> gHdrPlusClient = nullptr;
 bool gHdrPlusClientOpening = false; // If HDR+ client is being opened.
 std::condition_variable gHdrPlusClientOpenCond; // Used to synchronize HDR+ client opening.
@@ -909,12 +910,15 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
         std::unique_lock<std::mutex> l(gHdrPlusClientLock);
         if (gEaselManagerClient != nullptr && gEaselManagerClient->isEaselPresentOnDevice()) {
             logEaselEvent("EASEL_STARTUP_LATENCY", "Resume");
-            rc = gEaselManagerClient->resume(this);
-            if (rc != 0) {
-                ALOGE("%s: Resuming Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
-                return rc;
+            if (gActiveEaselClient == 0) {
+                rc = gEaselManagerClient->resume(this);
+                if (rc != 0) {
+                    ALOGE("%s: Resuming Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
+                    return rc;
+                }
+                mEaselFwUpdated = false;
             }
-            mEaselFwUpdated = false;
+            gActiveEaselClient++;
         }
     }
 
@@ -928,11 +932,14 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
         {
             std::unique_lock<std::mutex> l(gHdrPlusClientLock);
             if (gEaselManagerClient != nullptr && gEaselManagerClient->isEaselPresentOnDevice()) {
-                status_t suspendErr = gEaselManagerClient->suspend();
-                if (suspendErr != 0) {
-                    ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__,
-                            strerror(-suspendErr), suspendErr);
+                if (gActiveEaselClient == 1) {
+                    status_t suspendErr = gEaselManagerClient->suspend();
+                    if (suspendErr != 0) {
+                        ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__,
+                                strerror(-suspendErr), suspendErr);
+                    }
                 }
+                gActiveEaselClient--;
             }
         }
     }
@@ -1124,10 +1131,13 @@ int QCamera3HardwareInterface::closeCamera()
     {
         std::unique_lock<std::mutex> l(gHdrPlusClientLock);
         if (EaselManagerClientOpened) {
-            rc = gEaselManagerClient->suspend();
-            if (rc != 0) {
-                ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
+            if (gActiveEaselClient == 1) {
+                rc = gEaselManagerClient->suspend();
+                if (rc != 0) {
+                    ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
+                }
             }
+            gActiveEaselClient--;
         }
     }
 
@@ -6207,13 +6217,16 @@ int32_t QCamera3HardwareInterface::startChannelLocked()
     {
         // Configure Easel for stream on.
         std::unique_lock<std::mutex> l(gHdrPlusClientLock);
-
-        // Now that sensor mode should have been selected, get the selected sensor mode
-        // info.
-        memset(&mSensorModeInfo, 0, sizeof(mSensorModeInfo));
-        getCurrentSensorModeInfo(mSensorModeInfo);
-
         if (EaselManagerClientOpened) {
+            // Now that sensor mode should have been selected, get the selected sensor mode
+            // info.
+            memset(&mSensorModeInfo, 0, sizeof(mSensorModeInfo));
+            rc = getCurrentSensorModeInfo(mSensorModeInfo);
+            if (rc != NO_ERROR) {
+                ALOGE("%s: Get current sensor mode failed, bail out: %s (%d).", __FUNCTION__,
+                        strerror(-rc), rc);
+                return rc;
+            }
             logEaselEvent("EASEL_STARTUP_LATENCY", "Starting MIPI");
             rc = gEaselManagerClient->startMipi(mCameraId, mSensorModeInfo.op_pixel_clk,
                     /*enableCapture*/true);
