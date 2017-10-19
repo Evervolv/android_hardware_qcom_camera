@@ -15034,13 +15034,6 @@ bool QCamera3HardwareInterface::isRequestHdrPlusCompatible(
         return false;
     }
 
-    // TODO (b/66500626): support AE compensation.
-    if (!metadata.exists(ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION) ||
-            metadata.find(ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION).data.i32[0] != 0) {
-        ALOGV("%s: ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION is not 0.", __FUNCTION__);
-        return false;
-    }
-
     // TODO (b/32585046): support non-ZSL.
     if (!metadata.exists(ANDROID_CONTROL_ENABLE_ZSL) ||
          metadata.find(ANDROID_CONTROL_ENABLE_ZSL).data.u8[0] != ANDROID_CONTROL_ENABLE_ZSL_TRUE) {
