@@ -631,6 +631,7 @@ typedef struct {
 } cam_pd_calibration_t;
 
 typedef struct {
+  int32_t num_lights;
   float r_over_g[MAX_WB_CALIB_LIGHTS];
   float b_over_g[MAX_WB_CALIB_LIGHTS];
   float gr_over_gb;
