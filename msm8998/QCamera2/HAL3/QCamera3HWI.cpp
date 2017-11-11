@@ -12689,6 +12689,11 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
     }
 
     if (frame_settings.exists(ANDROID_FLASH_MODE)) {
+        uint32_t flashMode = (uint32_t)frame_settings.find(ANDROID_FLASH_MODE).data.u8[0];
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_FLASH_MODE, flashMode)) {
+            rc = BAD_VALUE;
+        }
+
         int32_t respectFlashMode = 1;
         if (frame_settings.exists(ANDROID_CONTROL_AE_MODE)) {
             uint8_t fwk_aeMode =
@@ -12706,11 +12711,18 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
             LOGH("flash mode after mapping %d", val);
             // To check: CAM_INTF_META_FLASH_MODE usage
             if (NAME_NOT_FOUND != val) {
-                uint8_t flashMode = (uint8_t)val;
-                if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_LED_MODE, flashMode)) {
+                uint8_t ledMode = (uint8_t)val;
+                if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_PARM_LED_MODE, ledMode)) {
                     rc = BAD_VALUE;
                 }
             }
+        }
+    }
+
+    if (frame_settings.exists(ANDROID_FLASH_STATE)) {
+        int32_t flashState = (int32_t)frame_settings.find(ANDROID_FLASH_STATE).data.i32[0];
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_FLASH_STATE, flashState)) {
+            rc = BAD_VALUE;
         }
     }
 
