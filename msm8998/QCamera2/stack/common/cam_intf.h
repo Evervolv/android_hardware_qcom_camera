@@ -654,6 +654,10 @@ typedef struct cam_capability{
 
     /*PDAF calibration data*/
     cam_pd_calibration_t pdaf_cal;
+
+    /*White balance calibration data*/
+    cam_wb_calibration_t wb_cal;
+
 } cam_capability_t;
 
 typedef enum {

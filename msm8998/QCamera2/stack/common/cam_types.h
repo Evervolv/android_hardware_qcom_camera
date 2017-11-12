@@ -53,6 +53,8 @@
 #define MAX_PDAF_CALIB_GAINS              (25*19)
 #define MAX_PDAF_CALIB_COEFF              (200)
 
+#define MAX_WB_CALIB_LIGHTS               (16)
+
 #define CEILING64(X) (((X) + 0x0003F) & 0xFFFFFFC0)
 #define CEILING32(X) (((X) + 0x0001F) & 0xFFFFFFE0)
 #define CEILING16(X) (((X) + 0x000F) & 0xFFF0)
@@ -627,6 +629,12 @@ typedef struct {
     uint16_t right_gain_map[MAX_PDAF_CALIB_GAINS];
     int16_t conversion_coeff[MAX_PDAF_CALIB_COEFF];
 } cam_pd_calibration_t;
+
+typedef struct {
+  float r_over_g[MAX_WB_CALIB_LIGHTS];
+  float b_over_g[MAX_WB_CALIB_LIGHTS];
+  float gr_over_gb;
+} cam_wb_calibration_t;
 
 typedef struct {
     cam_frame_len_offset_t plane_info;
