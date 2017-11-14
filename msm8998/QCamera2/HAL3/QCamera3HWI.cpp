@@ -15785,7 +15785,7 @@ void QCamera3HardwareInterface::onFailedCaptureResult(pbcamera::CaptureResult *f
         pendingBuffers++;
     }
 
-    // Send out buffer errors for the pending buffers.
+    // Send out request errors for the pending buffers.
     if (pendingBuffers != mPendingBuffersMap.mPendingBuffersInRequest.end()) {
         std::vector<camera3_stream_buffer_t> streamBuffers;
         for (auto &buffer : pendingBuffers->mPendingBufferList) {
@@ -15797,7 +15797,7 @@ void QCamera3HardwareInterface::onFailedCaptureResult(pbcamera::CaptureResult *f
             streamBuffer.acquire_fence = -1;
             streamBuffer.release_fence = -1;
 
-            // Send out error buffer event.
+            // Send out request error event.
             camera3_notify_msg_t notify_msg = {};
             notify_msg.type = CAMERA3_MSG_ERROR;
             notify_msg.message.error.frame_number = pendingBuffers->frame_number;
