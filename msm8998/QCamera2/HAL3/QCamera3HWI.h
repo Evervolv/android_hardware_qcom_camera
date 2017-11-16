@@ -485,6 +485,7 @@ private:
     int32_t getReprocessibleOutputStreamId(uint32_t &id);
     int32_t handleCameraDeviceError(bool stopChannelImmediately = false);
 
+    bool isEISEnabled(const CameraMetadata& meta);
     bool isOnEncoder(const cam_dimension_t max_viewfinder_size,
             uint32_t width, uint32_t height);
     void hdrPlusPerfLock(mm_camera_super_buf_t *metadata_buf);
@@ -544,6 +545,7 @@ private:
     metadata_buffer_t* mParameters;
     metadata_buffer_t* mPrevParameters;
     CameraMetadata mCurJpegMeta;
+    cam_is_type_t m_ISTypeVideo;
     bool m_bIsVideo;
     bool m_bIs4KVideo;
     bool m_bEisSupportedSize;

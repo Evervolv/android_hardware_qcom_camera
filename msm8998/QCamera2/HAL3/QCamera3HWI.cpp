@@ -470,6 +470,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mParamHeap(NULL),
       mParameters(NULL),
       mPrevParameters(NULL),
+      m_ISTypeVideo(IS_TYPE_NONE),
       m_bIsVideo(false),
       m_bIs4KVideo(false),
       m_bEisSupportedSize(false),
@@ -535,7 +536,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
     mCommon.init(gCamCapability[cameraId]);
     mCameraDevice.common.tag = HARDWARE_DEVICE_TAG;
 #ifndef USE_HAL_3_3
-    mCameraDevice.common.version = CAMERA_DEVICE_API_VERSION_3_4;
+    mCameraDevice.common.version = CAMERA_DEVICE_API_VERSION_3_5;
 #else
     mCameraDevice.common.version = CAMERA_DEVICE_API_VERSION_3_3;
 #endif
@@ -3101,9 +3102,238 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
 
     mFirstMetadataCallback = true;
 
+    if (streamList->session_parameters != nullptr) {
+        CameraMetadata meta;
+        meta = streamList->session_parameters;
+
+        // send an unconfigure to the backend so that the isp
+        // resources are deallocated
+        if (!mFirstConfiguration) {
+            cam_stream_size_info_t stream_config_info;
+            int32_t hal_version = CAM_HAL_V3;
+            memset(&stream_config_info, 0, sizeof(cam_stream_size_info_t));
+            stream_config_info.buffer_info.min_buffers =
+                    MIN_INFLIGHT_REQUESTS;
+            stream_config_info.buffer_info.max_buffers =
+                    m_bIs4KVideo ? 0 :
+                    m_bEis3PropertyEnabled && m_bIsVideo ? MAX_VIDEO_BUFFERS : MAX_INFLIGHT_REQUESTS;
+            clear_metadata_buffer(mParameters);
+            ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
+                    CAM_INTF_PARM_HAL_VERSION, hal_version);
+            ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
+                    CAM_INTF_META_STREAM_INFO, stream_config_info);
+            rc = mCameraHandle->ops->set_parms(mCameraHandle->camera_handle,
+                    mParameters);
+            if (rc < 0) {
+                LOGE("set_parms for unconfigure failed");
+                pthread_mutex_unlock(&mMutex);
+                return rc;
+            }
+
+        }
+        /* get eis information for stream configuration */
+        cam_is_type_t isTypePreview, is_type=IS_TYPE_NONE;
+        char is_type_value[PROPERTY_VALUE_MAX];
+        property_get("persist.camera.is_type", is_type_value, "4");
+        m_ISTypeVideo = static_cast<cam_is_type_t>(atoi(is_type_value));
+        // Make default value for preview IS_TYPE as IS_TYPE_EIS_2_0
+        property_get("persist.camera.is_type_preview", is_type_value, "4");
+        isTypePreview = static_cast<cam_is_type_t>(atoi(is_type_value));
+        LOGD("isTypeVideo: %d isTypePreview: %d", m_ISTypeVideo, isTypePreview);
+
+        int32_t hal_version = CAM_HAL_V3;
+        clear_metadata_buffer(mParameters);
+        ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_HAL_VERSION, hal_version);
+        ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_CAPTURE_INTENT, mCaptureIntent);
+
+        if (mFirstConfiguration) {
+            // configure instant AEC
+            // Instant AEC is a session based parameter and it is needed only
+            // once per complete session after open camera.
+            // i.e. This is set only once for the first capture request, after open camera.
+            setInstantAEC(meta);
+        }
+
+        bool setEis = isEISEnabled(meta);
+        int32_t vsMode;
+        vsMode = (setEis)? DIS_ENABLE: DIS_DISABLE;
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_DIS_ENABLE, vsMode)) {
+            rc = BAD_VALUE;
+        }
+        LOGD("setEis %d", setEis);
+        bool eis3Supported = false;
+        size_t count = IS_TYPE_MAX;
+        count = MIN(gCamCapability[mCameraId]->supported_is_types_cnt, count);
+        for (size_t i = 0; i < count; i++) {
+            if (gCamCapability[mCameraId]->supported_is_types[i] == IS_TYPE_EIS_3_0) {
+                eis3Supported = true;
+                break;
+            }
+        }
+
+        //IS type will be 0 unless EIS is supported. If EIS is supported
+        //it could either be 4 or 5 depending on the stream and video size
+        for (uint32_t i = 0; i < mStreamConfigInfo.num_streams; i++) {
+            if (setEis) {
+                if (mStreamConfigInfo.type[i] == CAM_STREAM_TYPE_PREVIEW) {
+                    is_type = isTypePreview;
+                } else if (mStreamConfigInfo.type[i] == CAM_STREAM_TYPE_VIDEO ) {
+                    if ( (m_ISTypeVideo == IS_TYPE_EIS_3_0) && (eis3Supported == FALSE) ) {
+                        LOGW(" EIS_3.0 is not supported and so setting EIS_2.0");
+                        is_type = IS_TYPE_EIS_2_0;
+                    } else {
+                        is_type = m_ISTypeVideo;
+                    }
+                } else {
+                    is_type = IS_TYPE_NONE;
+                }
+                 mStreamConfigInfo.is_type[i] = is_type;
+            } else {
+                 mStreamConfigInfo.is_type[i] = IS_TYPE_NONE;
+            }
+        }
+
+        ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
+                CAM_INTF_META_STREAM_INFO, mStreamConfigInfo);
+
+        char prop[PROPERTY_VALUE_MAX];
+        //Disable tintless only if the property is set to 0
+        memset(prop, 0, sizeof(prop));
+        property_get("persist.camera.tintless.enable", prop, "1");
+        int32_t tintless_value = atoi(prop);
+
+        ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
+                CAM_INTF_PARM_TINTLESS, tintless_value);
+
+        //Disable CDS for HFR mode or if DIS/EIS is on.
+        //CDS is a session parameter in the backend/ISP, so need to be set/reset
+        //after every configure_stream
+        if ((CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE == mOpMode) ||
+                (m_bIsVideo)) {
+            int32_t cds = CAM_CDS_MODE_OFF;
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
+                    CAM_INTF_PARM_CDS_MODE, cds))
+                LOGE("Failed to disable CDS for HFR mode");
+
+        }
+
+        if (m_debug_avtimer || meta.exists(QCAMERA3_USE_AV_TIMER)) {
+            uint8_t* use_av_timer = NULL;
+
+            if (m_debug_avtimer){
+                LOGI(" Enabling AV timer through setprop");
+                use_av_timer = &m_debug_avtimer;
+                m_bAVTimerEnabled = true;
+            }
+            else{
+                use_av_timer =
+                    meta.find(QCAMERA3_USE_AV_TIMER).data.u8;
+                if (use_av_timer) {
+                    m_bAVTimerEnabled = true;
+                    LOGI("Enabling AV timer through Metadata: use_av_timer: %d", *use_av_timer);
+                }
+            }
+
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_USE_AV_TIMER, *use_av_timer)) {
+                rc = BAD_VALUE;
+            }
+        }
+
+        setMobicat();
+
+        /* Set fps and hfr mode while sending meta stream info so that sensor
+         * can configure appropriate streaming mode */
+        mHFRVideoFps = DEFAULT_VIDEO_FPS;
+        mMinInFlightRequests = MIN_INFLIGHT_REQUESTS;
+        mMaxInFlightRequests = MAX_INFLIGHT_REQUESTS;
+        if (meta.exists(ANDROID_CONTROL_AE_TARGET_FPS_RANGE)) {
+            rc = setHalFpsRange(meta, mParameters);
+            if (rc == NO_ERROR) {
+                int32_t max_fps =
+                    (int32_t) meta.find(ANDROID_CONTROL_AE_TARGET_FPS_RANGE).data.i32[1];
+                if (max_fps == 60 || mCaptureIntent == ANDROID_CONTROL_CAPTURE_INTENT_VIDEO_RECORD) {
+                    mMinInFlightRequests = MIN_INFLIGHT_60FPS_REQUESTS;
+                }
+                /* For HFR, more buffers are dequeued upfront to improve the performance */
+                if (mBatchSize) {
+                    mMinInFlightRequests = MIN_INFLIGHT_HFR_REQUESTS;
+                    mMaxInFlightRequests = MAX_INFLIGHT_HFR_REQUESTS;
+                }
+            }
+            else {
+                LOGE("setHalFpsRange failed");
+            }
+        }
+        memset(&mBatchedStreamsArray, 0, sizeof(cam_stream_ID_t));
+
+        if (meta.exists(QCAMERA3_VIDEO_HDR_MODE)) {
+            cam_video_hdr_mode_t vhdr = (cam_video_hdr_mode_t)
+                    meta.find(QCAMERA3_VIDEO_HDR_MODE).data.i32[0];
+            rc = setVideoHdrMode(mParameters, vhdr);
+            if (rc != NO_ERROR) {
+                LOGE("setVideoHDR is failed");
+            }
+        }
+
+        if (meta.exists(TANGO_MODE_DATA_SENSOR_FULLFOV)) {
+            uint8_t sensorModeFullFov =
+                    meta.find(TANGO_MODE_DATA_SENSOR_FULLFOV).data.u8[0];
+            LOGD("SENSOR_MODE_FULLFOV %d" , sensorModeFullFov);
+            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_SENSOR_MODE_FULLFOV,
+                    sensorModeFullFov)) {
+                rc = BAD_VALUE;
+            }
+        }
+        //TODO: validate the arguments, HSV scenemode should have only the
+        //advertised fps ranges
+
+        /*set the capture intent, hal version, tintless, stream info,
+         *and disenable parameters to the backend*/
+        LOGD("set_parms META_STREAM_INFO " );
+        for (uint32_t i = 0; i < mStreamConfigInfo.num_streams; i++) {
+            LOGI("STREAM INFO : type %d, wxh: %d x %d, pp_mask: 0x%" PRIx64
+                    ", Format:%d is_type: %d",
+                    mStreamConfigInfo.type[i],
+                    mStreamConfigInfo.stream_sizes[i].width,
+                    mStreamConfigInfo.stream_sizes[i].height,
+                    mStreamConfigInfo.postprocess_mask[i],
+                    mStreamConfigInfo.format[i],
+                    mStreamConfigInfo.is_type[i]);
+        }
+
+        rc = mCameraHandle->ops->set_parms(mCameraHandle->camera_handle,
+                    mParameters);
+        if (rc < 0) {
+            LOGE("set_parms failed for hal version, stream info");
+        }
+
+    }
+
     pthread_mutex_unlock(&mMutex);
 
     return rc;
+}
+
+/*===========================================================================
+ * FUNCTION   : isEISEnabled
+ *
+ * DESCRIPTION: Decide whether EIS should get enabled or not.
+ *
+ * PARAMETERS :
+ *   @meta : request from framework to process
+ *
+ * RETURN     : true/false Whether EIS should be enabled
+ *
+ *==========================================================================*/
+bool QCamera3HardwareInterface::isEISEnabled(const CameraMetadata& meta) {
+    uint8_t fwkVideoStabMode = 0;
+    if (meta.exists(ANDROID_CONTROL_VIDEO_STABILIZATION_MODE)) {
+        fwkVideoStabMode = meta.find(ANDROID_CONTROL_VIDEO_STABILIZATION_MODE).data.u8[0];
+    }
+
+    // If EIS setprop is enabled then only turn it on for video/preview
+    return  m_bEisEnable && (m_bIsVideo || fwkVideoStabMode) && m_bEisSupportedSize &&
+        (m_ISTypeVideo >= IS_TYPE_EIS_2_0) && !meta.exists(QCAMERA3_USE_AV_TIMER);
 }
 
 /*===========================================================================
@@ -4918,7 +5148,6 @@ int QCamera3HardwareInterface::processCaptureRequest(
     CameraMetadata meta;
     bool isVidBufRequested = false;
     camera3_stream_buffer_t *pInputBuffer = NULL;
-    char prop[PROPERTY_VALUE_MAX];
 
     pthread_mutex_lock(&mMutex);
 
@@ -4953,229 +5182,14 @@ int QCamera3HardwareInterface::processCaptureRequest(
     // stream on all streams
     if (mState == CONFIGURED) {
         logEaselEvent("EASEL_STARTUP_LATENCY", "First request");
-        // send an unconfigure to the backend so that the isp
-        // resources are deallocated
-        if (!mFirstConfiguration) {
-            cam_stream_size_info_t stream_config_info;
-            int32_t hal_version = CAM_HAL_V3;
-            memset(&stream_config_info, 0, sizeof(cam_stream_size_info_t));
-            stream_config_info.buffer_info.min_buffers =
-                    MIN_INFLIGHT_REQUESTS;
-            stream_config_info.buffer_info.max_buffers =
-                    m_bIs4KVideo ? 0 :
-                    m_bEis3PropertyEnabled && m_bIsVideo ? MAX_VIDEO_BUFFERS : MAX_INFLIGHT_REQUESTS;
-            clear_metadata_buffer(mParameters);
-            ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
-                    CAM_INTF_PARM_HAL_VERSION, hal_version);
-            ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
-                    CAM_INTF_META_STREAM_INFO, stream_config_info);
-            rc = mCameraHandle->ops->set_parms(mCameraHandle->camera_handle,
-                    mParameters);
-            if (rc < 0) {
-                LOGE("set_parms for unconfigure failed");
-                pthread_mutex_unlock(&mMutex);
-                return rc;
-            }
-
-        }
-        mPerfLockMgr.acquirePerfLock(PERF_LOCK_START_PREVIEW);
-        /* get eis information for stream configuration */
-        cam_is_type_t isTypeVideo, isTypePreview, is_type=IS_TYPE_NONE;
-        char is_type_value[PROPERTY_VALUE_MAX];
-        property_get("persist.camera.is_type", is_type_value, "4");
-        isTypeVideo = static_cast<cam_is_type_t>(atoi(is_type_value));
-        // Make default value for preview IS_TYPE as IS_TYPE_EIS_2_0
-        property_get("persist.camera.is_type_preview", is_type_value, "4");
-        isTypePreview = static_cast<cam_is_type_t>(atoi(is_type_value));
-        LOGD("isTypeVideo: %d isTypePreview: %d", isTypeVideo, isTypePreview);
-
-        if (meta.exists(ANDROID_CONTROL_CAPTURE_INTENT)) {
-            int32_t hal_version = CAM_HAL_V3;
-            uint8_t captureIntent =
-                meta.find(ANDROID_CONTROL_CAPTURE_INTENT).data.u8[0];
-            mCaptureIntent = captureIntent;
-            clear_metadata_buffer(mParameters);
-            ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_HAL_VERSION, hal_version);
-            ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_CAPTURE_INTENT, captureIntent);
-        }
-        if (mFirstConfiguration) {
-            // configure instant AEC
-            // Instant AEC is a session based parameter and it is needed only
-            // once per complete session after open camera.
-            // i.e. This is set only once for the first capture request, after open camera.
-            setInstantAEC(meta);
-        }
-        uint8_t fwkVideoStabMode=0;
-        if (meta.exists(ANDROID_CONTROL_VIDEO_STABILIZATION_MODE)) {
-            fwkVideoStabMode = meta.find(ANDROID_CONTROL_VIDEO_STABILIZATION_MODE).data.u8[0];
-        }
-
-        // If EIS setprop is enabled then only turn it on for video/preview
-        bool setEis = m_bEisEnable && (m_bIsVideo || fwkVideoStabMode) && m_bEisSupportedSize &&
-                (isTypeVideo >= IS_TYPE_EIS_2_0) && !meta.exists(QCAMERA3_USE_AV_TIMER);
-        int32_t vsMode;
-        vsMode = (setEis)? DIS_ENABLE: DIS_DISABLE;
-        if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_DIS_ENABLE, vsMode)) {
-            rc = BAD_VALUE;
-        }
-        LOGD("setEis %d", setEis);
-        bool eis3Supported = false;
-        size_t count = IS_TYPE_MAX;
-        count = MIN(gCamCapability[mCameraId]->supported_is_types_cnt, count);
-        for (size_t i = 0; i < count; i++) {
-            if (gCamCapability[mCameraId]->supported_is_types[i] == IS_TYPE_EIS_3_0) {
-                eis3Supported = true;
-                break;
-            }
-        }
-
-        //IS type will be 0 unless EIS is supported. If EIS is supported
-        //it could either be 4 or 5 depending on the stream and video size
-        for (uint32_t i = 0; i < mStreamConfigInfo.num_streams; i++) {
-            if (setEis) {
-                if (mStreamConfigInfo.type[i] == CAM_STREAM_TYPE_PREVIEW) {
-                    is_type = isTypePreview;
-                } else if (mStreamConfigInfo.type[i] == CAM_STREAM_TYPE_VIDEO ) {
-                    if ( (isTypeVideo == IS_TYPE_EIS_3_0) && (eis3Supported == FALSE) ) {
-                        LOGW(" EIS_3.0 is not supported and so setting EIS_2.0");
-                        is_type = IS_TYPE_EIS_2_0;
-                    } else {
-                        is_type = isTypeVideo;
-                    }
-                } else {
-                    is_type = IS_TYPE_NONE;
-                }
-                 mStreamConfigInfo.is_type[i] = is_type;
-            } else {
-                 mStreamConfigInfo.is_type[i] = IS_TYPE_NONE;
-            }
-        }
-
-        ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
-                CAM_INTF_META_STREAM_INFO, mStreamConfigInfo);
-
-        //Disable tintless only if the property is set to 0
-        memset(prop, 0, sizeof(prop));
-        property_get("persist.camera.tintless.enable", prop, "1");
-        int32_t tintless_value = atoi(prop);
-
-        ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
-                CAM_INTF_PARM_TINTLESS, tintless_value);
-
-        //Disable CDS for HFR mode or if DIS/EIS is on.
-        //CDS is a session parameter in the backend/ISP, so need to be set/reset
-        //after every configure_stream
-        if ((CAMERA3_STREAM_CONFIGURATION_CONSTRAINED_HIGH_SPEED_MODE == mOpMode) ||
-                (m_bIsVideo)) {
-            int32_t cds = CAM_CDS_MODE_OFF;
-            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
-                    CAM_INTF_PARM_CDS_MODE, cds))
-                LOGE("Failed to disable CDS for HFR mode");
-
-        }
-
-        if (m_debug_avtimer || meta.exists(QCAMERA3_USE_AV_TIMER)) {
-            uint8_t* use_av_timer = NULL;
-
-            if (m_debug_avtimer){
-                LOGI(" Enabling AV timer through setprop");
-                use_av_timer = &m_debug_avtimer;
-                m_bAVTimerEnabled = true;
-            }
-            else{
-                use_av_timer =
-                    meta.find(QCAMERA3_USE_AV_TIMER).data.u8;
-                if (use_av_timer) {
-                    m_bAVTimerEnabled = true;
-                    LOGI("Enabling AV timer through Metadata: use_av_timer: %d", *use_av_timer);
-                }
-            }
-
-            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_USE_AV_TIMER, *use_av_timer)) {
-                rc = BAD_VALUE;
-            }
-        }
-
-        setMobicat();
 
         uint8_t nrMode = 0;
         if (meta.exists(ANDROID_NOISE_REDUCTION_MODE)) {
             nrMode = meta.find(ANDROID_NOISE_REDUCTION_MODE).data.u8[0];
         }
 
-        /* Set fps and hfr mode while sending meta stream info so that sensor
-         * can configure appropriate streaming mode */
-        mHFRVideoFps = DEFAULT_VIDEO_FPS;
-        mMinInFlightRequests = MIN_INFLIGHT_REQUESTS;
-        mMaxInFlightRequests = MAX_INFLIGHT_REQUESTS;
-        if (meta.exists(ANDROID_CONTROL_AE_TARGET_FPS_RANGE)) {
-            rc = setHalFpsRange(meta, mParameters);
-            if (rc == NO_ERROR) {
-                int32_t max_fps =
-                    (int32_t) meta.find(ANDROID_CONTROL_AE_TARGET_FPS_RANGE).data.i32[1];
-                if (max_fps == 60 || mCaptureIntent == ANDROID_CONTROL_CAPTURE_INTENT_VIDEO_RECORD) {
-                    mMinInFlightRequests = MIN_INFLIGHT_60FPS_REQUESTS;
-                }
-                /* For HFR, more buffers are dequeued upfront to improve the performance */
-                if (mBatchSize) {
-                    mMinInFlightRequests = MIN_INFLIGHT_HFR_REQUESTS;
-                    mMaxInFlightRequests = MAX_INFLIGHT_HFR_REQUESTS;
-                }
-            }
-            else {
-                LOGE("setHalFpsRange failed");
-            }
-        }
-        if (meta.exists(ANDROID_CONTROL_MODE)) {
-            uint8_t metaMode = meta.find(ANDROID_CONTROL_MODE).data.u8[0];
-            rc = extractSceneMode(meta, metaMode, mParameters);
-            if (rc != NO_ERROR) {
-                LOGE("extractSceneMode failed");
-            }
-        }
-        memset(&mBatchedStreamsArray, 0, sizeof(cam_stream_ID_t));
-
-        if (meta.exists(QCAMERA3_VIDEO_HDR_MODE)) {
-            cam_video_hdr_mode_t vhdr = (cam_video_hdr_mode_t)
-                    meta.find(QCAMERA3_VIDEO_HDR_MODE).data.i32[0];
-            rc = setVideoHdrMode(mParameters, vhdr);
-            if (rc != NO_ERROR) {
-                LOGE("setVideoHDR is failed");
-            }
-        }
-
-        if (meta.exists(TANGO_MODE_DATA_SENSOR_FULLFOV)) {
-            uint8_t sensorModeFullFov =
-                    meta.find(TANGO_MODE_DATA_SENSOR_FULLFOV).data.u8[0];
-            LOGD("SENSOR_MODE_FULLFOV %d" , sensorModeFullFov);
-            if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_SENSOR_MODE_FULLFOV,
-                    sensorModeFullFov)) {
-                rc = BAD_VALUE;
-            }
-        }
-        //TODO: validate the arguments, HSV scenemode should have only the
-        //advertised fps ranges
-
-        /*set the capture intent, hal version, tintless, stream info,
-         *and disenable parameters to the backend*/
-        LOGD("set_parms META_STREAM_INFO " );
-        for (uint32_t i = 0; i < mStreamConfigInfo.num_streams; i++) {
-            LOGI("STREAM INFO : type %d, wxh: %d x %d, pp_mask: 0x%" PRIx64
-                    ", Format:%d is_type: %d",
-                    mStreamConfigInfo.type[i],
-                    mStreamConfigInfo.stream_sizes[i].width,
-                    mStreamConfigInfo.stream_sizes[i].height,
-                    mStreamConfigInfo.postprocess_mask[i],
-                    mStreamConfigInfo.format[i],
-                    mStreamConfigInfo.is_type[i]);
-        }
-
-        rc = mCameraHandle->ops->set_parms(mCameraHandle->camera_handle,
-                    mParameters);
-        if (rc < 0) {
-            LOGE("set_parms failed for hal version, stream info");
-        }
-
+        cam_is_type_t is_type = IS_TYPE_NONE;
+        bool setEis = isEISEnabled(meta);
         cam_sensor_mode_info_t sensorModeInfo = {};
         rc = getSensorModeInfo(sensorModeInfo);
         if (rc != NO_ERROR) {
@@ -10382,6 +10396,16 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
             (void *)gCamCapability[cameraId]->calibration_transform2,
             CAL_TRANSFORM_COLS * CAL_TRANSFORM_ROWS);
 
+#ifndef USE_HAL_3_3
+
+    int32_t session_keys[] = {ANDROID_CONTROL_VIDEO_STABILIZATION_MODE,
+        ANDROID_CONTROL_AE_TARGET_FPS_RANGE, QCAMERA3_INSTANT_AEC_MODE, QCAMERA3_USE_AV_TIMER,
+        QCAMERA3_VIDEO_HDR_MODE, TANGO_MODE_DATA_SENSOR_FULLFOV};
+    staticInfo.update(ANDROID_REQUEST_AVAILABLE_SESSION_KEYS, session_keys,
+            sizeof(session_keys) / sizeof(session_keys[0]));
+
+#endif
+
     int32_t request_keys_basic[] = {ANDROID_COLOR_CORRECTION_MODE,
        ANDROID_COLOR_CORRECTION_TRANSFORM, ANDROID_COLOR_CORRECTION_GAINS,
        ANDROID_COLOR_CORRECTION_ABERRATION_MODE,
@@ -10856,7 +10880,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     }
 
     if (gCamCapability[cameraId]->supported_instant_aec_modes_cnt > 0) {
-        int32_t available_instant_aec_modes[CAM_AEC_CONVERGENCE_MAX];
+        uint8_t available_instant_aec_modes[CAM_AEC_CONVERGENCE_MAX];
         size = 0;
         count = CAM_AEC_CONVERGENCE_MAX;
         count = MIN(gCamCapability[cameraId]->supported_instant_aec_modes_cnt, count);
@@ -10864,7 +10888,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
             int val = lookupFwkName(INSTANT_AEC_MODES_MAP, METADATA_MAP_SIZE(INSTANT_AEC_MODES_MAP),
                     gCamCapability[cameraId]->supported_instant_aec_modes[i]);
             if (NAME_NOT_FOUND != val) {
-                available_instant_aec_modes[size] = (int32_t)val;
+                available_instant_aec_modes[size] = (uint8_t)val;
                 size++;
             }
         }
@@ -11300,7 +11324,7 @@ int QCamera3HardwareInterface::getCamInfo(uint32_t cameraId,
 
     info->orientation = (int)gCamCapability[cameraId]->sensor_mount_angle;
 #ifndef USE_HAL_3_3
-    info->device_version = CAMERA_DEVICE_API_VERSION_3_4;
+    info->device_version = CAMERA_DEVICE_API_VERSION_3_5;
 #else
     info->device_version = CAMERA_DEVICE_API_VERSION_3_3;
 #endif
@@ -11767,7 +11791,7 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     settings.update(QCAMERA3_AWB_CONVERGENCE_SPEED, &default_awb_speed, 1);
 
     // Set instant AEC to normal convergence by default
-    int32_t instant_aec_mode = (int32_t)QCAMERA3_INSTANT_AEC_NORMAL_CONVERGENCE;
+    uint8_t instant_aec_mode = (uint8_t)QCAMERA3_INSTANT_AEC_NORMAL_CONVERGENCE;
     settings.update(QCAMERA3_INSTANT_AEC_MODE, &instant_aec_mode, 1);
 
     if (gExposeEnableZslKey) {
@@ -11791,6 +11815,9 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     }
     /* hybrid ae */
     settings.update(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE, &hybrid_ae, 1);
+
+    int32_t fwk_hdr = QCAMERA3_VIDEO_HDR_MODE_OFF;
+    settings.update(QCAMERA3_VIDEO_HDR_MODE, &fwk_hdr, 1);
 
     mDefaultMetadata[type] = settings.release();
 
@@ -14702,7 +14729,8 @@ int32_t QCamera3HardwareInterface::setInstantAEC(const CameraMetadata &meta)
 
     // First try to configure instant AEC from framework metadata
     if (meta.exists(QCAMERA3_INSTANT_AEC_MODE)) {
-        val = (uint8_t)meta.find(QCAMERA3_INSTANT_AEC_MODE).data.i32[0];
+        val = meta.find(QCAMERA3_INSTANT_AEC_MODE).data.u8[0];
+        LOGE("Instant AEC mode set: %d", val);
     }
 
     // If framework did not set this value, try to read from set prop.
