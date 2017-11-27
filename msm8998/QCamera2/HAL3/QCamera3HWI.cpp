@@ -9651,8 +9651,25 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
                 reinterpret_cast<uint8_t *>(gCamCapability[cameraId]->pdaf_cal.conversion_coeff),
                 sizeof(gCamCapability[cameraId]->pdaf_cal.conversion_coeff));
         available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_EEPROM_PDAF_CALIB_CONV_COEFF);
-
     }
+
+
+    staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_WB_CALIB_NUM_LIGHTS,
+        &(gCamCapability[cameraId]->wb_cal.num_lights), 1);
+    available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_EEPROM_WB_CALIB_NUM_LIGHTS);
+
+    const int32_t num_lights = gCamCapability[cameraId]->wb_cal.num_lights;
+    staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_WB_CALIB_R_OVER_G_RATIOS,
+        gCamCapability[cameraId]->wb_cal.r_over_g, num_lights);
+    available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_EEPROM_WB_CALIB_R_OVER_G_RATIOS);
+
+    staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_WB_CALIB_B_OVER_G_RATIOS,
+        gCamCapability[cameraId]->wb_cal.b_over_g, num_lights);
+    available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_EEPROM_WB_CALIB_B_OVER_G_RATIOS);
+
+    staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_WB_CALIB_GR_OVER_GB_RATIO,
+        &(gCamCapability[cameraId]->wb_cal.gr_over_gb), 1);
+    available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_EEPROM_WB_CALIB_GR_OVER_GB_RATIO);
 
     int32_t scalar_formats[] = {
             ANDROID_SCALER_AVAILABLE_FORMATS_RAW_OPAQUE,
