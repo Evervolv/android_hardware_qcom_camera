@@ -10958,7 +10958,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         if (eepromLength + sizeof(easelInfo) < MAX_EEPROM_VERSION_INFO_LEN) {
             eepromLength += sizeof(easelInfo);
             strlcat(eepromInfo, ((gEaselManagerClient != nullptr &&
-                    gEaselManagerClient->isEaselPresentOnDevice()) ? ",E-ver" : ",E:N"),
+                    gEaselManagerClient->isEaselPresentOnDevice()) ? ",E-Y" : ",E:N"),
                     MAX_EEPROM_VERSION_INFO_LEN);
         }
         staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO,
@@ -15399,6 +15399,13 @@ status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked()
 
 void QCamera3HardwareInterface::handleEaselFatalError()
 {
+    {
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
+        if (gHdrPlusClient != nullptr) {
+            gHdrPlusClient->nofityEaselFatalError();
+        }
+    }
+
     pthread_mutex_lock(&mMutex);
     mState = ERROR;
     pthread_mutex_unlock(&mMutex);
