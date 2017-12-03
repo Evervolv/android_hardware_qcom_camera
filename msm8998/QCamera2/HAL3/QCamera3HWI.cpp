@@ -15354,6 +15354,13 @@ status_t QCamera3HardwareInterface::configureHdrPlusStreamsLocked()
 
 void QCamera3HardwareInterface::handleEaselFatalError()
 {
+    {
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
+        if (gHdrPlusClient != nullptr) {
+            gHdrPlusClient->nofityEaselFatalError();
+        }
+    }
+
     pthread_mutex_lock(&mMutex);
     mState = ERROR;
     pthread_mutex_unlock(&mMutex);
