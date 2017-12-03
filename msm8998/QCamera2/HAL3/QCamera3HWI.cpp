@@ -915,6 +915,14 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
                 return rc;
             }
             mEaselFwUpdated = false;
+
+            mQCamera3HdrPlusListenerThread = new QCamera3HdrPlusListenerThread(this);
+            rc = mQCamera3HdrPlusListenerThread->run("QCamera3HdrPlusListenerThread");
+            if (rc != OK) {
+                ALOGE("%s: Starting HDR+ client listener thread failed: %s (%d)", __FUNCTION__,
+                        strerror(-rc), rc);
+                return rc;
+            }
         }
     }
 
@@ -934,6 +942,10 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
                             strerror(-suspendErr), suspendErr);
                 }
             }
+
+            mQCamera3HdrPlusListenerThread->requestExit();
+            mQCamera3HdrPlusListenerThread->join();
+            mQCamera3HdrPlusListenerThread = nullptr;
         }
     }
 
@@ -1129,6 +1141,10 @@ int QCamera3HardwareInterface::closeCamera()
                 ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__, strerror(-rc), rc);
             }
         }
+
+        mQCamera3HdrPlusListenerThread->requestExit();
+        mQCamera3HdrPlusListenerThread->join();
+        mQCamera3HdrPlusListenerThread = nullptr;
     }
 
     return rc;
@@ -6430,6 +6446,7 @@ int QCamera3HardwareInterface::flush(bool restartChannels, bool stopChannelImmed
                 return rc;
             }
         }
+        mFirstPreviewIntentSeen = false;
     }
     pthread_mutex_unlock(&mMutex);
 
@@ -15189,7 +15206,7 @@ status_t QCamera3HardwareInterface::openHdrPlusClientAsyncLocked()
         return OK;
     }
 
-    status_t res = gEaselManagerClient->openHdrPlusClientAsync(this);
+    status_t res = gEaselManagerClient->openHdrPlusClientAsync(mQCamera3HdrPlusListenerThread.get());
     if (res != OK) {
         ALOGE("%s: Opening HDR+ client asynchronously failed: %s (%d)", __FUNCTION__,
                 strerror(-res), res);
@@ -15772,25 +15789,20 @@ void QCamera3HardwareInterface::onFailedCaptureResult(pbcamera::CaptureResult *f
             streamBuffer.acquire_fence = -1;
             streamBuffer.release_fence = -1;
 
-            streamBuffers.push_back(streamBuffer);
-
             // Send out error buffer event.
             camera3_notify_msg_t notify_msg = {};
             notify_msg.type = CAMERA3_MSG_ERROR;
             notify_msg.message.error.frame_number = pendingBuffers->frame_number;
-            notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_BUFFER;
+            notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_REQUEST;
             notify_msg.message.error.error_stream = buffer.stream;
 
             orchestrateNotify(&notify_msg);
+            mOutputBufferDispatcher.markBufferReady(pendingBuffers->frame_number, streamBuffer);
         }
 
-        camera3_capture_result_t result = {};
-        result.frame_number = pendingBuffers->frame_number;
-        result.num_output_buffers = streamBuffers.size();
-        result.output_buffers = &streamBuffers[0];
+        mShutterDispatcher.clear(pendingBuffers->frame_number);
 
-        // Send out result with buffer errors.
-        orchestrateResult(&result);
+
 
         // Remove pending buffers.
         mPendingBuffersMap.mPendingBuffersInRequest.erase(pendingBuffers);
@@ -15808,7 +15820,6 @@ void QCamera3HardwareInterface::onFailedCaptureResult(pbcamera::CaptureResult *f
 
     pthread_mutex_unlock(&mMutex);
 }
-
 
 ShutterDispatcher::ShutterDispatcher(QCamera3HardwareInterface *parent) :
         mParent(parent) {}

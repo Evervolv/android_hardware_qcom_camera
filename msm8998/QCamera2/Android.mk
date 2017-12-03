@@ -30,6 +30,7 @@ LOCAL_SRC_FILES := \
 
 #HAL 3.0 source
 LOCAL_SRC_FILES += \
+        HAL3/QCamera3HdrPlusListenerThread.cpp \
         HAL3/QCamera3HWI.cpp \
         HAL3/QCamera3Mem.cpp \
         HAL3/QCamera3Stream.cpp \
