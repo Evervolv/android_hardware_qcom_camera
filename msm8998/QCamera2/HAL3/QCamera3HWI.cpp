@@ -11177,7 +11177,7 @@ int QCamera3HardwareInterface::initHdrPlusClientLocked() {
             ALOGE("%s: Suspending Easel failed: %s (%d)", __FUNCTION__, strerror(-res), res);
         }
 
-        gEaselBypassOnly = !property_get_bool("persist.camera.hdrplus.enable", false);
+        gEaselBypassOnly = !property_get_bool("persist.camera.hdrplus.enable", true);
         gEaselProfilingEnabled = property_get_bool("persist.camera.hdrplus.profiling", false);
 
         // Expose enableZsl key only when HDR+ mode is enabled.
