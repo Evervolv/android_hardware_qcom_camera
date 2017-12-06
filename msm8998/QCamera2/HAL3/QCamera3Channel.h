@@ -184,6 +184,7 @@ protected:
     uint32_t mSkipMode;
     uint32_t mDumpSkipCnt;
     uint8_t mNRMode;
+    bool    mMapStreamBuffers; // Whether to mmap all stream buffers
 };
 
 /* QCamera3ProcessingChannel is used to handle all streams that are directly
@@ -219,7 +220,10 @@ public:
     virtual QCamera3StreamMem *getStreamBufs(uint32_t len);
     virtual void putStreamBufs();
     virtual int32_t registerBuffer(buffer_handle_t *buffer, cam_is_type_t isType);
-
+    // Register a buffer and get the buffer def for the registered buffer.
+    virtual int32_t registerBufferAndGetBufDef(buffer_handle_t *buffer, mm_camera_buf_def_t *frame);
+    // Unregister a buffer.
+    virtual void unregisterBuffer(mm_camera_buf_def_t *frame);
     virtual int32_t stop();
 
     virtual reprocess_type_t getReprocessType() = 0;
@@ -269,6 +273,7 @@ protected:
     uint8_t mIntent;
 
     bool mPostProcStarted;
+    reprocess_type_t mReprocessType; // Only valid when mPostProcStarted is true.
     bool mInputBufferConfig;   // Set when the processing channel is configured
                                // for processing input(framework) buffers
 
