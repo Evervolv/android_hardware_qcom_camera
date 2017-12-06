@@ -1774,6 +1774,19 @@ int32_t QCamera3PostProcessor::encodeData(qcamera_hal3_jpeg_data_t *jpeg_job_dat
     //TBD_later - Zoom event removed in stream
     //main_stream->getCropInfo(crop);
 
+    // Make sure crop region has the same aspect ratio as dst_dim
+    if (src_dim.width * dst_dim.height > src_dim.height * dst_dim.width) {
+        crop.height = src_dim.height;
+        crop.width = crop.height * dst_dim.width / dst_dim.height;
+        crop.left = (src_dim.width - crop.width) / 2;
+        crop.top = 0;
+    } else {
+        crop.width = src_dim.width;
+        crop.height = crop.width * dst_dim.height / dst_dim.width;
+        crop.left = 0;
+        crop.top = (src_dim.height - crop.height) / 2;
+    }
+
     // Set main dim job parameters and handle rotation
     if (!needJpegExifRotation && (jpeg_settings->jpeg_orientation == 90 ||
             jpeg_settings->jpeg_orientation == 270)) {

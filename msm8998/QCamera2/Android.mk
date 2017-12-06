@@ -118,8 +118,11 @@ ifneq (,$(filter msm8974 msm8916 msm8226 msm8610 msm8916 apq8084 msm8084 msm8994
     LOCAL_CFLAGS += -DVENUS_PRESENT
 endif
 
+# Disable UBWC for Easel HDR+.
+ifeq ($(TARGET_USES_EASEL), false)
 ifneq (,$(filter msm8996 msmcobalt sdm660 msm8998,$(TARGET_BOARD_PLATFORM)))
     LOCAL_CFLAGS += -DUBWC_PRESENT
+endif
 endif
 
 ifneq (,$(filter msm8996,$(TARGET_BOARD_PLATFORM)))
@@ -143,6 +146,7 @@ LOCAL_SHARED_LIBRARIES += libhidlbase libhwbinder libutils android.hardware.powe
 ifeq ($(TARGET_TS_MAKEUP),true)
 LOCAL_SHARED_LIBRARIES += libts_face_beautify_hal libts_detected_face_hal
 endif
+LOCAL_HEADER_LIBRARIES := libhardware_headers media_plugin_headers
 
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_MODULE := camera.$(TARGET_BOARD_PLATFORM)

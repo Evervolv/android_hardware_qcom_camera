@@ -369,12 +369,6 @@ status_t CameraContext::decodeJPEG(const sp<IMemory>& mem, SkBitmap *skBM)
         }
         break;
 
-        case kIndex_8_SkColorType:
-        {
-            mfmtMultiplier = 4;
-        }
-        break;
-
         case kAlpha_8_SkColorType:
         {
             mfmtMultiplier = 4;

@@ -278,7 +278,8 @@ QCamera3Stream::QCamera3Stream(uint32_t camHandle,
                              uint32_t chId,
                              mm_camera_ops_t *camOps,
                              cam_padding_info_t *paddingInfo,
-                             QCamera3Channel *channel) :
+                             QCamera3Channel *channel,
+                             bool mapStreamBuffers) :
         mCamHandle(camHandle),
         mChannelHandle(chId),
         mHandle(0),
@@ -300,7 +301,8 @@ QCamera3Stream::QCamera3Stream(uint32_t camHandle,
         mCurrentBatchBufDef(NULL),
         mBufsStaged(0),
         mFreeBatchBufQ(NULL, this),
-        mNRMode(0)
+        mNRMode(0),
+        mMapStreamBuffers(mapStreamBuffers)
 {
     mMemVtbl.user_data = this;
     mMemVtbl.get_bufs = get_bufs;
@@ -712,10 +714,10 @@ void *QCamera3Stream::dataProcRoutine(void *data)
             break;
         case CAMERA_CMD_TYPE_EXIT:
             LOGH("Exit");
+            pme->flushFreeBatchBufQ();
             /* flush data buf queue */
             pme->mDataQ.flush();
             pme->mTimeoutFrameQ.clear();
-            pme->flushFreeBatchBufQ();
             running = 0;
             break;
         default:
@@ -780,15 +782,17 @@ int32_t QCamera3Stream::bufDoneLocked(uint32_t index)
 
         if (BAD_INDEX != bufSize) {
             LOGD("Map streamBufIdx: %d", index);
+            void* buffer = (mMapStreamBuffers ?
+                            mStreamBufs->getPtr(index) : NULL);
             rc = mMemOps->map_ops(index, -1, mStreamBufs->getFd(index),
-                    (size_t)bufSize, mStreamBufs->getPtr(index),
+                    (size_t)bufSize, buffer,
                     CAM_MAPPING_BUF_TYPE_STREAM_BUF, mMemOps->userdata);
             if (rc < 0) {
                 LOGE("Failed to map camera buffer %d", index);
                 return rc;
             }
 
-            rc = mStreamBufs->getBufDef(mFrameLenOffset, mBufDefs[index], index);
+            rc = mStreamBufs->getBufDef(mFrameLenOffset, mBufDefs[index], index, mMapStreamBuffers);
             if (NO_ERROR != rc) {
                 LOGE("Couldn't find camera buffer definition");
                 mMemOps->unmap_ops(index, -1, CAM_MAPPING_BUF_TYPE_STREAM_BUF, mMemOps->userdata);
@@ -947,8 +951,10 @@ int32_t QCamera3Stream::getBufs(cam_frame_len_offset_t *offset,
         if (mStreamBufs->valid(i)) {
             ssize_t bufSize = mStreamBufs->getSize(i);
             if (BAD_INDEX != bufSize) {
+                void* buffer = (mMapStreamBuffers ?
+                        mStreamBufs->getPtr(i) : NULL);
                 rc = ops_tbl->map_ops(i, -1, mStreamBufs->getFd(i),
-                        (size_t)bufSize, mStreamBufs->getPtr(i),
+                        (size_t)bufSize, buffer,
                         CAM_MAPPING_BUF_TYPE_STREAM_BUF,
                         ops_tbl->userdata);
                 if (rc < 0) {
@@ -999,7 +1005,7 @@ int32_t QCamera3Stream::getBufs(cam_frame_len_offset_t *offset,
     memset(mBufDefs, 0, mNumBufs * sizeof(mm_camera_buf_def_t));
     for (uint32_t i = 0; i < mNumBufs; i++) {
         if (mStreamBufs->valid(i)) {
-            mStreamBufs->getBufDef(mFrameLenOffset, mBufDefs[i], i);
+            mStreamBufs->getBufDef(mFrameLenOffset, mBufDefs[i], i, mMapStreamBuffers);
         }
     }
 
@@ -1389,8 +1395,9 @@ int32_t QCamera3Stream::getBatchBufs(
         if (mNumBatchBufs) {
             //For USER_BUF, size = number_of_container bufs instead of the total
             //buf size
+            void* buffer = (mMapStreamBuffers ? mStreamBufs->getPtr(i) : NULL);
             rc = ops_tbl->map_ops(i, -1, mStreamBatchBufs->getFd(i),
-                    (size_t)mNumBatchBufs, mStreamBatchBufs->getPtr(i),
+                    (size_t)mNumBatchBufs, buffer,
                     CAM_MAPPING_BUF_TYPE_STREAM_USER_BUF,
                     ops_tbl->userdata);
             if (rc < 0) {

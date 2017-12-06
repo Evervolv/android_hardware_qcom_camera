@@ -226,20 +226,21 @@ int QCamera3StreamMem::cleanCache(uint32_t index)
  *   @offset  : [input] frame buffer offset
  *   @bufDef  : [output] reference to struct to store buffer definition
  *   @index   : [input] index of the buffer
+ *   @virtualAddr : [input] whether to fill out virtual address
  *
  * RETURN     : int32_t type of status
  *              NO_ERROR  -- success
  *              none-zero failure code
  *==========================================================================*/
 int32_t QCamera3StreamMem::getBufDef(const cam_frame_len_offset_t &offset,
-        mm_camera_buf_def_t &bufDef, uint32_t index)
+        mm_camera_buf_def_t &bufDef, uint32_t index, bool virtualAddr)
 {
     int32_t ret = NO_ERROR;
 
     if (index < mMaxHeapBuffers)
-        ret = mHeapMem.getBufDef(offset, bufDef, index);
+        ret = mHeapMem.getBufDef(offset, bufDef, index, virtualAddr);
     else
-        ret = mGrallocMem.getBufDef(offset, bufDef, index);
+        ret = mGrallocMem.getBufDef(offset, bufDef, index, virtualAddr);
 
     bufDef.mem_info = (void *)this;
 
@@ -394,10 +395,10 @@ int QCamera3StreamMem::allocateAll(size_t size)
     return mHeapMem.allocate(size);
 }
 
-int QCamera3StreamMem::allocateOne(size_t size)
+int QCamera3StreamMem::allocateOne(size_t size, bool isCached)
 {
     Mutex::Autolock lock(mLock);
-    return mHeapMem.allocateOne(size);
+    return mHeapMem.allocateOne(size, isCached);
 }
 
 /*===========================================================================

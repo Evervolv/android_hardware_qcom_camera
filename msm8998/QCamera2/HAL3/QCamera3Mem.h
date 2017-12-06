@@ -78,7 +78,7 @@ public:
     virtual ~QCamera3Memory();
 
     int32_t getBufDef(const cam_frame_len_offset_t &offset,
-            mm_camera_buf_def_t &bufDef, uint32_t index);
+            mm_camera_buf_def_t &bufDef, uint32_t index, bool virtualAddr);
 
 protected:
     struct QCamera3MemInfo {
@@ -107,7 +107,7 @@ public:
     virtual ~QCamera3HeapMemory();
 
     int allocate(size_t size);
-    int allocateOne(size_t size);
+    int allocateOne(size_t size, bool isCached = true);
     void deallocate();
 
     virtual int cacheOps(uint32_t index, unsigned int cmd);
@@ -123,7 +123,7 @@ protected:
     virtual void *getPtrLocked(uint32_t index);
 private:
     int allocOneBuffer(struct QCamera3MemInfo &memInfo,
-            unsigned int heap_id, size_t size);
+            unsigned int heap_id, size_t size, bool isCached = true);
     void deallocOneBuffer(struct QCamera3MemInfo &memInfo);
     uint32_t mMaxCnt;
 };

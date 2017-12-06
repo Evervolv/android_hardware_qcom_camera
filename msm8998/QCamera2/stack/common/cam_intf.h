@@ -651,6 +651,9 @@ typedef struct cam_capability{
 
     /* Whether camera timestamp is calibrated with sensor */
     uint8_t timestamp_calibrated;
+
+    /*PDAF calibration data*/
+    cam_pd_calibration_t pdaf_cal;
 } cam_capability_t;
 
 typedef enum {
@@ -1148,8 +1151,8 @@ typedef struct {
     INCLUDE(CAM_INTF_META_DEV_CAM_ENABLE,               uint8_t,                     1);
     /* DevCamDebug metadata CAM_INTF.H AF */
     INCLUDE(CAM_INTF_META_DEV_CAM_AF_LENS_POSITION,     int32_t,                     1);
-    INCLUDE(CAM_INTF_META_DEV_CAM_AF_TOF_CONFIDENCE,    int32_t,                     1);
-    INCLUDE(CAM_INTF_META_DEV_CAM_AF_TOF_DISTANCE,      int32_t,                     1);
+    INCLUDE(CAM_INTF_META_AF_TOF_CONFIDENCE,            int32_t,                     1);
+    INCLUDE(CAM_INTF_META_AF_TOF_DISTANCE,              int32_t,                     1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AF_LUMA,                    int32_t,               1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AF_HAF_STATE,               int32_t,               1);
     INCLUDE(CAM_INTF_META_DEV_CAM_AF_MONITOR_PDAF_TARGET_POS, int32_t,               1);
@@ -1222,7 +1225,7 @@ typedef struct {
     INCLUDE(CAM_INTF_META_SENSOR_MODE_FULLFOV,          int32_t,                     1);
     INCLUDE(CAM_INTF_META_EARLY_AF_STATE,               uint32_t,                    1);
     INCLUDE(CAM_INTF_META_EXP_TIME_BOOST,               float,                       1);
-
+    INCLUDE(CAM_INTF_META_MAKERNOTE,                    cam_makernote_t,             1);
 } metadata_data_t;
 
 /* Update clear_metadata_buffer() function when a new is_xxx_valid is added to

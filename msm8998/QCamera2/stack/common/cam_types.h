@@ -45,9 +45,13 @@
 #define BHIST_STATS_DEBUG_DATA_SIZE       (70000)
 #define TUNING_INFO_DEBUG_DATA_SIZE       (4)
 #define OIS_DATA_MAX_SIZE                 (32)
-#define MAX_OIS_SAMPLE_NUM_PER_FRAME      (10)
+#define MAX_OIS_SAMPLE_NUM_PER_FRAME      (20)
+#define MAX_MAKERNOTE_LENGTH              (65535)
 
 #define PD_DATA_SIZE                      (4032*2*758)
+
+#define MAX_PDAF_CALIB_GAINS              (25*19)
+#define MAX_PDAF_CALIB_COEFF              (200)
 
 #define CEILING64(X) (((X) + 0x0003F) & 0xFFFFFFC0)
 #define CEILING32(X) (((X) + 0x0001F) & 0xFFFFFFE0)
@@ -615,7 +619,14 @@ typedef struct {
     uint32_t op_pixel_clk;             // Sensor output rate.
     uint32_t num_raw_bits;             // Number of bits for RAW. 0 if not RAW.
     int64_t  timestamp_offset;         // Timestamp offset with gyro sensor. 0 if uncalibrated.
+    int64_t  timestamp_crop_offset;    // Timestamp offset due to crop on top of active array.
 } cam_sensor_mode_info_t;
+
+typedef struct {
+    uint16_t left_gain_map[MAX_PDAF_CALIB_GAINS];
+    uint16_t right_gain_map[MAX_PDAF_CALIB_GAINS];
+    int16_t conversion_coeff[MAX_PDAF_CALIB_COEFF];
+} cam_pd_calibration_t;
 
 typedef struct {
     cam_frame_len_offset_t plane_info;
@@ -988,12 +999,11 @@ typedef struct {
 } cam_ois_data_t;
 
 typedef struct {
-    int64_t frame_sof_timestamp_vsync;
     int64_t frame_sof_timestamp_boottime;
     int32_t num_ois_sample;
     int64_t ois_sample_timestamp_boottime[MAX_OIS_SAMPLE_NUM_PER_FRAME];
-    int32_t ois_sample_shift_x[MAX_OIS_SAMPLE_NUM_PER_FRAME];
-    int32_t ois_sample_shift_y[MAX_OIS_SAMPLE_NUM_PER_FRAME];
+    float ois_sample_shift_pixel_x[MAX_OIS_SAMPLE_NUM_PER_FRAME];
+    float ois_sample_shift_pixel_y[MAX_OIS_SAMPLE_NUM_PER_FRAME];
 } cam_frame_ois_info_t;
 
 typedef struct  {
@@ -2458,8 +2468,8 @@ typedef enum {
     CAM_INTF_META_DEV_CAM_ENABLE,
     /* DevCamDebug metadata CAM_TYPES.h AF */
     CAM_INTF_META_DEV_CAM_AF_LENS_POSITION,
-    CAM_INTF_META_DEV_CAM_AF_TOF_CONFIDENCE,
-    CAM_INTF_META_DEV_CAM_AF_TOF_DISTANCE,
+    CAM_INTF_META_AF_TOF_CONFIDENCE,
+    CAM_INTF_META_AF_TOF_DISTANCE,
     CAM_INTF_META_DEV_CAM_AF_LUMA,
     CAM_INTF_META_DEV_CAM_AF_HAF_STATE,
     CAM_INTF_META_DEV_CAM_AF_MONITOR_PDAF_TARGET_POS,
@@ -2549,6 +2559,8 @@ typedef enum {
     CAM_INTF_META_EARLY_AF_STATE,
     /* Exposure time boost */
     CAM_INTF_META_EXP_TIME_BOOST,
+    /* Easel HDR+ makernote */
+    CAM_INTF_META_MAKERNOTE,
     CAM_INTF_PARM_MAX
 } cam_intf_parm_type_t;
 
@@ -3172,5 +3184,12 @@ typedef enum {
     CAM_STREAM_ON_TYPE_CONFIG, // Configure modules for stream ON without starting sensor streaming.
     CAM_STREAM_ON_TYPE_START_SENSOR_STREAMING, // Start sensor streaming.
 } cam_stream_on_type_t;
+
+
+// Used with CAM_INTF_META_MAKERNOTE.
+typedef struct {
+    char data[MAX_MAKERNOTE_LENGTH];
+    uint32_t length;
+} cam_makernote_t;
 
 #endif /* __QCAMERA_TYPES_H__ */
