@@ -950,9 +950,11 @@ int QCamera3HardwareInterface::openCamera(struct hw_device_t **hw_device)
                 gActiveEaselClient--;
             }
 
-            mQCamera3HdrPlusListenerThread->requestExit();
-            mQCamera3HdrPlusListenerThread->join();
-            mQCamera3HdrPlusListenerThread = nullptr;
+            if (mQCamera3HdrPlusListenerThread != nullptr) {
+                mQCamera3HdrPlusListenerThread->requestExit();
+                mQCamera3HdrPlusListenerThread->join();
+                mQCamera3HdrPlusListenerThread = nullptr;
+            }
         }
     }
 
@@ -1152,9 +1154,11 @@ int QCamera3HardwareInterface::closeCamera()
             gActiveEaselClient--;
         }
 
-        mQCamera3HdrPlusListenerThread->requestExit();
-        mQCamera3HdrPlusListenerThread->join();
-        mQCamera3HdrPlusListenerThread = nullptr;
+        if (mQCamera3HdrPlusListenerThread != nullptr) {
+            mQCamera3HdrPlusListenerThread->requestExit();
+            mQCamera3HdrPlusListenerThread->join();
+            mQCamera3HdrPlusListenerThread = nullptr;
+        }
     }
 
     return rc;
