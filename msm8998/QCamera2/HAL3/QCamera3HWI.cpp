@@ -57,6 +57,9 @@
 #include "QCamera3VendorTags.h"
 #include "QCameraTrace.h"
 
+// XML parsing
+#include "tinyxml2.h"
+
 #include "HdrPlusClientUtils.h"
 
 extern "C" {
@@ -9535,6 +9538,34 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
                       lens_shading_map_size,
                       sizeof(lens_shading_map_size)/sizeof(int32_t));
 
+    // Lens calibration for MOTION_TRACKING, back camera only
+    if (cameraId == 0) {
+
+        float poseRotation[4] = {1.0f, 0.f, 0.f, 0.f}; // quaternion rotation
+        float poseTranslation[3] = {0.0f, 0.f, 0.f}; // xyz translation, meters
+        uint8_t poseReference = ANDROID_LENS_POSE_REFERENCE_GYROSCOPE;
+        // TODO: b/70565622 - these should have better identity values as a fallback
+        float cameraIntrinsics[5] = {100.f, 100.f, 0.f, 1000, 1000}; // fx,fy,sx,cx,cy
+        float radialDistortion[6] = {1.f, 0.f, 0.f, 0.f, 0.f, 0.f}; // identity
+
+        bool success = readSensorCalibration(
+                gCamCapability[cameraId]->active_array_size.width,
+                poseRotation, poseTranslation, cameraIntrinsics, radialDistortion);
+        if (!success) {
+            ALOGE("Using identity lens calibration values");
+        }
+        staticInfo.update(ANDROID_LENS_POSE_ROTATION,
+                poseRotation, sizeof(poseRotation)/sizeof(float));
+        staticInfo.update(ANDROID_LENS_POSE_TRANSLATION,
+                poseTranslation, sizeof(poseTranslation)/sizeof(float));
+        staticInfo.update(ANDROID_LENS_INTRINSIC_CALIBRATION,
+                cameraIntrinsics, sizeof(cameraIntrinsics)/sizeof(float));
+        staticInfo.update(ANDROID_LENS_RADIAL_DISTORTION,
+                radialDistortion, sizeof(radialDistortion)/sizeof(float));
+        staticInfo.update(ANDROID_LENS_POSE_REFERENCE,
+                &poseReference, sizeof(poseReference));
+    }
+
     staticInfo.update(ANDROID_SENSOR_INFO_PHYSICAL_SIZE,
             gCamCapability[cameraId]->sensor_physical_size, SENSOR_PHYSICAL_SIZE_CNT);
 
@@ -10280,6 +10311,11 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     if (CAM_SENSOR_YUV != gCamCapability[cameraId]->sensor_type.sens_type) {
         available_capabilities.add(ANDROID_REQUEST_AVAILABLE_CAPABILITIES_RAW);
     }
+    // Only back camera supports MOTION_TRACKING
+    if (cameraId == 0) {
+        available_capabilities.add(ANDROID_REQUEST_AVAILABLE_CAPABILITIES_MOTION_TRACKING);
+    }
+
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_CAPABILITIES,
             available_capabilities.array(),
             available_capabilities.size());
@@ -10744,6 +10780,18 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         available_characteristics_keys.add(ANDROID_SENSOR_OPTICAL_BLACK_REGIONS);
     }
 #endif
+
+    if (cameraId == 0) {
+        int32_t lensCalibrationKeys[] = {
+            ANDROID_LENS_POSE_ROTATION,
+            ANDROID_LENS_POSE_TRANSLATION,
+            ANDROID_LENS_POSE_REFERENCE,
+            ANDROID_LENS_INTRINSIC_CALIBRATION,
+            ANDROID_LENS_RADIAL_DISTORTION,
+        };
+        available_characteristics_keys.appendArray(lensCalibrationKeys,
+                sizeof(lensCalibrationKeys) / sizeof(lensCalibrationKeys[0]));
+    }
 
     if (0 <= indexPD) {
         int32_t depthKeys[] = {
@@ -11537,6 +11585,18 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         focusMode = ANDROID_CONTROL_AF_MODE_OFF;
         optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
         break;
+      case CAMERA3_TEMPLATE_MOTION_TRACKING_PREVIEW:
+      case CAMERA3_TEMPLATE_MOTION_TRACKING_BEST:
+        edge_mode = ANDROID_EDGE_MODE_FAST;
+        noise_red_mode = ANDROID_NOISE_REDUCTION_MODE_FAST;
+        shading_mode = ANDROID_SHADING_MODE_FAST;
+        hot_pixel_mode = ANDROID_HOT_PIXEL_MODE_FAST;
+        tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
+        cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_FAST;
+        controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_MOTION_TRACKING;
+        focusMode = ANDROID_CONTROL_AF_MODE_OFF;
+        optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
+        break;
       default:
         edge_mode = ANDROID_EDGE_MODE_FAST;
         noise_red_mode = ANDROID_NOISE_REDUCTION_MODE_FAST;
@@ -11689,6 +11749,10 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
 
     /*focus distance*/
     float focus_distance = 0.0;
+    if (type == CAMERA3_TEMPLATE_MOTION_TRACKING_PREVIEW ||
+            type == CAMERA3_TEMPLATE_MOTION_TRACKING_BEST) {
+        focus_distance = 0.1f;
+    }
     settings.update(ANDROID_LENS_FOCUS_DISTANCE, &focus_distance, 1);
 
     /*target fps range: use maximum range for picture, and maximum fixed range for video*/
@@ -15937,6 +16001,191 @@ void QCamera3HardwareInterface::onFailedCaptureResult(pbcamera::CaptureResult *f
     }
 
     pthread_mutex_unlock(&mMutex);
+}
+
+bool QCamera3HardwareInterface::readSensorCalibration(
+        int activeArrayWidth,
+        float poseRotation[4], float poseTranslation[3],
+        float cameraIntrinsics[5], float radialDistortion[6]) {
+
+    const char* calibrationPath = "/persist/sensors/calibration/calibration.xml";
+
+    using namespace tinyxml2;
+
+    XMLDocument calibrationXml;
+    XMLError err = calibrationXml.LoadFile(calibrationPath);
+    if (err != XML_SUCCESS) {
+        ALOGE("Unable to load calibration file '%s'. Error: %s",
+                calibrationPath, XMLDocument::ErrorIDToName(err));
+        return false;
+    }
+    XMLElement *rig = calibrationXml.FirstChildElement("rig");
+    if (rig == nullptr) {
+        ALOGE("No 'rig' in calibration file");
+        return false;
+    }
+    XMLElement *cam = rig->FirstChildElement("camera");
+    XMLElement *camModel = nullptr;
+    while (cam != nullptr) {
+        camModel = cam->FirstChildElement("camera_model");
+        if (camModel == nullptr) {
+            ALOGE("No 'camera_model' in calibration file");
+            return false;
+        }
+        int modelIndex = camModel->IntAttribute("index", -1);
+        // Model index "0" has the calibration we need
+        if (modelIndex == 0) {
+            break;
+        }
+        cam = cam->NextSiblingElement("camera");
+    }
+    if (cam == nullptr) {
+        ALOGE("No 'camera' in calibration file");
+        return false;
+    }
+    const char *modelType = camModel->Attribute("type");
+    if (modelType == nullptr || strcmp(modelType,"calibu_fu_fv_u0_v0_k1_k2_k3")) {
+        ALOGE("Camera model is unknown type %s",
+                modelType ? modelType : "NULL");
+        return false;
+    }
+    XMLElement *modelWidth = camModel->FirstChildElement("width");
+    if (modelWidth == nullptr || modelWidth->GetText() == nullptr) {
+        ALOGE("No camera model width in calibration file");
+        return false;
+    }
+    int width = atoi(modelWidth->GetText());
+    XMLElement *modelHeight = camModel->FirstChildElement("height");
+    if (modelHeight == nullptr || modelHeight->GetText() == nullptr) {
+        ALOGE("No camera model height in calibration file");
+        return false;
+    }
+    int height = atoi(modelHeight->GetText());
+    if (width <= 0 || height <= 0) {
+        ALOGE("Bad model width or height in calibration file: %d x %d", width, height);
+        return false;
+    }
+    ALOGI("Width: %d, Height: %d", width, height);
+
+    XMLElement *modelParams = camModel->FirstChildElement("params");
+    if (modelParams == nullptr) {
+        ALOGE("No camera model params in calibration file");
+        return false;
+    }
+    const char* paramText = modelParams->GetText();
+    if (paramText == nullptr) {
+        ALOGE("No parameters in params element in calibration file");
+        return false;
+    }
+    ALOGI("Parameters: %s", paramText);
+
+    // Parameter string is of the form "[ float; float; float ...]"
+    float params[7];
+    bool success = parseStringArray(paramText, params, 7);
+    if (!success) {
+        ALOGE("Malformed camera parameter string in calibration file");
+        return false;
+    }
+
+    XMLElement *extCalib = rig->FirstChildElement("extrinsic_calibration");
+    while (extCalib != nullptr) {
+        int id = extCalib->IntAttribute("frame_B_id", -1);
+        if (id == 0) {
+            break;
+        }
+        extCalib = extCalib->NextSiblingElement("extrinsic_calibration");
+    }
+    if (extCalib == nullptr) {
+        ALOGE("No 'extrinsic_calibration' in calibration file");
+        return false;
+    }
+
+    XMLElement *q = extCalib->FirstChildElement("A_q_B");
+    if (q == nullptr || q->GetText() == nullptr) {
+        ALOGE("No extrinsic quarternion in calibration file");
+        return false;
+    }
+    float rotation[4];
+    success = parseStringArray(q->GetText(), rotation, 4);
+    if (!success) {
+        ALOGE("Malformed extrinsic quarternion string in calibration file");
+        return false;
+    }
+
+    XMLElement *p = extCalib->FirstChildElement("A_p_B");
+    if (p == nullptr || p->GetText() == nullptr) {
+        ALOGE("No extrinsic translation in calibration file");
+        return false;
+    }
+    float position[3];
+    success = parseStringArray(p->GetText(), position, 3);
+    if (!success) {
+        ALOGE("Malformed extrinsic position string in calibration file");
+        return false;
+    }
+
+    // Map from width x height to active array
+    float scaleFactor = static_cast<float>(activeArrayWidth) / width;
+
+    cameraIntrinsics[0] = params[0] * scaleFactor; // fu -> f_x
+    cameraIntrinsics[1] = params[1] * scaleFactor; // fv -> f_y
+    cameraIntrinsics[2] = params[2] * scaleFactor; // u0 -> c_x
+    cameraIntrinsics[3] = params[3] * scaleFactor; // v0 -> c_y
+    cameraIntrinsics[4] = 0; // s = 0
+
+    radialDistortion[0] = 1; // k_0 = 1
+    radialDistortion[1] = params[4]; // k1 -> k_1
+    radialDistortion[2] = params[5]; // k2 -> k_2
+    radialDistortion[3] = params[6]; // k3 -> k_3
+    radialDistortion[4] = 0; // k_4 = 0
+    radialDistortion[5] = 0; // k_5 = 0
+
+    for (int i = 0; i < 4; i++) {
+        poseRotation[i] = rotation[i];
+    }
+    for (int i = 0; i < 3; i++) {
+        poseTranslation[i] = position[i];
+    }
+
+    ALOGI("Intrinsics: %f, %f, %f, %f, %f", cameraIntrinsics[0],
+            cameraIntrinsics[1], cameraIntrinsics[2],
+            cameraIntrinsics[3], cameraIntrinsics[4]);
+    ALOGI("Distortion: %f, %f, %f, %f, %f, %f",
+            radialDistortion[0], radialDistortion[1], radialDistortion[2], radialDistortion[3],
+            radialDistortion[4], radialDistortion[5]);
+    ALOGI("Pose rotation: %f, %f, %f, %f",
+            poseRotation[0], poseRotation[1], poseRotation[2], poseRotation[3]);
+    ALOGI("Pose translation: %f, %f, %f",
+            poseTranslation[0], poseTranslation[1], poseTranslation[2]);
+
+    return true;
+}
+
+bool QCamera3HardwareInterface::parseStringArray(const char *str, float *dest, int count) {
+    size_t idx = 0;
+    size_t len = strlen(str);
+    for (; idx < len; idx++) {
+        if (str[idx] == '[') break;
+    }
+    const char *startParam = str + idx + 1;
+    if (startParam >= str + len) {
+        ALOGE("Malformed array: %s", str);
+        return false;
+    }
+    char *endParam = nullptr;
+    for (int i = 0; i < count; i++) {
+        dest[i] = strtod(startParam, &endParam);
+        if (startParam == endParam) {
+            ALOGE("Malformed array, index %d: %s", i, str);
+            return false;
+        }
+        startParam = endParam + 1;
+        if (startParam >= str + len) {
+            ALOGE("Malformed array, index %d: %s", i, str);
+            return false;
+        }
+    }
+    return true;
 }
 
 ShutterDispatcher::ShutterDispatcher(QCamera3HardwareInterface *parent) :

@@ -901,6 +901,16 @@ private:
 
     // Thread to handle callbacks from HDR+ client. Protected by gHdrPlusClientLock.
     sp<QCamera3HdrPlusListenerThread> mQCamera3HdrPlusListenerThread;
+
+    // Read sensor calibration XML file for lens calibration fields. On failure to read
+    // the file, leaves passed-in values unchanged and returns false.
+    static bool readSensorCalibration(int activeArrayWidth,
+            float poseRotation[4], float poseTranslation[3],
+            float cameraIntrinsics[5], float radialDistortion[6]);
+
+    // Parse a string of form " [ x; y; z ...]" into a floating-point array.
+    // Returns false on parse error
+    static bool parseStringArray(const char *str, float *dest, int count);
 };
 
 }; // namespace qcamera
