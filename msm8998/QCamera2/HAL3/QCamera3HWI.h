@@ -597,6 +597,7 @@ private:
         uint8_t capture_intent;
         uint8_t fwkCacMode;
         uint8_t hybrid_ae_enable;
+        uint8_t motion_detection_enable;
         /* DevCamDebug metadata PendingRequestInfo */
         uint8_t DevCamDebug_meta_enable;
         /* DevCamDebug metadata end */
