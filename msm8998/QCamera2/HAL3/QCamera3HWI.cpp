@@ -277,8 +277,7 @@ const QCamera3HardwareInterface::QCameraMap<
     { ANDROID_CONTROL_AE_MODE_ON_AUTO_FLASH,        CAM_FLASH_MODE_AUTO},
     { ANDROID_CONTROL_AE_MODE_ON_ALWAYS_FLASH,      CAM_FLASH_MODE_ON  },
     { ANDROID_CONTROL_AE_MODE_ON_AUTO_FLASH_REDEYE, CAM_FLASH_MODE_AUTO},
-    { (camera_metadata_enum_android_control_ae_mode_t)
-      NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH, CAM_FLASH_MODE_OFF }
+    { ANDROID_CONTROL_AE_MODE_ON_EXTERNAL_FLASH, CAM_FLASH_MODE_OFF }
 };
 
 const QCamera3HardwareInterface::QCameraMap<
@@ -8263,6 +8262,7 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     // AF scene change
     IF_META_AVAILABLE(uint8_t, afSceneChange, CAM_INTF_META_AF_SCENE_CHANGE, metadata) {
         camMetadata.update(NEXUS_EXPERIMENTAL_2016_AF_SCENE_CHANGE, afSceneChange, 1);
+        camMetadata.update(ANDROID_CONTROL_AF_SCENE_CHANGE, afSceneChange, 1);
     }
 
     // Enable ZSL
@@ -8565,7 +8565,7 @@ QCamera3HardwareInterface::translateCbUrgentMetadataToResultMetadata
         fwk_aeMode = ANDROID_CONTROL_AE_MODE_OFF;
         camMetadata.update(ANDROID_CONTROL_AE_MODE, &fwk_aeMode, 1);
     } else if (aeMode == CAM_AE_MODE_ON_EXTERNAL_FLASH) {
-        fwk_aeMode = NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH;
+        fwk_aeMode = ANDROID_CONTROL_AE_MODE_ON_EXTERNAL_FLASH;
         camMetadata.update(ANDROID_CONTROL_AE_MODE, &fwk_aeMode, 1);
     } else {
         LOGE("Not enough info to deduce ANDROID_CONTROL_AE_MODE redeye:%d, "
@@ -10177,7 +10177,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     for (size_t i = 0; i < count; i++) {
         uint8_t aeMode = gCamCapability[cameraId]->supported_ae_modes[i];
         if (aeMode == CAM_AE_MODE_ON_EXTERNAL_FLASH) {
-            aeMode = NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH;
+            aeMode = ANDROID_CONTROL_AE_MODE_ON_EXTERNAL_FLASH;
         }
         avail_ae_modes.add(aeMode);
     }
@@ -10491,6 +10491,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_COLOR_CORRECTION_GAINS, ANDROID_CONTROL_AE_MODE, ANDROID_CONTROL_AE_REGIONS,
        ANDROID_CONTROL_AE_STATE, ANDROID_CONTROL_AF_MODE,
        ANDROID_CONTROL_AF_STATE, ANDROID_CONTROL_AWB_MODE,
+       ANDROID_CONTROL_AF_SCENE_CHANGE,
        ANDROID_CONTROL_AWB_STATE, ANDROID_CONTROL_MODE, ANDROID_EDGE_MODE,
        ANDROID_FLASH_FIRING_POWER, ANDROID_FLASH_FIRING_TIME, ANDROID_FLASH_MODE,
        ANDROID_FLASH_STATE, ANDROID_JPEG_GPS_COORDINATES, ANDROID_JPEG_GPS_PROCESSING_METHOD,
@@ -11000,6 +11001,10 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         staticInfo.update(NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO,
                 gCamCapability[cameraId]->eeprom_version_info, eepromLength);
         available_characteristics_keys.add(NEXUS_EXPERIMENTAL_2017_EEPROM_VERSION_INFO);
+
+        staticInfo.update(ANDROID_INFO_VERSION,
+                gCamCapability[cameraId]->eeprom_version_info, eepromLength);
+        available_characteristics_keys.add(ANDROID_INFO_VERSION);
     }
 
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_CHARACTERISTICS_KEYS,
@@ -12452,7 +12457,7 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
 
         if (fwk_aeMode == ANDROID_CONTROL_AE_MODE_OFF ) {
             aeMode = CAM_AE_MODE_OFF;
-        } else if (fwk_aeMode == NEXUS_EXPERIMENTAL_2016_CONTROL_AE_MODE_EXTERNAL_FLASH) {
+        } else if (fwk_aeMode == ANDROID_CONTROL_AE_MODE_ON_EXTERNAL_FLASH) {
             aeMode = CAM_AE_MODE_ON_EXTERNAL_FLASH;
         } else {
             aeMode = CAM_AE_MODE_ON;
