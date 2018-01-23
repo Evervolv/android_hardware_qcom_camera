@@ -234,8 +234,8 @@ vendor_tag_info_t qcamera3_awb_speed[QCAMERA3_AWB_CONVERGENCE_SPEED_END -
 vendor_tag_info_t
         qcamera3_instant_aec[QCAMERA3_INSTANT_AEC_END -
         QCAMERA3_INSTANT_AEC_START] = {
-    { "instant_aec_mode", TYPE_INT32 },
-    { "instant_aec_available_modes",   TYPE_INT32 }
+    { "instant_aec_mode", TYPE_BYTE },
+    { "instant_aec_available_modes",   TYPE_BYTE }
 };
 
 vendor_tag_info_t nexus_experimental_2016[NEXUS_EXPERIMENTAL_2016_END -
