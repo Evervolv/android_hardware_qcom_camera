@@ -512,6 +512,7 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mInstantAecFrameIdxCount(0),
       mLastRequestedLensShadingMapMode(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF),
       mLastRequestedFaceDetectMode(ANDROID_STATISTICS_FACE_DETECT_MODE_OFF),
+      mLastRequestedOisDataMode(ANDROID_STATISTICS_OIS_DATA_MODE_OFF),
       mCurrFeatureState(0),
       mLdafCalibExist(false),
       mLastCustIntentFrmNum(-1),
@@ -5510,6 +5511,11 @@ no_error:
                 meta.find(ANDROID_STATISTICS_FACE_DETECT_MODE).data.u8[0];
     }
 
+    if (meta.exists(ANDROID_STATISTICS_OIS_DATA_MODE)) {
+        mLastRequestedOisDataMode =
+                meta.find(ANDROID_STATISTICS_OIS_DATA_MODE).data.u8[0];
+    }
+
     bool hdrPlusRequest = false;
     HdrPlusPendingRequest pendingHdrPlusRequest = {};
 
@@ -5621,6 +5627,7 @@ no_error:
     pendingRequest.timestamp = 0;
     pendingRequest.requestedLensShadingMapMode = requestedLensShadingMapMode;
     pendingRequest.requestedFaceDetectMode = mLastRequestedFaceDetectMode;
+    pendingRequest.requestedOisDataMode = mLastRequestedOisDataMode;
     if (request->input_buffer) {
         pendingRequest.input_buffer =
                 (camera3_stream_buffer_t*)malloc(sizeof(camera3_stream_buffer_t));
@@ -8284,6 +8291,8 @@ QCamera3HardwareInterface::translateFromHalMetadata(
         camMetadata.update(ANDROID_CONTROL_ENABLE_ZSL, &value, 1);
     }
 
+    camMetadata.update(ANDROID_STATISTICS_OIS_DATA_MODE, &pendingRequest.requestedOisDataMode, 1);
+
     // OIS Data
     IF_META_AVAILABLE(cam_frame_ois_info_t, frame_ois_data, CAM_INTF_META_FRAME_OIS_DATA, metadata) {
         camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_FRAME_TIMESTAMP_BOOTTIME,
@@ -8294,6 +8303,25 @@ QCamera3HardwareInterface::translateFromHalMetadata(
             frame_ois_data->ois_sample_shift_pixel_x, frame_ois_data->num_ois_sample);
         camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_Y,
             frame_ois_data->ois_sample_shift_pixel_y, frame_ois_data->num_ois_sample);
+
+        if (pendingRequest.requestedOisDataMode == ANDROID_STATISTICS_OIS_DATA_MODE_ON) {
+            int64_t timeDiff = pendingRequest.timestamp -
+                    frame_ois_data->frame_sof_timestamp_boottime;
+
+            std::vector<int64_t> oisTimestamps;
+
+            for (int32_t i = 0; i < frame_ois_data->num_ois_sample; i++) {
+                oisTimestamps.push_back(
+                        frame_ois_data->ois_sample_timestamp_boottime[i] + timeDiff);
+            }
+
+            camMetadata.update(ANDROID_STATISTICS_OIS_TIMESTAMPS,
+                    oisTimestamps.data(), frame_ois_data->num_ois_sample);
+            camMetadata.update(ANDROID_STATISTICS_OIS_X_SHIFTS,
+                    frame_ois_data->ois_sample_shift_pixel_x, frame_ois_data->num_ois_sample);
+            camMetadata.update(ANDROID_STATISTICS_OIS_Y_SHIFTS,
+                    frame_ois_data->ois_sample_shift_pixel_y, frame_ois_data->num_ois_sample);
+        }
     }
 
     // DevCamDebug metadata translateFromHalMetadata AEC MOTION
@@ -10453,7 +10481,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST,
 #endif
        ANDROID_STATISTICS_FACE_DETECT_MODE,
-       ANDROID_STATISTICS_SHARPNESS_MAP_MODE,
+       ANDROID_STATISTICS_SHARPNESS_MAP_MODE, ANDROID_STATISTICS_OIS_DATA_MODE,
        ANDROID_STATISTICS_LENS_SHADING_MAP_MODE, ANDROID_TONEMAP_CURVE_BLUE,
        ANDROID_TONEMAP_CURVE_GREEN, ANDROID_TONEMAP_CURVE_RED, ANDROID_TONEMAP_MODE,
        ANDROID_BLACK_LEVEL_LOCK, NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE,
@@ -10526,7 +10554,9 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        ANDROID_STATISTICS_SHARPNESS_MAP, ANDROID_STATISTICS_SHARPNESS_MAP_MODE,
        ANDROID_STATISTICS_PREDICTED_COLOR_GAINS, ANDROID_STATISTICS_PREDICTED_COLOR_TRANSFORM,
        ANDROID_STATISTICS_SCENE_FLICKER, ANDROID_STATISTICS_FACE_RECTANGLES,
-       ANDROID_STATISTICS_FACE_SCORES,
+       ANDROID_STATISTICS_FACE_SCORES, ANDROID_STATISTICS_OIS_DATA_MODE,
+       ANDROID_STATISTICS_OIS_TIMESTAMPS, ANDROID_STATISTICS_OIS_X_SHIFTS,
+       ANDROID_STATISTICS_OIS_Y_SHIFTS,
 #ifndef USE_HAL_3_3
        ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST,
 #endif
@@ -11027,6 +11057,16 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
     staticInfo.update(ANDROID_REQUEST_AVAILABLE_CHARACTERISTICS_KEYS,
                       available_characteristics_keys.array(),
                       available_characteristics_keys.size());
+
+    std::vector<uint8_t> availableOisModes;
+    availableOisModes.push_back(ANDROID_STATISTICS_OIS_DATA_MODE_OFF);
+    if (cameraId == 0) {
+        availableOisModes.push_back(ANDROID_STATISTICS_OIS_DATA_MODE_ON);
+    }
+
+    staticInfo.update(ANDROID_STATISTICS_INFO_AVAILABLE_OIS_DATA_MODES,
+                      availableOisModes.data(),
+                      availableOisModes.size());
 
     gStaticMetadata[cameraId] = staticInfo.release();
     return rc;
@@ -11841,6 +11881,12 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     // Set instant AEC to normal convergence by default
     uint8_t instant_aec_mode = (uint8_t)QCAMERA3_INSTANT_AEC_NORMAL_CONVERGENCE;
     settings.update(QCAMERA3_INSTANT_AEC_MODE, &instant_aec_mode, 1);
+
+    uint8_t oisDataMode = ANDROID_STATISTICS_OIS_DATA_MODE_OFF;
+    if (mCameraId == 0) {
+        oisDataMode = ANDROID_STATISTICS_OIS_DATA_MODE_ON;
+    }
+    settings.update(ANDROID_STATISTICS_OIS_DATA_MODE, &oisDataMode, 1);
 
     if (gExposeEnableZslKey) {
         settings.update(ANDROID_CONTROL_ENABLE_ZSL, &enableZsl, 1);
