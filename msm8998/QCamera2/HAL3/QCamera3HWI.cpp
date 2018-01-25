@@ -8324,6 +8324,14 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                     frame_ois_data->ois_sample_shift_pixel_x, frame_ois_data->num_ois_sample);
             camMetadata.update(ANDROID_STATISTICS_OIS_Y_SHIFTS,
                     frame_ois_data->ois_sample_shift_pixel_y, frame_ois_data->num_ois_sample);
+        } else {
+            // If OIS data mode is OFF, add NULL for OIS keys.
+            camMetadata.update(ANDROID_STATISTICS_OIS_TIMESTAMPS,
+                    frame_ois_data->ois_sample_timestamp_boottime, 0);
+            camMetadata.update(ANDROID_STATISTICS_OIS_X_SHIFTS,
+                    frame_ois_data->ois_sample_shift_pixel_x, 0);
+            camMetadata.update(ANDROID_STATISTICS_OIS_Y_SHIFTS,
+                    frame_ois_data->ois_sample_shift_pixel_y, 0);
         }
     }
 
