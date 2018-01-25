@@ -613,6 +613,7 @@ private:
         uint8_t requestedLensShadingMapMode; // Lens shading map mode for this request.
         uint8_t requestedFaceDetectMode; // Face detect mode for this request.
         bool partialResultDropped; // Whether partial metadata is dropped.
+        uint8_t requestedOisDataMode; // OIS data mode for this request.
     } PendingRequestInfo;
     typedef struct {
         uint32_t frame_number;
@@ -704,6 +705,8 @@ private:
     uint8_t mLastRequestedLensShadingMapMode;
     // Last face detect mode framework requsted.
     uint8_t mLastRequestedFaceDetectMode;
+    // Last OIS data mode framework requested.
+    uint8_t mLastRequestedOisDataMode;
 
     cam_feature_mask_t mCurrFeatureState;
     /* Ldaf calibration data */
