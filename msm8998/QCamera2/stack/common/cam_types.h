@@ -2464,6 +2464,8 @@ typedef enum {
     CAM_INTF_META_LED_CALIB_RESULT,
     /* Whether to enable hybrid ae mode */
     CAM_INTF_META_HYBRID_AE,
+    /* Whether to enable motion detection */
+    CAM_INTF_META_MOTION_DETECTION_ENABLE,
     /* DevCamDebug metadata CAM_TYPES.h */
     CAM_INTF_META_DEV_CAM_ENABLE,
     /* DevCamDebug metadata CAM_TYPES.h AF */

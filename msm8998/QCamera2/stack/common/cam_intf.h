@@ -1146,6 +1146,7 @@ typedef struct {
     INCLUDE(CAM_INTF_PARM_FOV_COMP_ENABLE,              int32_t,                     1);
     INCLUDE(CAM_INTF_META_LED_CALIB_RESULT,             int32_t,                     1);
     INCLUDE(CAM_INTF_META_HYBRID_AE,                    uint8_t,                     1);
+    INCLUDE(CAM_INTF_META_MOTION_DETECTION_ENABLE,      uint8_t,                     1);
     INCLUDE(CAM_INTF_META_AF_SCENE_CHANGE,              uint8_t,                     1);
     /* DevCamDebug metadata CAM_INTF.H */
     INCLUDE(CAM_INTF_META_DEV_CAM_ENABLE,               uint8_t,                     1);

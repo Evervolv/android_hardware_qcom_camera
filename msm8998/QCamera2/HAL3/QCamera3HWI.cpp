@@ -5630,6 +5630,11 @@ no_error:
                 meta.find(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE).data.u8[0];
     }
 
+    if (meta.exists(NEXUS_EXPERIMENTAL_2017_MOTION_DETECTION_ENABLE)) {
+        pendingRequest.motion_detection_enable =
+                meta.find(NEXUS_EXPERIMENTAL_2017_MOTION_DETECTION_ENABLE).data.u8[0];
+    }
+
     /* DevCamDebug metadata processCaptureRequest */
     if (meta.exists(DEVCAMDEBUG_META_ENABLE)) {
         mDevCamDebugMetaEnable =
@@ -6845,6 +6850,7 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     camMetadata.update(ANDROID_REQUEST_PIPELINE_DEPTH, &pendingRequest.pipeline_depth, 1);
     camMetadata.update(ANDROID_CONTROL_CAPTURE_INTENT, &pendingRequest.capture_intent, 1);
     camMetadata.update(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE, &pendingRequest.hybrid_ae_enable, 1);
+    camMetadata.update(NEXUS_EXPERIMENTAL_2017_MOTION_DETECTION_ENABLE, &pendingRequest.motion_detection_enable, 1);
     if (mBatchSize == 0) {
         // DevCamDebug metadata translateFromHalMetadata. Only update this one for non-HFR mode
         camMetadata.update(DEVCAMDEBUG_META_ENABLE, &pendingRequest.DevCamDebug_meta_enable, 1);
@@ -8276,6 +8282,26 @@ QCamera3HardwareInterface::translateFromHalMetadata(
             frame_ois_data->ois_sample_shift_pixel_x, frame_ois_data->num_ois_sample);
         camMetadata.update(NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_Y,
             frame_ois_data->ois_sample_shift_pixel_y, frame_ois_data->num_ois_sample);
+    }
+
+    // DevCamDebug metadata translateFromHalMetadata AEC MOTION
+    IF_META_AVAILABLE(float, DevCamDebug_aec_camera_motion_dx,
+            CAM_INTF_META_DEV_CAM_AEC_CAMERA_MOTION_DX, metadata) {
+        float fwk_DevCamDebug_aec_camera_motion_dx = *DevCamDebug_aec_camera_motion_dx;
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_CAMERA_MOTION_X,
+                           &fwk_DevCamDebug_aec_camera_motion_dx, 1);
+    }
+    IF_META_AVAILABLE(float, DevCamDebug_aec_camera_motion_dy,
+            CAM_INTF_META_DEV_CAM_AEC_CAMERA_MOTION_DY, metadata) {
+        float fwk_DevCamDebug_aec_camera_motion_dy = *DevCamDebug_aec_camera_motion_dy;
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_CAMERA_MOTION_Y,
+                           &fwk_DevCamDebug_aec_camera_motion_dy, 1);
+    }
+    IF_META_AVAILABLE(float, DevCamDebug_aec_subject_motion,
+            CAM_INTF_META_DEV_CAM_AEC_SUBJECT_MOTION, metadata) {
+        float fwk_DevCamDebug_aec_subject_motion = *DevCamDebug_aec_subject_motion;
+        camMetadata.update(NEXUS_EXPERIMENTAL_2017_SUBJECT_MOTION,
+                           &fwk_DevCamDebug_aec_subject_motion, 1);
     }
 
     resultMetadata = camMetadata.release();
@@ -10422,7 +10448,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        TANGO_MODE_DATA_SENSOR_FULLFOV,
        NEXUS_EXPERIMENTAL_2017_TRACKING_AF_TRIGGER,
        NEXUS_EXPERIMENTAL_2017_PD_DATA_ENABLE,
-       NEXUS_EXPERIMENTAL_2017_EXIF_MAKERNOTE
+       NEXUS_EXPERIMENTAL_2017_EXIF_MAKERNOTE,
+       NEXUS_EXPERIMENTAL_2017_MOTION_DETECTION_ENABLE,
        };
 
     size_t request_keys_cnt =
@@ -10565,7 +10592,11 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
        NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_X,
        NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_Y,
        NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_X,
-       NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_Y
+       NEXUS_EXPERIMENTAL_2017_OIS_SHIFT_PIXEL_Y,
+       NEXUS_EXPERIMENTAL_2017_MOTION_DETECTION_ENABLE,
+       NEXUS_EXPERIMENTAL_2017_CAMERA_MOTION_X,
+       NEXUS_EXPERIMENTAL_2017_CAMERA_MOTION_Y,
+       NEXUS_EXPERIMENTAL_2017_SUBJECT_MOTION
        };
 
     size_t result_keys_cnt =
@@ -13361,6 +13392,15 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
         uint8_t *hybrid_ae = (uint8_t *)
                 frame_settings.find(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE).data.u8;
         if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_HYBRID_AE, *hybrid_ae)) {
+            rc = BAD_VALUE;
+        }
+    }
+
+    // Motion Detection
+    if (frame_settings.exists(NEXUS_EXPERIMENTAL_2017_MOTION_DETECTION_ENABLE)) {
+        uint8_t *motion_detection = (uint8_t *)
+                frame_settings.find(NEXUS_EXPERIMENTAL_2017_MOTION_DETECTION_ENABLE).data.u8;
+        if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_MOTION_DETECTION_ENABLE, *motion_detection)) {
             rc = BAD_VALUE;
         }
     }
