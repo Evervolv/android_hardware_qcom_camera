@@ -11633,18 +11633,6 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         focusMode = ANDROID_CONTROL_AF_MODE_OFF;
         optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
         break;
-      case CAMERA3_TEMPLATE_MOTION_TRACKING_PREVIEW:
-      case CAMERA3_TEMPLATE_MOTION_TRACKING_BEST:
-        edge_mode = ANDROID_EDGE_MODE_FAST;
-        noise_red_mode = ANDROID_NOISE_REDUCTION_MODE_FAST;
-        shading_mode = ANDROID_SHADING_MODE_FAST;
-        hot_pixel_mode = ANDROID_HOT_PIXEL_MODE_FAST;
-        tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
-        cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_FAST;
-        controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_MOTION_TRACKING;
-        focusMode = ANDROID_CONTROL_AF_MODE_OFF;
-        optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_OFF;
-        break;
       default:
         edge_mode = ANDROID_EDGE_MODE_FAST;
         noise_red_mode = ANDROID_NOISE_REDUCTION_MODE_FAST;
@@ -11797,10 +11785,6 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
 
     /*focus distance*/
     float focus_distance = 0.0;
-    if (type == CAMERA3_TEMPLATE_MOTION_TRACKING_PREVIEW ||
-            type == CAMERA3_TEMPLATE_MOTION_TRACKING_BEST) {
-        focus_distance = 0.1f;
-    }
     settings.update(ANDROID_LENS_FOCUS_DISTANCE, &focus_distance, 1);
 
     /*target fps range: use maximum range for picture, and maximum fixed range for video*/
