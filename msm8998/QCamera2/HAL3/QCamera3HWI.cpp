@@ -13567,6 +13567,10 @@ int QCamera3HardwareInterface::translateFwkMetadataToHalMetadata(
     if (frame_settings.exists(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE)) {
         uint8_t *hybrid_ae = (uint8_t *)
                 frame_settings.find(NEXUS_EXPERIMENTAL_2016_HYBRID_AE_ENABLE).data.u8;
+        // Motion tracking intent isn't compatible with hybrid ae.
+        if (mCaptureIntent == CAM_INTENT_MOTION_TRACKING) {
+            *hybrid_ae = 0;
+        }
         if (ADD_SET_PARAM_ENTRY_TO_BATCH(hal_metadata, CAM_INTF_META_HYBRID_AE, *hybrid_ae)) {
             rc = BAD_VALUE;
         }
