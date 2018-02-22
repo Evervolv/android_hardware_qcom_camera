@@ -101,7 +101,7 @@ namespace qcamera {
 #define MAX_HFR_BATCH_SIZE     (8)
 #define REGIONS_TUPLE_COUNT    5
 // Set a threshold for detection of missing buffers //seconds
-#define MISSING_REQUEST_BUF_TIMEOUT 5
+#define MISSING_REQUEST_BUF_TIMEOUT 10
 #define MISSING_HDRPLUS_REQUEST_BUF_TIMEOUT 30
 #define FLUSH_TIMEOUT 3
 #define METADATA_MAP_SIZE(MAP) (sizeof(MAP)/sizeof(MAP[0]))
@@ -3944,12 +3944,13 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
             // HDR+ request is done. So allow a longer timeout.
             timeout = (mHdrPlusPendingRequests.size() > 0) ?
                     MISSING_HDRPLUS_REQUEST_BUF_TIMEOUT : MISSING_REQUEST_BUF_TIMEOUT;
+            timeout = s2ns(timeout);
             if (timeout < mExpectedInflightDuration) {
                 timeout = mExpectedInflightDuration;
             }
         }
 
-        if ( (currentSysTime - req.timestamp) > s2ns(timeout) ) {
+        if ((currentSysTime - req.timestamp) > timeout) {
             for (auto &missed : req.mPendingBufferList) {
                 assert(missed.stream->priv);
                 if (missed.stream->priv) {
