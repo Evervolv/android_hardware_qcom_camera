@@ -9583,7 +9583,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         uint8_t poseReference = ANDROID_LENS_POSE_REFERENCE_GYROSCOPE;
         // TODO: b/70565622 - these should have better identity values as a fallback
         float cameraIntrinsics[5] = {100.f, 100.f, 0.f, 1000, 1000}; // fx,fy,sx,cx,cy
-        float radialDistortion[6] = {1.f, 0.f, 0.f, 0.f, 0.f, 0.f}; // identity
+        float radialDistortion[5] = {0.f, 0.f, 0.f, 0.f, 0.f}; // identity
 
         bool success = readSensorCalibration(
                 gCamCapability[cameraId]->active_array_size.width,
@@ -9597,7 +9597,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
                 poseTranslation, sizeof(poseTranslation)/sizeof(float));
         staticInfo.update(ANDROID_LENS_INTRINSIC_CALIBRATION,
                 cameraIntrinsics, sizeof(cameraIntrinsics)/sizeof(float));
-        staticInfo.update(ANDROID_LENS_RADIAL_DISTORTION,
+        staticInfo.update(ANDROID_LENS_DISTORTION,
                 radialDistortion, sizeof(radialDistortion)/sizeof(float));
         staticInfo.update(ANDROID_LENS_POSE_REFERENCE,
                 &poseReference, sizeof(poseReference));
@@ -10826,7 +10826,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
             ANDROID_LENS_POSE_TRANSLATION,
             ANDROID_LENS_POSE_REFERENCE,
             ANDROID_LENS_INTRINSIC_CALIBRATION,
-            ANDROID_LENS_RADIAL_DISTORTION,
+            ANDROID_LENS_DISTORTION,
         };
         available_characteristics_keys.appendArray(lensCalibrationKeys,
                 sizeof(lensCalibrationKeys) / sizeof(lensCalibrationKeys[0]));
@@ -16045,7 +16045,7 @@ void QCamera3HardwareInterface::onFailedCaptureResult(pbcamera::CaptureResult *f
 bool QCamera3HardwareInterface::readSensorCalibration(
         int activeArrayWidth,
         float poseRotation[4], float poseTranslation[3],
-        float cameraIntrinsics[5], float radialDistortion[6]) {
+        float cameraIntrinsics[5], float radialDistortion[5]) {
 
     const char* calibrationPath = "/persist/sensors/calibration/calibration.xml";
 
@@ -16172,12 +16172,11 @@ bool QCamera3HardwareInterface::readSensorCalibration(
     cameraIntrinsics[3] = params[3] * scaleFactor; // v0 -> c_y
     cameraIntrinsics[4] = 0; // s = 0
 
-    radialDistortion[0] = 1; // k_0 = 1
-    radialDistortion[1] = params[4]; // k1 -> k_1
-    radialDistortion[2] = params[5]; // k2 -> k_2
-    radialDistortion[3] = params[6]; // k3 -> k_3
-    radialDistortion[4] = 0; // k_4 = 0
-    radialDistortion[5] = 0; // k_5 = 0
+    radialDistortion[0] = params[4]; // k1 -> k_1
+    radialDistortion[1] = params[5]; // k2 -> k_2
+    radialDistortion[2] = params[6]; // k3 -> k_3
+    radialDistortion[3] = 0; // k_4 = 0
+    radialDistortion[4] = 0; // k_5 = 0
 
     for (int i = 0; i < 4; i++) {
         poseRotation[i] = rotation[i];
@@ -16189,9 +16188,9 @@ bool QCamera3HardwareInterface::readSensorCalibration(
     ALOGI("Intrinsics: %f, %f, %f, %f, %f", cameraIntrinsics[0],
             cameraIntrinsics[1], cameraIntrinsics[2],
             cameraIntrinsics[3], cameraIntrinsics[4]);
-    ALOGI("Distortion: %f, %f, %f, %f, %f, %f",
+    ALOGI("Distortion: %f, %f, %f, %f, %f",
             radialDistortion[0], radialDistortion[1], radialDistortion[2], radialDistortion[3],
-            radialDistortion[4], radialDistortion[5]);
+            radialDistortion[4]);
     ALOGI("Pose rotation: %f, %f, %f, %f",
             poseRotation[0], poseRotation[1], poseRotation[2], poseRotation[3]);
     ALOGI("Pose translation: %f, %f, %f",
