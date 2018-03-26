@@ -4502,8 +4502,8 @@ void QCamera3HardwareInterface::removeUnrequestedMetadata(pendingRequestIterator
     // Remove len shading map if it's not requested.
     if (requestIter->requestedLensShadingMapMode == ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF &&
             metadata.exists(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE) &&
-            metadata.find(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF).data.u8[0] !=
-            ANDROID_STATISTICS_FACE_DETECT_MODE_OFF) {
+            metadata.find(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE).data.u8[0] !=
+            ANDROID_STATISTICS_LENS_SHADING_MAP_MODE_OFF) {
         metadata.erase(ANDROID_STATISTICS_LENS_SHADING_MAP);
         metadata.update(ANDROID_STATISTICS_LENS_SHADING_MAP_MODE,
             &requestIter->requestedLensShadingMapMode, 1);
