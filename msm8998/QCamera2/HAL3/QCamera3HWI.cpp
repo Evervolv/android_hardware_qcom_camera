@@ -638,6 +638,9 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
 
     int32_t rc = 0;
 
+    // Clean up Easel error future first to avoid Easel error happens during destructor.
+    cleanupEaselErrorFuture();
+
     // Disable power hint and enable the perf lock for close camera
     mPerfLockMgr.releasePerfLock(PERF_LOCK_POWERHINT_ENCODE);
     mPerfLockMgr.acquirePerfLock(PERF_LOCK_CLOSE_CAMERA);
@@ -15610,8 +15613,23 @@ void QCamera3HardwareInterface::handleEaselFatalError()
     handleCameraDeviceError(/*stopChannelImmediately*/true);
 }
 
+void QCamera3HardwareInterface::cleanupEaselErrorFuture()
+{
+    {
+        std::lock_guard<std::mutex> lock(mEaselErrorFutureLock);
+        if (!mEaselErrorFuture.valid()) {
+            // If there is no Easel error, construct a dummy future to wait for.
+            mEaselErrorFuture = std::async([]() { return; });
+        }
+    }
+
+    mEaselErrorFuture.wait();
+}
+
 void QCamera3HardwareInterface::handleEaselFatalErrorAsync()
 {
+    std::lock_guard<std::mutex> lock(mEaselErrorFutureLock);
+
     if (mEaselErrorFuture.valid()) {
         // The error future has been invoked.
         return;
