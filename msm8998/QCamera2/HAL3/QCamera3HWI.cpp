@@ -5674,8 +5674,10 @@ no_error:
     }
     pendingRequest.fwkCacMode = mCacMode;
     pendingRequest.hdrplus = hdrPlusRequest;
-    pendingRequest.expectedFrameDuration = mExpectedFrameDuration;
-    mExpectedInflightDuration += mExpectedFrameDuration;
+    // We need to account for several dropped frames initially on sensor side.
+    pendingRequest.expectedFrameDuration = (mState == CONFIGURED) ? (4 * mExpectedFrameDuration) :
+        mExpectedFrameDuration;
+    mExpectedInflightDuration += pendingRequest.expectedFrameDuration;
 
     // extract enableZsl info
     if (gExposeEnableZslKey) {
