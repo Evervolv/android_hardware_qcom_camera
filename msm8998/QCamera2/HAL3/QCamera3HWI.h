@@ -857,6 +857,9 @@ private:
     // Easel manager client callbacks.
     void onEaselFatalError(std::string errMsg);
 
+    // Clean up and wait for Easel error future.
+    void cleanupEaselErrorFuture();
+
     // HDR+ client callbacks.
     void onOpened(std::unique_ptr<HdrPlusClient> client) override;
     void onOpenFailed(status_t err) override;
@@ -900,6 +903,7 @@ private:
 
     int32_t mSceneDistance;
 
+    std::mutex mEaselErrorFutureLock;
     std::future<void> mEaselErrorFuture;
 
     // Thread to handle callbacks from HDR+ client. Protected by gHdrPlusClientLock.
