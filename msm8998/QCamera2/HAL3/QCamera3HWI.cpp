@@ -8361,6 +8361,52 @@ QCamera3HardwareInterface::translateFromHalMetadata(
                            &fwk_DevCamDebug_aec_subject_motion, 1);
     }
 
+    // Camera lens calibration dynamic fields, for back camera. Same values as for static metadata.
+    if (mCameraId == 0) {
+        const camera_metadata_t *staticInfo = gStaticMetadata[mCameraId];
+        camera_metadata_ro_entry_t rotation, translation, intrinsics, distortion, reference;
+        int res;
+        bool fail = false;
+        res = find_camera_metadata_ro_entry(staticInfo, ANDROID_LENS_POSE_ROTATION,
+                &rotation);
+        if (res != 0) {
+            fail = true;
+        }
+        res = find_camera_metadata_ro_entry(staticInfo, ANDROID_LENS_POSE_TRANSLATION,
+                &translation);
+        if (res != 0) {
+            fail = true;
+        }
+        res = find_camera_metadata_ro_entry(staticInfo, ANDROID_LENS_INTRINSIC_CALIBRATION,
+                &intrinsics);
+        if (res != 0) {
+            fail = true;
+        }
+        res = find_camera_metadata_ro_entry(staticInfo, ANDROID_LENS_DISTORTION,
+                &distortion);
+        if (res != 0) {
+            fail = true;
+        }
+        res = find_camera_metadata_ro_entry(staticInfo, ANDROID_LENS_POSE_REFERENCE,
+                &reference);
+        if (res != 0) {
+            fail = true;
+        }
+
+        if (!fail) {
+            camMetadata.update(ANDROID_LENS_POSE_ROTATION,
+                    rotation.data.f, rotation.count);
+            camMetadata.update(ANDROID_LENS_POSE_TRANSLATION,
+                    translation.data.f, translation.count);
+            camMetadata.update(ANDROID_LENS_INTRINSIC_CALIBRATION,
+                    intrinsics.data.f, intrinsics.count);
+            camMetadata.update(ANDROID_LENS_DISTORTION,
+                    distortion.data.f, distortion.count);
+            camMetadata.update(ANDROID_LENS_POSE_REFERENCE,
+                    reference.data.u8, reference.count);
+        }
+    }
+
     resultMetadata = camMetadata.release();
     return resultMetadata;
 }
