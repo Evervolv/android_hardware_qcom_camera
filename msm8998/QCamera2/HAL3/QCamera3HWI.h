@@ -918,6 +918,8 @@ private:
     // Parse a string of form " [ x; y; z ...]" into a floating-point array.
     // Returns false on parse error
     static bool parseStringArray(const char *str, float *dest, int count);
+
+    float mLastFocusDistance;
 };
 
 }; // namespace qcamera
