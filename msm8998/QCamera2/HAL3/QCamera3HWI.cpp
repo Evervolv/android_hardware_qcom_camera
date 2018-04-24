@@ -533,7 +533,8 @@ QCamera3HardwareInterface::QCamera3HardwareInterface(uint32_t cameraId,
       mFirstPreviewIntentSeen(false),
       m_bSensorHDREnabled(false),
       mAfTrigger(),
-      mSceneDistance(-1)
+      mSceneDistance(-1),
+      mLastFocusDistance(0.0)
 {
     getLogLevel();
     mCommon.init(gCamCapability[cameraId]);
@@ -5185,10 +5186,24 @@ int QCamera3HardwareInterface::processCaptureRequest(
 
     meta = request->settings;
 
-    // For first capture request, send capture intent, and
-    // stream on all streams
     if (mState == CONFIGURED) {
         logEaselEvent("EASEL_STARTUP_LATENCY", "First request");
+
+        // For HFR first capture request, send capture intent, and
+        // stream on all streams
+        if (meta.exists(ANDROID_CONTROL_CAPTURE_INTENT) && mBatchSize) {
+            int32_t hal_version = CAM_HAL_V3;
+            uint8_t captureIntent = meta.find(ANDROID_CONTROL_CAPTURE_INTENT).data.u8[0];
+            clear_metadata_buffer(mParameters);
+            ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_HAL_VERSION, hal_version);
+            ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_CAPTURE_INTENT, captureIntent);
+            rc = mCameraHandle->ops->set_parms(mCameraHandle->camera_handle, mParameters);
+            if (rc < 0) {
+                LOGE("set_parms for for capture intent failed");
+                pthread_mutex_unlock(&mMutex);
+                return rc;
+            }
+        }
 
         uint8_t nrMode = 0;
         if (meta.exists(ANDROID_NOISE_REDUCTION_MODE)) {
@@ -7961,6 +7976,11 @@ QCamera3HardwareInterface::translateFromHalMetadata(
 
     IF_META_AVAILABLE(float, focusDistance, CAM_INTF_META_LENS_FOCUS_DISTANCE, metadata) {
         camMetadata.update(ANDROID_LENS_FOCUS_DISTANCE , focusDistance, 1);
+        mLastFocusDistance = *focusDistance;
+    } else {
+        LOGE("Missing LENS_FOCUS_DISTANCE metadata. Use last known distance of %f",
+                mLastFocusDistance);
+        camMetadata.update(ANDROID_LENS_FOCUS_DISTANCE , &mLastFocusDistance, 1);
     }
 
     IF_META_AVAILABLE(float, focusRange, CAM_INTF_META_LENS_FOCUS_RANGE, metadata) {
