@@ -3053,6 +3053,7 @@ void QCamera3YUVChannel::streamCbRoutine(mm_camera_super_buf_t *super_frame,
     ATRACE_CAMSCOPE_CALL(CAMSCOPE_HAL3_YUV_CH_STRM_CB);
     uint8_t frameIndex;
     int32_t resultFrameNumber;
+    bool droppedInputPPBuffer = false;
 
     if (checkStreamCbErrors(super_frame, stream) != NO_ERROR) {
         LOGE("Error with the stream callback");
@@ -3088,22 +3089,28 @@ void QCamera3YUVChannel::streamCbRoutine(mm_camera_super_buf_t *super_frame,
             }
 
             if (ppInfo->offlinePpFlag) {
-                mm_camera_super_buf_t *frame =
+                if (ppInfo != mOfflinePpInfoList.begin() &&
+                        IS_BUFFER_ERROR(super_frame->bufs[0]->flags)) {
+                    droppedInputPPBuffer = true;
+                    mOfflinePpInfoList.erase(ppInfo);
+                } else {
+                    mm_camera_super_buf_t *frame =
                         (mm_camera_super_buf_t *)malloc(sizeof(
-                                mm_camera_super_buf_t));
-                if (frame == NULL) {
-                    LOGE("Error allocating memory to save received_frame structure.");
-                    if(stream) {
-                        stream->bufDone(frameIndex);
+                                    mm_camera_super_buf_t));
+                    if (frame == NULL) {
+                        LOGE("Error allocating memory to save received_frame structure.");
+                        if(stream) {
+                            stream->bufDone(frameIndex);
+                        }
+                        return;
                     }
+
+                    *frame = *super_frame;
+                    m_postprocessor.processData(frame, ppInfo->output,
+                            resultFrameNumber);
+                    free(super_frame);
                     return;
                 }
-
-                *frame = *super_frame;
-                m_postprocessor.processData(frame, ppInfo->output,
-                        resultFrameNumber);
-                free(super_frame);
-                return;
             } else {
                 if (ppInfo != mOfflinePpInfoList.begin()) {
                     // There is pending reprocess buffer, cache current buffer
@@ -3121,6 +3128,31 @@ void QCamera3YUVChannel::streamCbRoutine(mm_camera_super_buf_t *super_frame,
         if (IS_BUFFER_ERROR(super_frame->bufs[0]->flags)) {
             mChannelCbBufErr(this, resultFrameNumber,
                             CAMERA3_BUFFER_STATUS_ERROR, mUserData);
+            if (droppedInputPPBuffer) {
+                camera3_stream_buffer_t result = {};
+                result.buffer = (buffer_handle_t *)mMemory.getBufferHandle(frameIndex);
+                int32_t bufferIndex =
+                    mMemory.getHeapBufferIndex(resultFrameNumber);
+                if (bufferIndex < 0) {
+                    LOGE("Fatal %d: no buffer index for frame number %d",
+                            bufferIndex, resultFrameNumber);
+                } else {
+                    mMemory.markFrameNumber(bufferIndex, -1);
+                    mFreeHeapBufferList.push_back(bufferIndex);
+                }
+
+                LOGE("Input frame number: %d dropped!", resultFrameNumber);
+                result.stream = mCamera3Stream;
+                result.status = CAMERA3_BUFFER_STATUS_ERROR;
+                result.acquire_fence = -1;
+                result.release_fence = -1;
+                if (mChannelCB) {
+                    mChannelCB(NULL, &result, (uint32_t)resultFrameNumber, false, mUserData);
+                }
+                free(super_frame);
+
+                return;
+            }
         }
     }
 
