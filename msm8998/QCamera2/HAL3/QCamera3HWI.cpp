@@ -4555,6 +4555,10 @@ void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t fra
         requestIter->partial_result_cnt = PARTIAL_RESULT_COUNT;
     } else {
         liveRequest = true;
+        if ((requestIter->partial_result_cnt == 0) && !requestIter->partialResultDropped) {
+            LOGE("Urgent metadata for frame number: %d didn't arrive!", frameNumber);
+            requestIter->partialResultDropped = true;
+        }
         requestIter->partial_result_cnt = PARTIAL_RESULT_COUNT;
         mPendingLiveRequest--;
 
