@@ -4132,6 +4132,7 @@ void QCamera3HardwareInterface::handleMetadataWithLock(
                     if(p_is_metabuf_queued != NULL) {
                         *p_is_metabuf_queued = true;
                     }
+                    iter->need_metadata = false;
                     break;
                 }
             }
@@ -4629,6 +4630,24 @@ void QCamera3HardwareInterface::dispatchResultMetadataWithLock(uint32_t frameNum
         }
 
         if (errorResult) {
+            // Check for any buffers that might be stuck in the post-process input queue
+            // awaiting metadata and queue an empty meta buffer. The invalid data should
+            // fail the offline post-process pass and return any buffers that otherwise
+            // will become lost.
+            for (auto it = iter->buffers.begin(); it != iter->buffers.end(); it++) {
+                if (it->need_metadata) {
+                    QCamera3ProcessingChannel *channel =
+                        reinterpret_cast<QCamera3ProcessingChannel *> (it->stream->priv);
+                    if (channel != nullptr) {
+                        LOGE("Dropped result: %d Unblocking any pending pp buffers!",
+                                iter->frame_number);
+                        channel->queueReprocMetadata(nullptr);
+                    }
+                    it->need_metadata = false;
+                    break;
+                }
+            }
+
             notifyError(iter->frame_number, CAMERA3_MSG_ERROR_RESULT);
         } else {
             result.output_buffers = nullptr;
