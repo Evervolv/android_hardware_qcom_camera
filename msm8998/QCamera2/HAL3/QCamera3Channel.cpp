@@ -1041,6 +1041,41 @@ int32_t QCamera3ProcessingChannel::timeoutFrame(uint32_t frameNumber)
 }
 
 /*===========================================================================
+ * FUNCTION   : postprocFail
+ *
+ * DESCRIPTION: notify clients about failing post-process requests.
+ *
+ * PARAMETERS :
+ * @ppBuffer  : pointer to the pp buffer.
+ *
+ * RETURN     : 0 on success
+ *              -EINVAL on invalid input
+ *==========================================================================*/
+int32_t QCamera3ProcessingChannel::postprocFail(qcamera_hal3_pp_buffer_t *ppBuffer) {
+    if (ppBuffer == nullptr) {
+        return BAD_VALUE;
+    }
+
+    if (ppBuffer->output == nullptr) {
+        return BAD_VALUE;
+    }
+
+    camera3_stream_buffer_t result = {};
+    result.buffer = ppBuffer->output;
+
+    LOGE("Input frame number: %d dropped!", ppBuffer->frameNumber);
+    result.stream = mCamera3Stream;
+    result.status = CAMERA3_BUFFER_STATUS_ERROR;
+    result.acquire_fence = -1;
+    result.release_fence = -1;
+    if (mChannelCB) {
+        mChannelCB(NULL, &result, ppBuffer->frameNumber, false, mUserData);
+    }
+
+    return OK;
+}
+
+/*===========================================================================
  * FUNCTION   : request
  *
  * DESCRIPTION: handle the request - either with an input buffer or a direct
@@ -3034,6 +3069,55 @@ int32_t QCamera3YUVChannel::request(buffer_handle_t *buffer,
 
     }
     return rc;
+}
+
+/*===========================================================================
+ * FUNCTION   : postprocFail
+ *
+ * DESCRIPTION: notify clients about failing post-process requests.
+ *
+ * PARAMETERS :
+ * @ppBuffer  : pointer to the pp buffer.
+ *
+ * RETURN     : 0 on success
+ *              -EINVAL on invalid input
+ *==========================================================================*/
+int32_t QCamera3YUVChannel::postprocFail(qcamera_hal3_pp_buffer_t *ppBuffer) {
+    if (ppBuffer == nullptr) {
+        return BAD_VALUE;
+    }
+
+    {
+        List<PpInfo>::iterator ppInfo;
+
+        Mutex::Autolock lock(mOfflinePpLock);
+        for (ppInfo = mOfflinePpInfoList.begin();
+                ppInfo != mOfflinePpInfoList.end(); ppInfo++) {
+            if (ppInfo->frameNumber == ppBuffer->frameNumber) {
+                break;
+            }
+        }
+
+        if (ppInfo == mOfflinePpInfoList.end()) {
+            LOGE("Offline reprocess info for frame number: %d not found!", ppBuffer->frameNumber);
+            return BAD_VALUE;
+        }
+
+        LOGE("Failed YUV post-process on frame number: %d removing from offline queue!",
+                ppBuffer->frameNumber);
+        mOfflinePpInfoList.erase(ppInfo);
+    }
+
+    int32_t bufferIndex = mMemory.getHeapBufferIndex(ppBuffer->frameNumber);
+    if (bufferIndex < 0) {
+        LOGE("Fatal %d: no buffer index for frame number %d", bufferIndex, ppBuffer->frameNumber);
+        return BAD_VALUE;
+    } else {
+        mMemory.markFrameNumber(bufferIndex, -1);
+        mFreeHeapBufferList.push_back(bufferIndex);
+    }
+
+    return QCamera3ProcessingChannel::postprocFail(ppBuffer);
 }
 
 /*===========================================================================
