@@ -7941,8 +7941,6 @@ QCamera3HardwareInterface::translateFromHalMetadata(
     }
 
     /* Constant metadata values to be update*/
-    uint8_t hotPixelModeFast = ANDROID_HOT_PIXEL_MODE_FAST;
-    camMetadata.update(ANDROID_HOT_PIXEL_MODE, &hotPixelModeFast, 1);
 
     uint8_t hotPixelMapMode = ANDROID_STATISTICS_HOT_PIXEL_MAP_MODE_OFF;
     camMetadata.update(ANDROID_STATISTICS_HOT_PIXEL_MAP_MODE, &hotPixelMapMode, 1);
@@ -9835,11 +9833,6 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
 
     staticInfo.update(ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS,
                       available_stream_configs.array(), available_stream_configs.size());
-    static const uint8_t hotpixelMode = ANDROID_HOT_PIXEL_MODE_FAST;
-    staticInfo.update(ANDROID_HOT_PIXEL_MODE, &hotpixelMode, 1);
-
-    static const uint8_t hotPixelMapMode = ANDROID_STATISTICS_HOT_PIXEL_MAP_MODE_OFF;
-    staticInfo.update(ANDROID_STATISTICS_HOT_PIXEL_MAP_MODE, &hotPixelMapMode, 1);
 
     /* android.scaler.availableMinFrameDurations */
     Vector<int64_t> available_min_durations;
@@ -11337,6 +11330,8 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     uint8_t cacMode;
     uint8_t edge_mode;
     uint8_t noise_red_mode;
+    uint8_t shading_mode;
+    uint8_t hot_pixel_mode;
     uint8_t tonemap_mode;
     bool highQualityModeEntryAvailable = FALSE;
     bool fastModeEntryAvailable = FALSE;
@@ -11355,6 +11350,8 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_FAST;
         edge_mode = ANDROID_EDGE_MODE_FAST;
         noise_red_mode = ANDROID_NOISE_REDUCTION_MODE_FAST;
+        shading_mode = ANDROID_SHADING_MODE_FAST;
+        hot_pixel_mode = ANDROID_HOT_PIXEL_MODE_FAST;
         tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
         break;
       case CAMERA3_TEMPLATE_STILL_CAPTURE:
@@ -11363,6 +11360,8 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_ON;
         edge_mode = ANDROID_EDGE_MODE_HIGH_QUALITY;
         noise_red_mode = ANDROID_NOISE_REDUCTION_MODE_HIGH_QUALITY;
+        shading_mode = ANDROID_SHADING_MODE_HIGH_QUALITY;
+        hot_pixel_mode = ANDROID_HOT_PIXEL_MODE_HIGH_QUALITY;
         tonemap_mode = ANDROID_TONEMAP_MODE_HIGH_QUALITY;
         cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_OFF;
         // Order of priority for default CAC is HIGH Quality -> FAST -> OFF
@@ -11392,6 +11391,8 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_FAST;
         edge_mode = ANDROID_EDGE_MODE_FAST;
         noise_red_mode = ANDROID_NOISE_REDUCTION_MODE_FAST;
+        shading_mode = ANDROID_SHADING_MODE_FAST;
+        hot_pixel_mode = ANDROID_HOT_PIXEL_MODE_FAST;
         tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
         if (forceVideoOis)
             optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_ON;
@@ -11403,6 +11404,8 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_FAST;
         edge_mode = ANDROID_EDGE_MODE_FAST;
         noise_red_mode = ANDROID_NOISE_REDUCTION_MODE_FAST;
+        shading_mode = ANDROID_SHADING_MODE_FAST;
+        hot_pixel_mode = ANDROID_HOT_PIXEL_MODE_FAST;
         tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
         if (forceVideoOis)
             optStabMode = ANDROID_LENS_OPTICAL_STABILIZATION_MODE_ON;
@@ -11414,11 +11417,15 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
         cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_FAST;
         edge_mode = ANDROID_EDGE_MODE_ZERO_SHUTTER_LAG;
         noise_red_mode = ANDROID_NOISE_REDUCTION_MODE_ZERO_SHUTTER_LAG;
+        shading_mode = ANDROID_SHADING_MODE_FAST;
+        hot_pixel_mode = ANDROID_HOT_PIXEL_MODE_FAST;
         tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
         break;
       case CAMERA3_TEMPLATE_MANUAL:
         edge_mode = ANDROID_EDGE_MODE_FAST;
         noise_red_mode = ANDROID_NOISE_REDUCTION_MODE_FAST;
+        shading_mode = ANDROID_SHADING_MODE_FAST;
+        hot_pixel_mode = ANDROID_HOT_PIXEL_MODE_FAST;
         tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
         cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_FAST;
         controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_MANUAL;
@@ -11428,6 +11435,8 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
       default:
         edge_mode = ANDROID_EDGE_MODE_FAST;
         noise_red_mode = ANDROID_NOISE_REDUCTION_MODE_FAST;
+        shading_mode = ANDROID_SHADING_MODE_FAST;
+        hot_pixel_mode = ANDROID_HOT_PIXEL_MODE_FAST;
         tonemap_mode = ANDROID_TONEMAP_MODE_FAST;
         cacMode = ANDROID_COLOR_CORRECTION_ABERRATION_MODE_FAST;
         controlIntent = ANDROID_CONTROL_CAPTURE_INTENT_CUSTOM;
@@ -11507,9 +11516,6 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
     static const uint8_t demosaicMode = ANDROID_DEMOSAIC_MODE_FAST;
     settings.update(ANDROID_DEMOSAIC_MODE, &demosaicMode, 1);
 
-    static const uint8_t hotpixelMode = ANDROID_HOT_PIXEL_MODE_FAST;
-    settings.update(ANDROID_HOT_PIXEL_MODE, &hotpixelMode, 1);
-
     static const int32_t testpatternMode = ANDROID_SENSOR_TEST_PATTERN_MODE_OFF;
     settings.update(ANDROID_SENSOR_TEST_PATTERN_MODE, &testpatternMode, 1);
 
@@ -11552,6 +11558,12 @@ camera_metadata_t* QCamera3HardwareInterface::translateCapabilityToMetadata(int 
 
     /*noise reduction mode*/
     settings.update(ANDROID_NOISE_REDUCTION_MODE, &noise_red_mode, 1);
+
+    /*shading mode*/
+    settings.update(ANDROID_SHADING_MODE, &shading_mode, 1);
+
+    /*hot pixel mode*/
+    settings.update(ANDROID_HOT_PIXEL_MODE, &hot_pixel_mode, 1);
 
     /*color correction mode*/
     static const uint8_t color_correct_mode = ANDROID_COLOR_CORRECTION_MODE_FAST;
