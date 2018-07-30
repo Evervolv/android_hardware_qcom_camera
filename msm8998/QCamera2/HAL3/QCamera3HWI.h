@@ -578,6 +578,9 @@ private:
         // metadata needs to be consumed by the corresponding stream
         // in order to generate the buffer.
         bool need_metadata;
+        // Do we need additional crop due to EIS.
+        bool need_crop;
+        cam_eis_crop_info_t crop_info;
     } RequestedBufferInfo;
 
     typedef struct {
@@ -831,6 +834,13 @@ private:
     // Configure streams for HDR+.
     status_t configureHdrPlusStreamsLocked();
 
+    // Check whether additional EIS crop is needed.
+    bool isEISCropInSnapshotNeeded(const CameraMetadata &metadata) const;
+
+    // Various crop sanity checks.
+    bool isCropValid(int32_t startX, int32_t startY, int32_t width,
+            int32_t height, int32_t maxWidth, int32_t maxHeight) const;
+
     // Try to submit an HDR+ request. Returning true if an HDR+ request was submitted. Returning
     // false if it is not an HDR+ request or submitting an HDR+ request failed. Must be called with
     // gHdrPlusClientLock held.
@@ -920,6 +930,12 @@ private:
     static bool parseStringArray(const char *str, float *dest, int count);
 
     float mLastFocusDistance;
+
+    // Last cached EIS crop info.
+    cam_eis_crop_info_t mLastEISCropInfo;
+
+    // Maps between active region and specific stream crop.
+    QCamera3CropRegionMapper mStreamCropMapper;
 };
 
 }; // namespace qcamera
