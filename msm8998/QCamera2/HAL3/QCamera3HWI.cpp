@@ -1600,6 +1600,13 @@ int32_t QCamera3HardwareInterface::getCurrentSensorModeInfo(cam_sensor_mode_info
 {
     int32_t rc = NO_ERROR;
 
+    metadata_buffer_t *cachedParameters = (metadata_buffer_t *) malloc(sizeof(metadata_buffer_t));
+    if (nullptr == cachedParameters) {
+        return NO_MEMORY;
+    }
+
+    memcpy(cachedParameters, mParameters, sizeof(metadata_buffer_t));
+
     clear_metadata_buffer(mParameters);
     ADD_GET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_CURRENT_SENSOR_MODE_INFO);
 
@@ -1607,6 +1614,7 @@ int32_t QCamera3HardwareInterface::getCurrentSensorModeInfo(cam_sensor_mode_info
             mParameters);
     if (rc != NO_ERROR) {
         LOGE("Failed to get CAM_INTF_PARM_SENSOR_MODE_INFO");
+        free(cachedParameters);
         return rc;
     }
 
@@ -1616,6 +1624,9 @@ int32_t QCamera3HardwareInterface::getCurrentSensorModeInfo(cam_sensor_mode_info
             sensorModeInfo.active_array_size.height, sensorModeInfo.pixel_array_size.width,
             sensorModeInfo.pixel_array_size.height, sensorModeInfo.op_pixel_clk,
             sensorModeInfo.num_raw_bits);
+
+    memcpy(mParameters, cachedParameters, sizeof(metadata_buffer_t));
+    free(cachedParameters);
 
     return rc;
 }
