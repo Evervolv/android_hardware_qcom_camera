@@ -3653,6 +3653,27 @@ int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
         rc = -1;
 #endif
         break;
+    case CAM_FORMAT_Y_ONLY:
+    case CAM_FORMAT_Y_ONLY_10_BPP:
+    case CAM_FORMAT_Y_ONLY_12_BPP:
+    case CAM_FORMAT_Y_ONLY_14_BPP:
+        buf_planes->plane_info.num_planes = 1;
+
+        buf_planes->plane_info.mp[0].len =
+                PAD_TO_SIZE((uint32_t)(stride * scanline),
+                padding->plane_padding);
+        buf_planes->plane_info.mp[0].offset =
+                PAD_TO_SIZE((uint32_t)(offset_x + stride * offset_y),
+                padding->plane_padding);
+        buf_planes->plane_info.mp[0].offset_x = offset_x;
+        buf_planes->plane_info.mp[0].offset_y = offset_y;
+        buf_planes->plane_info.mp[0].stride = stride;
+        buf_planes->plane_info.mp[0].scanline = scanline;
+        buf_planes->plane_info.mp[0].width = dim->width;
+        buf_planes->plane_info.mp[0].height = dim->height;
+        buf_planes->plane_info.frame_len =
+                PAD_TO_SIZE(buf_planes->plane_info.mp[0].len, CAM_PAD_TO_4K);
+        break;
     default:
         LOGE("Invalid cam_format for snapshot %d",
                     fmt);

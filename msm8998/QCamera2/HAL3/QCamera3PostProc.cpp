@@ -362,6 +362,7 @@ int32_t QCamera3PostProcessor::getFWKJpegEncodeConfig(
     // get color format
     cam_format_t img_fmt = frame->reproc_config.stream_format;
     encode_parm.color_format = getColorfmtFromImgFmt(img_fmt);
+    encode_parm.thumb_color_format = encode_parm.color_format;
 
     // get jpeg quality
     encode_parm.quality = jpeg_settings->jpeg_quality;
@@ -446,6 +447,7 @@ int32_t QCamera3PostProcessor::getJpegEncodeConfig(
     cam_format_t img_fmt = CAM_FORMAT_YUV_420_NV12;  //default value
     main_stream->getFormat(img_fmt);
     encode_parm.color_format = getColorfmtFromImgFmt(img_fmt);
+    encode_parm.thumb_color_format = encode_parm.color_format;
 
     // get jpeg quality
     encode_parm.quality = jpeg_settings->jpeg_quality;
@@ -1117,6 +1119,8 @@ mm_jpeg_color_format QCamera3PostProcessor::getColorfmtFromImgFmt(cam_format_t i
         return MM_JPEG_COLOR_FORMAT_YCRCBLP_H2V1;
     case CAM_FORMAT_YUV_422_NV16:
         return MM_JPEG_COLOR_FORMAT_YCBCRLP_H2V1;
+    case CAM_FORMAT_Y_ONLY:
+        return MM_JPEG_COLOR_FORMAT_MONOCHROME;
     default:
         return MM_JPEG_COLOR_FORMAT_YCRCBLP_H2V2;
     }

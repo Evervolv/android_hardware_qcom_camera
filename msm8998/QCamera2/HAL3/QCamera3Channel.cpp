@@ -1616,6 +1616,10 @@ int32_t QCamera3ProcessingChannel::translateStreamTypeAndFormat(camera3_stream_t
                         stream->width, stream->height, m_bUBWCenable, mIsType);
             }
             break;
+        case HAL_PIXEL_FORMAT_Y8:
+            streamType = CAM_STREAM_TYPE_CALLBACK;
+            streamFormat = CAM_FORMAT_Y_ONLY;
+            break;
         case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
             if (stream->usage & GRALLOC_USAGE_HW_VIDEO_ENCODER) {
                 streamType = CAM_STREAM_TYPE_VIDEO;
@@ -1693,11 +1697,12 @@ int32_t QCamera3ProcessingChannel::setReprocConfig(reprocess_config_t &reproc_cf
     reproc_cfg.output_stream_dim.width = mCamera3Stream->width;
     reproc_cfg.output_stream_dim.height = mCamera3Stream->height;
     reproc_cfg.reprocess_type = getReprocessType();
+    reproc_cfg.stream_format = streamFormat;
 
     //offset calculation
     if (NULL != pInputBuffer) {
         rc = translateStreamTypeAndFormat(pInputBuffer->stream,
-                reproc_cfg.stream_type, reproc_cfg.stream_format);
+                reproc_cfg.stream_type, reproc_cfg.input_stream_format);
         if (rc != NO_ERROR) {
             LOGE("Stream format %d is not supported",
                     pInputBuffer->stream->format);
@@ -1705,7 +1710,7 @@ int32_t QCamera3ProcessingChannel::setReprocConfig(reprocess_config_t &reproc_cf
         }
     } else {
         reproc_cfg.stream_type = mStreamType;
-        reproc_cfg.stream_format = streamFormat;
+        reproc_cfg.input_stream_format = streamFormat;
     }
 
     switch (reproc_cfg.stream_type) {
@@ -2928,8 +2933,12 @@ int32_t QCamera3YUVChannel::initialize(cam_is_type_t isType)
     }
 
     mIsType  = isType;
-    mStreamFormat = getStreamDefaultFormat(CAM_STREAM_TYPE_CALLBACK,
-            mCamera3Stream->width, mCamera3Stream->height, m_bUBWCenable, mIsType);
+    rc = translateStreamTypeAndFormat(mCamera3Stream, mStreamType,
+            mStreamFormat);
+    if (rc != NO_ERROR) {
+        return -EINVAL;
+    }
+
     streamDim.width = mCamera3Stream->width;
     streamDim.height = mCamera3Stream->height;
 
@@ -3652,6 +3661,7 @@ QCamera3PicChannel::QCamera3PicChannel(uint32_t cam_handle,
                     cam_feature_mask_t postprocess_mask,
                     __unused bool is4KVideo,
                     bool isInputStreamConfigured,
+                    bool useY8,
                     QCamera3Channel *metadataChannel,
                     uint32_t numBuffers) :
                         QCamera3ProcessingChannel(cam_handle, channel_handle,
@@ -3669,7 +3679,7 @@ QCamera3PicChannel::QCamera3PicChannel(uint32_t cam_handle,
     mYuvHeight = stream->height;
     mStreamType = CAM_STREAM_TYPE_SNAPSHOT;
     // Use same pixelformat for 4K video case
-    mStreamFormat = getStreamDefaultFormat(CAM_STREAM_TYPE_SNAPSHOT,
+    mStreamFormat = useY8 ? CAM_FORMAT_Y_ONLY : getStreamDefaultFormat(CAM_STREAM_TYPE_SNAPSHOT,
             stream->width, stream->height, m_bUBWCenable, IS_TYPE_NONE);
     int32_t rc = m_postprocessor.initJpeg(jpegEvtHandle, &m_max_pic_dim, this);
     if (rc != 0) {
@@ -5447,13 +5457,16 @@ int32_t QCamera3ReprocessChannel::addReprocStreamsFromSource(cam_pp_feature_conf
     streamType = CAM_STREAM_TYPE_OFFLINE_PROC;
     reprocess_config.pp_type = CAM_OFFLINE_REPROCESS_TYPE;
 
-    reprocess_config.offline.input_fmt = src_config.stream_format;
+    reprocess_config.offline.input_fmt = src_config.input_stream_format;
     reprocess_config.offline.input_dim = src_config.input_stream_dim;
     reprocess_config.offline.input_buf_planes.plane_info =
             src_config.input_stream_plane_info.plane_info;
     reprocess_config.offline.num_of_bufs = (uint8_t)mNumBuffers;
     reprocess_config.offline.input_type = src_config.stream_type;
 
+    LOGH("input_fmt is %d, fmt is %d, input_dim is %d x %d", reprocess_config.offline.input_fmt,
+         src_config.stream_format, reprocess_config.offline.input_dim.width,
+         reprocess_config.offline.input_dim.height);
     reprocess_config.pp_feature_config = pp_config;
     QCamera3Stream *pStream = new QCamera3Stream(m_camHandle,
             m_handle,
@@ -5541,7 +5554,7 @@ int32_t QCamera3SupportChannel::initialize(cam_is_type_t isType)
     int32_t rc;
 
     if (mMemory || m_numStreams > 0) {
-        LOGE("metadata channel already initialized");
+        LOGE("QCamera3SupportChannel already initialized");
         return -EINVAL;
     }
 

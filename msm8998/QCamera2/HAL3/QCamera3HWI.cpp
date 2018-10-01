@@ -1331,6 +1331,7 @@ int QCamera3HardwareInterface::validateStreamDimensions(
                 }
             }
             break;
+        case HAL_PIXEL_FORMAT_Y8:
         case HAL_PIXEL_FORMAT_YCbCr_420_888:
         case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
         default:
@@ -1952,6 +1953,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
     cam_dimension_t jpegSize = {0, 0};
     cam_dimension_t previewSize = {0, 0};
     size_t pdStatCount = 0;
+    bool y8OnEncoder = false;
 
     cam_padding_info_t padding_info = gCamCapability[mCameraId]->padding_info;
 
@@ -2099,15 +2101,19 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                 }
                 break;
             case HAL_PIXEL_FORMAT_YCbCr_420_888:
+            case HAL_PIXEL_FORMAT_Y8:
                 processedStreamCnt++;
                 if (isOnEncoder(maxViewfinderSize, newStream->width,
                         newStream->height)) {
-                    // If Yuv888 size is not greater than 4K, set feature mask
+                    // If Yuv888/Y8 size is not greater than 4K, set feature mask
                     // to SUPERSET so that it support concurrent request on
                     // YUV and JPEG.
                     if (newStream->width <= VIDEO_4K_WIDTH &&
                             newStream->height <= VIDEO_4K_HEIGHT) {
                         commonFeatureMask |= CAM_QCOM_FEATURE_PP_SUPERSET_HAL3;
+                    }
+                    if (newStream->format == HAL_PIXEL_FORMAT_Y8) {
+                        y8OnEncoder = true;
                     }
                     numStreamsOnEncoder++;
                     numYuv888OnEncoder++;
@@ -2156,7 +2162,6 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         m_bVideoHdrEnabled = true;
     else
         m_bVideoHdrEnabled = false;
-
 
     /* Check if num_streams is sane */
     if (stallStreamCnt > MAX_STALLING_STREAMS ||
@@ -2304,8 +2309,10 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
         /* Covers YUV reprocess */
         if (inputStream != NULL) {
             if (newStream->stream_type == CAMERA3_STREAM_OUTPUT
-                    && newStream->format == HAL_PIXEL_FORMAT_YCbCr_420_888
-                    && inputStream->format == HAL_PIXEL_FORMAT_YCbCr_420_888
+                    && ((newStream->format == HAL_PIXEL_FORMAT_YCbCr_420_888
+                         && inputStream->format == HAL_PIXEL_FORMAT_YCbCr_420_888)
+                        || (newStream->format == HAL_PIXEL_FORMAT_Y8
+                         && inputStream->format == HAL_PIXEL_FORMAT_Y8))
                     && inputStream->width == newStream->width
                     && inputStream->height == newStream->height) {
                 if (zslStream != NULL) {
@@ -2536,6 +2543,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
             }
             break;
             case HAL_PIXEL_FORMAT_YCbCr_420_888:
+            case HAL_PIXEL_FORMAT_Y8:
                 onlyRaw = false; // There is non-raw stream - bypass flag if set
                 mStreamConfigInfo.type[mStreamConfigInfo.num_streams] = CAM_STREAM_TYPE_CALLBACK;
                 if (isOnEncoder(maxViewfinderSize, newStream->width, newStream->height)) {
@@ -2650,7 +2658,8 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                     LOGD("ZSL usage flag skipping");
                 }
                 else if (newStream == zslStream
-                        || newStream->format == HAL_PIXEL_FORMAT_YCbCr_420_888) {
+                        || (newStream->format == HAL_PIXEL_FORMAT_YCbCr_420_888 ||
+                            newStream->format == HAL_PIXEL_FORMAT_Y8)) {
                     newStream->usage |= GRALLOC_USAGE_HW_CAMERA_ZSL;
                 } else
                     newStream->usage |= GRALLOC_USAGE_HW_CAMERA_WRITE;
@@ -2744,7 +2753,8 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                         newStream->priv = channel;
                     }
                     break;
-                case HAL_PIXEL_FORMAT_YCbCr_420_888: {
+                case HAL_PIXEL_FORMAT_YCbCr_420_888:
+                case HAL_PIXEL_FORMAT_Y8: {
                     channel = new QCamera3YUVChannel(mCameraHandle->camera_handle,
                             mChannelHandle,
                             mCameraHandle->ops, captureResultCb,
@@ -2809,7 +2819,7 @@ int QCamera3HardwareInterface::configureStreamsPerfLocked(
                                 mCameraHandle->ops, captureResultCb,
                                 setBufferErrorStatus, &padding_info, this, newStream,
                                 mStreamConfigInfo.postprocess_mask[mStreamConfigInfo.num_streams],
-                                m_bIs4KVideo, isZsl, mMetadataChannel,
+                                m_bIs4KVideo, isZsl, y8OnEncoder, mMetadataChannel,
                                 (m_bIsVideo ? 1 : MAX_INFLIGHT_BLOB));
                         if (mPictureChannel == NULL) {
                             LOGE("allocation of channel failed");
@@ -4988,6 +4998,7 @@ void QCamera3HardwareInterface::orchestrateResult(
                 }
             }
             result->frame_number = frameworkFrameNumber;
+            LOGH("process_capture_result frame_number %d, result %p, partial %d", result->frame_number, result->result, result->partial_result);
             mCallbackOps->process_capture_result(mCallbackOps, result);
         }
     }
@@ -5950,7 +5961,8 @@ no_error:
                         streams_need_metadata++;
                     }
                 }
-            } else if (output.stream->format == HAL_PIXEL_FORMAT_YCbCr_420_888) {
+            } else if (output.stream->format == HAL_PIXEL_FORMAT_YCbCr_420_888 ||
+                    output.stream->format == HAL_PIXEL_FORMAT_Y8) {
                 bool needMetadata = false;
                 QCamera3YUVChannel *yuvChannel = (QCamera3YUVChannel *)channel;
                 rc = yuvChannel->request(output.buffer, frameNumber,
@@ -9964,7 +9976,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
             ANDROID_SCALER_AVAILABLE_FORMATS_YCbCr_420_888,
             ANDROID_SCALER_AVAILABLE_FORMATS_BLOB,
             HAL_PIXEL_FORMAT_RAW10,
-            HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED};
+            HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED,
+            HAL_PIXEL_FORMAT_Y8};
     size_t scalar_formats_count = sizeof(scalar_formats) / sizeof(scalar_formats[0]);
     staticInfo.update(ANDROID_SCALER_AVAILABLE_FORMATS, scalar_formats,
             scalar_formats_count);
@@ -10135,6 +10148,7 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
             break;
         case HAL_PIXEL_FORMAT_YCbCr_420_888:
         case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
+        case HAL_PIXEL_FORMAT_Y8:
         default:
             cam_dimension_t largest_picture_size;
             memset(&largest_picture_size, 0, sizeof(cam_dimension_t));
@@ -10145,7 +10159,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
                         ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT);
                 /*For below 2 formats we also support i/p streams for reprocessing advertise those*/
                 if ((scalar_formats[j] == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED ||
-                        scalar_formats[j] == HAL_PIXEL_FORMAT_YCbCr_420_888) && i == 0) {
+                        scalar_formats[j] == HAL_PIXEL_FORMAT_YCbCr_420_888 ||
+                        scalar_formats[j] == HAL_PIXEL_FORMAT_Y8) && i == 0) {
                      if ((gCamCapability[cameraId]->picture_sizes_tbl[i].width
                             >= minInputSize.width) || (gCamCapability[cameraId]->
                             picture_sizes_tbl[i].height >= minInputSize.height)) {
@@ -10555,10 +10570,13 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
                       1);
 
     /* format of the map is : input format, num_output_formats, outputFormat1,..,outputFormatN */
-    int32_t io_format_map[] = {HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED, 2,
+    int32_t io_format_map[] = {HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED, 3,
             HAL_PIXEL_FORMAT_BLOB, HAL_PIXEL_FORMAT_YCbCr_420_888,
+            HAL_PIXEL_FORMAT_Y8,
             HAL_PIXEL_FORMAT_YCbCr_420_888, 2, HAL_PIXEL_FORMAT_BLOB,
-            HAL_PIXEL_FORMAT_YCbCr_420_888};
+            HAL_PIXEL_FORMAT_YCbCr_420_888,
+            HAL_PIXEL_FORMAT_Y8, 2,
+            HAL_PIXEL_FORMAT_BLOB, HAL_PIXEL_FORMAT_Y8};
     staticInfo.update(ANDROID_SCALER_AVAILABLE_INPUT_OUTPUT_FORMATS_MAP,
                       io_format_map, sizeof(io_format_map)/sizeof(io_format_map[0]));
 
@@ -15474,6 +15492,7 @@ bool QCamera3HardwareInterface::isRequestHdrPlusCompatible(
     switch (request.output_buffers[0].stream->format) {
         case HAL_PIXEL_FORMAT_BLOB:
         case HAL_PIXEL_FORMAT_YCbCr_420_888:
+        case HAL_PIXEL_FORMAT_Y8:
         case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
             break;
         default:
@@ -15621,6 +15640,7 @@ bool QCamera3HardwareInterface::trySubmittingHdrPlusRequestLocked(
                 break;
             }
             case HAL_PIXEL_FORMAT_YCbCr_420_888:
+            case HAL_PIXEL_FORMAT_Y8:
             case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
             {
                 // For YUV output, register the buffer and get the buffer def from the channel.
