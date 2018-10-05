@@ -745,6 +745,9 @@ typedef struct cam_stream_info {
     /* number of stream bufs allocated for this stream*/
     uint32_t buf_cnt;
 
+    /* buffer stride for this stream*/
+    uint32_t buf_stride;
+
     /* streaming type */
     cam_streaming_mode_t streaming_mode;
 

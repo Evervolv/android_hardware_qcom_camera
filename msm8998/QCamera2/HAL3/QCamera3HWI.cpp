@@ -11079,7 +11079,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
         cam_stream_buf_plane_info_t buf_planes;
         strides.add(gCamCapability[cameraId]->raw_dim[i].width);
         strides.add(gCamCapability[cameraId]->raw_dim[i].height);
-        mm_stream_calc_offset_raw(fmt, &gCamCapability[cameraId]->raw_dim[i],
+        cam_stream_info_t info = {.fmt = fmt};
+        mm_stream_calc_offset_raw(&info, &gCamCapability[cameraId]->raw_dim[i],
             &gCamCapability[cameraId]->padding_info, &buf_planes);
         strides.add(buf_planes.plane_info.mp[0].stride);
     }
@@ -11122,8 +11123,8 @@ int QCamera3HardwareInterface::initStaticMetadata(uint32_t cameraId)
             for (size_t i = 0; i < MIN(MAX_SIZES_CNT,
                     gCamCapability[cameraId]->supported_raw_dim_cnt); i++) {
                 cam_stream_buf_plane_info_t buf_planes;
-
-                rc = mm_stream_calc_offset_raw(fmt, &gCamCapability[cameraId]->raw_dim[i],
+                cam_stream_info_t info = {.fmt = fmt};
+                rc = mm_stream_calc_offset_raw(&info, &gCamCapability[cameraId]->raw_dim[i],
                          &gCamCapability[cameraId]->padding_info, &buf_planes);
 
                 if (rc == 0) {

@@ -1674,6 +1674,7 @@ int32_t QCamera3ProcessingChannel::setReprocConfig(reprocess_config_t &reproc_cf
 {
     int32_t rc = 0;
     reproc_cfg.padding = &mPaddingInfo;
+    cam_stream_info_t info = {.fmt = reproc_cfg.stream_format};
     //to ensure a big enough buffer size set the height and width
     //padding to max(height padding, width padding)
     if (reproc_cfg.padding->height_padding > reproc_cfg.padding->width_padding) {
@@ -1726,7 +1727,7 @@ int32_t QCamera3ProcessingChannel::setReprocConfig(reprocess_config_t &reproc_cf
                     &reproc_cfg.input_stream_plane_info);
             break;
         case CAM_STREAM_TYPE_RAW:
-            rc = mm_stream_calc_offset_raw(reproc_cfg.stream_format,
+            rc = mm_stream_calc_offset_raw(&info,
                     &reproc_cfg.input_stream_dim,
                     reproc_cfg.padding, &reproc_cfg.input_stream_plane_info);
             break;
