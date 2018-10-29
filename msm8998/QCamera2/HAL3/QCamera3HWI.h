@@ -268,6 +268,8 @@ public:
     } InternalRequest;
 
     static int getCamInfo(uint32_t cameraId, struct camera_info *info);
+    static int isStreamCombinationSupported(uint32_t cameraId,
+            const camera_stream_combination_t *streams);
     static cam_capability_t *getCapabilities(mm_camera_ops_t *ops,
             uint32_t cam_handle);
     static int initCapabilities(uint32_t cameraId);
