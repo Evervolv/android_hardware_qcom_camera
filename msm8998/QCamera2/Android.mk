@@ -51,7 +51,7 @@ LOCAL_CFLAGS += -DQCAMERA_HAL1_SUPPORT
 
 # Allow implicit fallthroughs in QCamera2HWI.cpp:6495 and
 # in QCameraStateMaschine.cpp until they are fixed.
-LOCAL_CFLAGS += -Wno-error=implicit-fallthrough
+LOCAL_CFLAGS += -Wno-implicit-fallthrough
 
 LOCAL_SRC_FILES += \
         HAL/QCamera2HWI.cpp \
