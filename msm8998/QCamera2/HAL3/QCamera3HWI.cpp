@@ -4507,7 +4507,7 @@ void QCamera3HardwareInterface::handleInputBufferWithLock(uint32_t frame_number)
         i = erasePendingRequest(i);
 
         // Dispatch result metadata that may be just unblocked by this reprocess result.
-        dispatchResultMetadataWithLock(frame_number, /*isLiveRequest*/false);
+        dispatchResultMetadataWithLock(frame_number, REPROCESS, false/*isHdrPlus*/);
     } else {
         LOGE("Could not find input request for frame number %d", frame_number);
     }
@@ -4658,17 +4658,17 @@ void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t fra
     requestIter->resultMetadata = resultMetadata;
 
     // Check what type of request this is.
-    bool liveRequest = false;
+    RequestType requestType = (requestIter->input_buffer != nullptr) ?  REPROCESS :
+            (isStillZsl(*requestIter) ? ZSL : NORMAL);
     if (requestIter->hdrplus) {
         // HDR+ request doesn't have partial results.
         requestIter->partial_result_cnt = PARTIAL_RESULT_COUNT;
-    } else if (requestIter->input_buffer != nullptr) {
+    } else if (requestType == REPROCESS) {
         // Reprocessing request result is the same as settings.
         requestIter->resultMetadata = requestIter->settings;
         // Reprocessing request doesn't have partial results.
         requestIter->partial_result_cnt = PARTIAL_RESULT_COUNT;
     } else {
-        liveRequest = true;
         if ((requestIter->partial_result_cnt == 0) && !requestIter->partialResultDropped) {
             LOGE("Urgent metadata for frame number: %d didn't arrive!", frameNumber);
             requestIter->partialResultDropped = true;
@@ -4686,15 +4686,15 @@ void QCamera3HardwareInterface::handlePendingResultMetadataWithLock(uint32_t fra
         }
     }
 
-    if (requestIter->input_buffer == nullptr) {
+    if (requestType != REPROCESS) {
         removeUnrequestedMetadata(requestIter, resultMetadata);
     }
 
-    dispatchResultMetadataWithLock(frameNumber, liveRequest);
+    dispatchResultMetadataWithLock(frameNumber, requestType, requestIter->hdrplus);
 }
 
 void QCamera3HardwareInterface::dispatchResultMetadataWithLock(uint32_t frameNumber,
-        bool isLiveRequest) {
+        RequestType requestType, bool isHdrPlus) {
     // The pending requests are ordered by increasing frame numbers. The result metadata are ready
     // to be sent if all previous pending requests are ready to be sent.
     bool readyToSend = true;
@@ -4702,15 +4702,22 @@ void QCamera3HardwareInterface::dispatchResultMetadataWithLock(uint32_t frameNum
     // Iterate through the pending requests to send out result metadata that are ready. Also if
     // this result metadata belongs to a live request, notify errors for previous live requests
     // that don't have result metadata yet.
+    // Note: a live request is either a NORMAL request, or a ZSL non-hdrplus request.
+    bool isLiveRequest = requestType != REPROCESS && !isHdrPlus;
     auto iter = mPendingRequestsList.begin();
     while (iter != mPendingRequestsList.end()) {
+        bool thisIsStillZsl = isStillZsl(*iter);
+        RequestType thisRequestType = (iter->input_buffer != nullptr) ? REPROCESS :
+                (thisIsStillZsl ? ZSL : NORMAL);
+        if (thisRequestType != requestType) {
+            iter++;
+            continue;
+        }
         // Check if current pending request is ready. If it's not ready, the following pending
         // requests are also not ready.
-        if (readyToSend && iter->resultMetadata == nullptr) {
-            readyToSend = false;
-        }
+        readyToSend &= iter->resultMetadata != nullptr;
 
-        bool thisLiveRequest = iter->hdrplus == false && iter->input_buffer == nullptr;
+        bool thisLiveRequest = !iter->hdrplus && iter->input_buffer == nullptr;
         bool errorResult = false;
 
         camera3_capture_result_t result = {};
@@ -4718,8 +4725,7 @@ void QCamera3HardwareInterface::dispatchResultMetadataWithLock(uint32_t frameNum
         result.result = iter->resultMetadata;
         result.partial_result = iter->partial_result_cnt;
 
-        // If this pending buffer has result metadata, we may be able to send out shutter callback
-        // and result metadata.
+        // If this pending buffer has result metadata, we may be able to send it out.
         if (iter->resultMetadata != nullptr) {
             if (!readyToSend) {
                 // If any of the previous pending request is not ready, this pending request is
@@ -5896,7 +5902,8 @@ no_error:
 
     // Let shutter dispatcher and buffer dispatcher know shutter and output buffers are expected
     // for the frame number.
-    mShutterDispatcher.expectShutter(frameNumber, request->input_buffer != nullptr);
+    mShutterDispatcher.expectShutter(frameNumber, request->input_buffer != nullptr,
+            isStillZsl(pendingRequest));
     for (size_t i = 0; i < request->num_output_buffers; i++) {
         mOutputBufferDispatcher.expectBuffer(frameNumber, request->output_buffers[i].stream);
     }
@@ -16742,12 +16749,14 @@ bool QCamera3HardwareInterface::parseStringArray(const char *str, float *dest, i
 ShutterDispatcher::ShutterDispatcher(QCamera3HardwareInterface *parent) :
         mParent(parent) {}
 
-void ShutterDispatcher::expectShutter(uint32_t frameNumber, bool isReprocess)
+void ShutterDispatcher::expectShutter(uint32_t frameNumber, bool isReprocess, bool isZsl)
 {
     std::lock_guard<std::mutex> lock(mLock);
 
     if (isReprocess) {
         mReprocessShutters.emplace(frameNumber, Shutter());
+    } else if (isZsl) {
+        mZslShutters.emplace(frameNumber, Shutter());
     } else {
         mShutters.emplace(frameNumber, Shutter());
     }
@@ -16761,15 +16770,21 @@ void ShutterDispatcher::markShutterReady(uint32_t frameNumber, uint64_t timestam
 
     // Find the shutter entry.
     auto shutter = mShutters.find(frameNumber);
-    if (shutter == mShutters.end()) {
-        shutter = mReprocessShutters.find(frameNumber);
-        if (shutter == mReprocessShutters.end()) {
-            // Shutter was already sent.
-            return;
-        }
-        shutters = &mReprocessShutters;
-    } else {
+    if (shutter != mShutters.end()) {
         shutters = &mShutters;
+    } else {
+        shutter = mReprocessShutters.find(frameNumber);
+        if (shutter != mReprocessShutters.end()) {
+            shutters = &mReprocessShutters;
+        } else {
+            shutter = mZslShutters.find(frameNumber);
+            if (shutter != mZslShutters.end()) {
+                shutters = &mZslShutters;
+            } else {
+                // Shutter was already sent.
+                return;
+            }
+        }
     }
 
     if (shutter->second.ready) {
@@ -16804,6 +16819,7 @@ void ShutterDispatcher::clear(uint32_t frameNumber)
     std::lock_guard<std::mutex> lock(mLock);
     mShutters.erase(frameNumber);
     mReprocessShutters.erase(frameNumber);
+    mZslShutters.erase(frameNumber);
 }
 
 void ShutterDispatcher::clear()
@@ -16824,8 +16840,16 @@ void ShutterDispatcher::clear()
             shutter.second.timestamp);
     }
 
+    // Log errors for stale ZSL shutters.
+    for (auto &shutter : mZslShutters) {
+        ALOGE("%s: stale zsl shutter: frame number %u, ready %d, timestamp %" PRId64,
+            __FUNCTION__, shutter.first, shutter.second.ready,
+            shutter.second.timestamp);
+    }
+
     mShutters.clear();
     mReprocessShutters.clear();
+    mZslShutters.clear();
 }
 
 OutputBufferDispatcher::OutputBufferDispatcher(QCamera3HardwareInterface *parent) :
