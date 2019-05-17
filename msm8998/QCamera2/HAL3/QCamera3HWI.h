@@ -173,7 +173,7 @@ public:
     virtual ~ShutterDispatcher() = default;
 
     // Tell dispatch to expect a shutter for a frame number.
-    void expectShutter(uint32_t frameNumber, bool isReprocess);
+    void expectShutter(uint32_t frameNumber, bool isReprocess, bool isZsl);
     // Mark a shutter callback for a frame ready.
     void markShutterReady(uint32_t frameNumber, uint64_t timestamp);
     // Discard a pending shutter for frame number.
@@ -193,6 +193,7 @@ private:
     // frame number -> shutter map. Protected by mLock.
     std::map<uint32_t, Shutter> mShutters;
     std::map<uint32_t, Shutter> mReprocessShutters;
+    std::map<uint32_t, Shutter> mZslShutters;
 
     QCamera3HardwareInterface *mParent;
 };
@@ -462,8 +463,13 @@ private:
     // Going through pending request list and send out result metadata for requests
     // that are ready.
     // frameNumber is the lastest frame whose result metadata is ready.
-    // isLiveRequest is whether the frame belongs to a live request.
-    void dispatchResultMetadataWithLock(uint32_t frameNumber, bool isLiveRequest);
+    typedef enum {
+        NORMAL,
+        REPROCESS,
+        ZSL
+    } RequestType;
+    void dispatchResultMetadataWithLock(uint32_t frameNumber,
+            RequestType requestType, bool isHdrPlus);
     void handleDepthDataLocked(const cam_depth_data_t &depthData,
             uint32_t frameNumber, uint8_t valid);
     void notifyErrorFoPendingDepthData(QCamera3DepthChannel *depthCh);
@@ -952,6 +958,11 @@ private:
     // Parse a string of form " [ x; y; z ...]" into a floating-point array.
     // Returns false on parse error
     static bool parseStringArray(const char *str, float *dest, int count);
+
+    static bool isStillZsl(const PendingRequestInfo& requestInfo) {
+        return requestInfo.enableZsl &&
+                requestInfo.capture_intent == ANDROID_CONTROL_CAPTURE_INTENT_STILL_CAPTURE;
+    }
 
     float mLastFocusDistance;
 
