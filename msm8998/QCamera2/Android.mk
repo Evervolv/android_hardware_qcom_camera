@@ -148,7 +148,7 @@ LOCAL_SHARED_LIBRARIES := liblog libhardware libutils libcutils libdl libsync
 LOCAL_SHARED_LIBRARIES += libmmcamera_interface libmmjpeg_interface libui libcamera_metadata
 LOCAL_SHARED_LIBRARIES += libqdMetaData libqservice libbinder
 LOCAL_SHARED_LIBRARIES += libbase libcutils libdl libhdrplusclient
-LOCAL_SHARED_LIBRARIES += libhidlbase libhwbinder libutils android.hardware.power@1.2
+LOCAL_SHARED_LIBRARIES += libhidlbase libutils android.hardware.power@1.2
 LOCAL_SHARED_LIBRARIES += libtinyxml2
 ifeq ($(TARGET_TS_MAKEUP),true)
 LOCAL_SHARED_LIBRARIES += libts_face_beautify_hal libts_detected_face_hal
