@@ -5875,11 +5875,13 @@ no_error:
         ALOGD("%s: frame number %u is an HDR+ request.", __FUNCTION__, frameNumber);
     }
 
+    buffer_handle_t *depth_buffer = nullptr;
     for (size_t i = 0; i < request->num_output_buffers; i++) {
         if ((request->output_buffers[i].stream->data_space ==
                 HAL_DATASPACE_DEPTH) &&
                 (HAL_PIXEL_FORMAT_BLOB ==
                         request->output_buffers[i].stream->format)) {
+            depth_buffer = request->output_buffers[i].buffer;
             continue;
         }
         RequestedBufferInfo requestedBuf;
@@ -5916,6 +5918,23 @@ no_error:
 
     if(mFlush) {
         LOGI("mFlush is true");
+
+        // If depth buffer is requested, return an error depth buffer. The buffer is not
+        // going to be added to the depth channel so it won't be returned in
+        // notifyErrorFoPendingDepthData().
+        if (depth_buffer != nullptr) {
+            camera3_stream_buffer_t errorBuffer =
+            {
+                .acquire_fence = -1,
+                .release_fence = -1,
+                .status = CAMERA3_BUFFER_STATUS_ERROR,
+                .buffer = depth_buffer,
+                .stream = mDepthChannel->getStream(),
+            };
+
+            mOutputBufferDispatcher.markBufferReady(frameNumber, errorBuffer);
+        }
+
         pthread_mutex_unlock(&mMutex);
         return NO_ERROR;
     }
