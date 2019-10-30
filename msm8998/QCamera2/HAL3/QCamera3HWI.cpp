@@ -672,13 +672,7 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
     {
         std::unique_lock<std::mutex> l(gHdrPlusClientLock);
         finishHdrPlusClientOpeningLocked(l);
-        if (gHdrPlusClient != nullptr) {
-            // Disable HDR+ mode.
-            disableHdrPlusModeLocked();
-            // Disconnect Easel if it's connected.
-            gEaselManagerClient->closeHdrPlusClient(std::move(gHdrPlusClient));
-            gHdrPlusClient = nullptr;
-        }
+        closeHdrPlusClientLocked();
     }
 
     // unlink of dualcam during close camera
@@ -5299,6 +5293,18 @@ int QCamera3HardwareInterface::processCaptureRequest(
     CameraMetadata meta;
     bool isVidBufRequested = false;
     camera3_stream_buffer_t *pInputBuffer = NULL;
+
+    // If Easel is thermal throttled and there is no pending HDR+ request,
+    // close HDR+ client.
+    {
+        std::unique_lock<std::mutex> l(gHdrPlusClientLock);
+        if (gHdrPlusClient != nullptr && mEaselThermalThrottled) {
+            Mutex::Autolock lock(mHdrPlusPendingRequestsLock);
+            if (mHdrPlusPendingRequests.empty()) {
+                closeHdrPlusClientLocked();
+            }
+        }
+    }
 
     pthread_mutex_lock(&mMutex);
 
@@ -16142,6 +16148,25 @@ void QCamera3HardwareInterface::onEaselFatalError(std::string errMsg)
 {
     ALOGE("%s: Got an Easel fatal error: %s", __FUNCTION__, errMsg.c_str());
     handleEaselFatalErrorAsync();
+}
+
+void QCamera3HardwareInterface::closeHdrPlusClientLocked()
+{
+    if (gHdrPlusClient != nullptr) {
+        // Disable HDR+ mode.
+        disableHdrPlusModeLocked();
+        // Disconnect Easel if it's connected.
+        gEaselManagerClient->closeHdrPlusClient(std::move(gHdrPlusClient));
+        gHdrPlusClient = nullptr;
+        ALOGD("HDR+ client closed.");
+    }
+}
+
+void QCamera3HardwareInterface::onThermalThrottle() {
+    ALOGW("%s: Thermal throttling. Will close HDR+ client.", __FUNCTION__);
+    // HDR+ will be disabled when HAL receives the next request and there is no
+    // pending HDR+ request.
+    mEaselThermalThrottled = true;
 }
 
 void QCamera3HardwareInterface::onOpened(std::unique_ptr<HdrPlusClient> client)
