@@ -4332,11 +4332,12 @@ void QCamera3HardwareInterface::handleDepthDataLocked(
     }
 
     camera3_stream_buffer_t resultBuffer =
-        {.acquire_fence = -1,
-         .release_fence = -1,
-         .status = CAMERA3_BUFFER_STATUS_OK,
+        {.stream = mDepthChannel->getStream(),
          .buffer = nullptr,
-         .stream = mDepthChannel->getStream()};
+         .status = CAMERA3_BUFFER_STATUS_OK,
+         .acquire_fence = -1,
+         .release_fence = -1,
+        };
     do {
         depthBuffer = mDepthChannel->getOldestFrame(currentFrameNumber);
         if (nullptr == depthBuffer) {
@@ -4396,11 +4397,11 @@ void QCamera3HardwareInterface::notifyErrorFoPendingDepthData(
         {.type = CAMERA3_MSG_ERROR,
                 {{0, depthCh->getStream(), CAMERA3_MSG_ERROR_BUFFER}}};
     camera3_stream_buffer_t resultBuffer =
-        {.acquire_fence = -1,
-         .release_fence = -1,
+        {.stream = depthCh->getStream(),
          .buffer = nullptr,
-         .stream = depthCh->getStream(),
-         .status = CAMERA3_BUFFER_STATUS_ERROR};
+         .status = CAMERA3_BUFFER_STATUS_ERROR,
+         .acquire_fence = -1,
+         .release_fence = -1,};
 
     while (nullptr !=
             (depthBuffer = depthCh->getOldestFrame(currentFrameNumber))) {
@@ -5925,11 +5926,11 @@ no_error:
         if (depth_buffer != nullptr) {
             camera3_stream_buffer_t errorBuffer =
             {
+                .stream = mDepthChannel->getStream(),
+                .buffer = depth_buffer,
+                .status = CAMERA3_BUFFER_STATUS_ERROR,
                 .acquire_fence = -1,
                 .release_fence = -1,
-                .status = CAMERA3_BUFFER_STATUS_ERROR,
-                .buffer = depth_buffer,
-                .stream = mDepthChannel->getStream(),
             };
 
             mOutputBufferDispatcher.markBufferReady(frameNumber, errorBuffer);
