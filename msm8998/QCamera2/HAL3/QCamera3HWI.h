@@ -894,8 +894,12 @@ private:
     // Handle Easel error.
     void handleEaselFatalError();
 
+    // Close HDR+ client. Must be protected by gHdrPlusClientLock.
+    void closeHdrPlusClientLocked();
+
     // Easel manager client callbacks.
     void onEaselFatalError(std::string errMsg);
+    void onThermalThrottle();
 
     // Clean up and wait for Easel error future.
     void cleanupEaselErrorFuture();
@@ -945,6 +949,9 @@ private:
 
     std::mutex mEaselErrorFutureLock;
     std::future<void> mEaselErrorFuture;
+
+    // If HDR+ should be thermal throttled.
+    std::atomic<bool> mEaselThermalThrottled = false;
 
     // Thread to handle callbacks from HDR+ client. Protected by gHdrPlusClientLock.
     sp<QCamera3HdrPlusListenerThread> mQCamera3HdrPlusListenerThread;
