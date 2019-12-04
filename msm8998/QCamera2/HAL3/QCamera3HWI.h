@@ -319,9 +319,6 @@ public:
             metadata_buffer_t *parm, uint32_t snapshotStreamId);
     int translateFwkMetadataToHalMetadata(const camera_metadata_t *frameworkMetadata,
             metadata_buffer_t *hal_metadata, uint32_t snapshotStreamId, int64_t minFrameDuration);
-    camera_metadata_t* translateCbUrgentMetadataToResultMetadata (
-                             metadata_buffer_t *metadata, bool lastUrgentMetadataInBatch,
-                             uint32_t frame_number, bool isJumpstartMetadata);
     camera_metadata_t* saveRequestSettings(const CameraMetadata& jpegMetadata,
                             camera3_capture_request_t *request);
     int initParameters();
@@ -647,6 +644,7 @@ private:
         uint8_t requestedFaceDetectMode; // Face detect mode for this request.
         bool partialResultDropped; // Whether partial metadata is dropped.
         uint8_t requestedOisDataMode; // OIS data mode for this request.
+        float zoomRatio;
     } PendingRequestInfo;
     typedef struct {
         uint32_t frame_number;
@@ -740,6 +738,8 @@ private:
     uint8_t mLastRequestedFaceDetectMode;
     // Last OIS data mode framework requested.
     uint8_t mLastRequestedOisDataMode;
+    // Last zoom ratio framework requested
+    float mLastRequestedZoomRatio;
 
     cam_feature_mask_t mCurrFeatureState;
     /* Ldaf calibration data */
@@ -813,6 +813,9 @@ private:
                             bool pprocDone,
                             bool lastMetadataInBatch,
                             const bool *enableZsl);
+    camera_metadata_t* translateCbUrgentMetadataToResultMetadata (
+                            metadata_buffer_t *metadata, bool lastUrgentMetadataInBatch,
+                            const pendingRequestIterator requestIter, bool isJumpstartMetadata);
 
     State mState;
     //Dual camera related params

@@ -121,22 +121,36 @@ void QCamera3CropRegionMapper::update(uint32_t active_array_w,
  *   @crop_top    : y coordinate of top left corner of rectangle
  *   @crop_width  : width of rectangle
  *   @crop_height : height of rectangle
+ *   @zoom_ratio  : zoom ratio to be reverted for the input rectangles
  *
  * RETURN     : none
  *==========================================================================*/
 void QCamera3CropRegionMapper::toActiveArray(int32_t& crop_left, int32_t& crop_top,
-        int32_t& crop_width, int32_t& crop_height)
+        int32_t& crop_width, int32_t& crop_height, float zoom_ratio)
 {
     if (mSensorW == 0 || mSensorH == 0 ||
             mActiveArrayW == 0 || mActiveArrayH == 0) {
         LOGE("sensor/active array sizes are not initialized!");
         return;
     }
+    if (zoom_ratio < MIN_ZOOM_RATIO) {
+        LOGE("Invalid zoom ratio %f", zoom_ratio);
+        return;
+    }
 
+    // Map back to activeArray space
     crop_left = crop_left * mActiveArrayW / mSensorW;
     crop_top = crop_top * mActiveArrayH / mSensorH;
     crop_width = crop_width * mActiveArrayW / mSensorW;
     crop_height = crop_height * mActiveArrayH / mSensorH;
+
+    // Revert zoom_ratio, so that now the crop rectangle is separate from
+    // zoom_ratio. The coordinate is within the active array space which covers
+    // the post-zoom FOV.
+    crop_left = crop_left * zoom_ratio - (zoom_ratio - 1) * 0.5f * mActiveArrayW;
+    crop_top = crop_top * zoom_ratio - (zoom_ratio - 1) * 0.5f * mActiveArrayH;
+    crop_width = crop_width * zoom_ratio;
+    crop_height = crop_height * zoom_ratio;
 
     boundToSize(crop_left, crop_top, crop_width, crop_height,
             mActiveArrayW, mActiveArrayH);
@@ -152,19 +166,35 @@ void QCamera3CropRegionMapper::toActiveArray(int32_t& crop_left, int32_t& crop_t
  *   @crop_top    : y coordinate of top left corner of rectangle
  *   @crop_width  : width of rectangle
  *   @crop_height : height of rectangle
+ *   @zoom_ratio  : zoom ratio to be applied to the input rectangles
  *
  * RETURN     : none
  *==========================================================================*/
 
 void QCamera3CropRegionMapper::toSensor(int32_t& crop_left, int32_t& crop_top,
-        int32_t& crop_width, int32_t& crop_height)
+        int32_t& crop_width, int32_t& crop_height, float zoom_ratio)
 {
     if (mSensorW == 0 || mSensorH == 0 ||
             mActiveArrayW == 0 || mActiveArrayH == 0) {
         LOGE("sensor/active array sizes are not initialized!");
         return;
     }
+    if (zoom_ratio < MIN_ZOOM_RATIO) {
+        LOGE("Invalid zoom ratio %f", zoom_ratio);
+        return;
+    }
 
+    // Apply zoom_ratio to the input rectangle in activeArray space, so that
+    // crop rectangle already takes zoom_ratio into account (in other words,
+    // coordinate within the sensor native active array space).
+    crop_left = crop_left / zoom_ratio +
+            0.5f * mActiveArrayW * (1.0f - 1.0f / zoom_ratio);
+    crop_top = crop_top / zoom_ratio +
+            0.5f * mActiveArrayH * (1.0f - 1.0f / zoom_ratio);
+    crop_width = crop_width / zoom_ratio;
+    crop_height = crop_height / zoom_ratio;
+
+    // Map to sensor space.
     crop_left = crop_left * mSensorW / mActiveArrayW;
     crop_top = crop_top * mSensorH / mActiveArrayH;
     crop_width = crop_width * mSensorW / mActiveArrayW;
@@ -219,10 +249,11 @@ void QCamera3CropRegionMapper::boundToSize(int32_t& left, int32_t& top,
  * PARAMETERS :
  *   @x   : x coordinate
  *   @y   : y coordinate
+ *   @zoom_ratio  : zoom ratio to be applied to the input coordinates
  *
  * RETURN     : none
  *==========================================================================*/
-void QCamera3CropRegionMapper::toActiveArray(uint32_t& x, uint32_t& y)
+void QCamera3CropRegionMapper::toActiveArray(uint32_t& x, uint32_t& y, float zoom_ratio)
 {
     if (mSensorW == 0 || mSensorH == 0 ||
             mActiveArrayW == 0 || mActiveArrayH == 0) {
@@ -235,8 +266,20 @@ void QCamera3CropRegionMapper::toActiveArray(uint32_t& x, uint32_t& y)
                  x, y, mSensorW, mSensorH);
         return;
     }
+    if (zoom_ratio < MIN_ZOOM_RATIO) {
+        LOGE("Invalid zoom ratio %f", zoom_ratio);
+        return;
+    }
+
+    // Map back to activeArray space
     x = x * mActiveArrayW / mSensorW;
     y = y * mActiveArrayH / mSensorH;
+
+    // Revert zoom_ratio, so that now the crop rectangle is separate from
+    // zoom_ratio. The coordinate is within the active array space which covers
+    // the post-zoom FOV.
+    x = x * zoom_ratio - (zoom_ratio - 1) * 0.5f * mActiveArrayW;
+    y = y * zoom_ratio - (zoom_ratio - 1) * 0.5f * mActiveArrayH;
 }
 
 /*===========================================================================
@@ -247,24 +290,38 @@ void QCamera3CropRegionMapper::toActiveArray(uint32_t& x, uint32_t& y)
  * PARAMETERS :
  *   @x   : x coordinate
  *   @y   : y coordinate
+ *   @zoom_ratio  : zoom ratio to be applied to the input coordinates
  *
  * RETURN     : none
  *==========================================================================*/
 
-void QCamera3CropRegionMapper::toSensor(uint32_t& x, uint32_t& y)
+void QCamera3CropRegionMapper::toSensor(uint32_t& x, uint32_t& y, float zoom_ratio)
 {
     if (mSensorW == 0 || mSensorH == 0 ||
             mActiveArrayW == 0 || mActiveArrayH == 0) {
         LOGE("sensor/active array sizes are not initialized!");
         return;
     }
-
     if ((x > static_cast<uint32_t>(mActiveArrayW)) ||
             (y > static_cast<uint32_t>(mActiveArrayH))) {
         LOGE("invalid co-ordinate (%d, %d) in (0, 0, %d, %d) space",
                  x, y, mSensorW, mSensorH);
         return;
     }
+    if (zoom_ratio < MIN_ZOOM_RATIO) {
+        LOGE("Invalid zoom ratio %f", zoom_ratio);
+        return;
+    }
+
+    // Apply zoom_ratio to the input coordinate in activeArray space, so that
+    // coordinate already takes zoom_ratio into account (in other words,
+    // coordinate within the sensor native active array space).
+    x = x / zoom_ratio +
+            0.5f * mActiveArrayW * (1.0f - 1.0f / zoom_ratio);
+    y = y / zoom_ratio +
+            0.5f * mActiveArrayH * (1.0f - 1.0f / zoom_ratio);
+
+    // Map to sensor space.
     x = x * mSensorW / mActiveArrayW;
     y = y * mSensorH / mActiveArrayH;
 }
