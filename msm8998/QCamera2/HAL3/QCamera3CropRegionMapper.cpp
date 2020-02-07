@@ -186,6 +186,31 @@ void QCamera3CropRegionMapper::toSensor(int32_t& crop_left, int32_t& crop_top,
         LOGE("sensor/active array sizes are not initialized!");
         return;
     }
+
+    applyZoomRatioHelper(crop_left, crop_top, crop_width, crop_height, zoom_ratio,
+            true /*to_sensor*/);
+}
+
+/*===========================================================================
+ * FUNCTION   : applyZoomRatioHelper
+ *
+ * DESCRIPTION: Apply zoom ratio to the crop region, and optionally map
+ *              to sensor coordinate system
+ *
+ * PARAMETERS :
+ *   @crop_left   : x coordinate of top left corner of rectangle
+ *   @crop_top    : y coordinate of top left corner of rectangle
+ *   @crop_width  : width of rectangle
+ *   @crop_height : height of rectangle
+ *   @zoom_ratio  : zoom ratio to be applied to the input rectangles
+ *   @to_sensor   : whether the crop region is to be mapped to sensor coordinate
+ *                  system
+ *
+ * RETURN     : none
+ *==========================================================================*/
+void QCamera3CropRegionMapper::applyZoomRatioHelper(int32_t& crop_left, int32_t& crop_top,
+        int32_t& crop_width, int32_t& crop_height, float zoom_ratio, bool to_sensor)
+{
     if (zoom_ratio < MIN_ZOOM_RATIO) {
         LOGE("Invalid zoom ratio %f", zoom_ratio);
         return;
@@ -201,11 +226,13 @@ void QCamera3CropRegionMapper::toSensor(int32_t& crop_left, int32_t& crop_top,
     float width = crop_width / zoom_ratio;
     float height = crop_height / zoom_ratio;
 
-    // Map to sensor space.
-    left = left * mSensorW / mActiveArrayW;
-    top = top * mSensorH / mActiveArrayH;
-    width = width * mSensorW / mActiveArrayW;
-    height = height * mSensorH / mActiveArrayH;
+    if (to_sensor) {
+        // Map to sensor space.
+        left = left * mSensorW / mActiveArrayW;
+        top = top * mSensorH / mActiveArrayH;
+        width = width * mSensorW / mActiveArrayW;
+        height = height * mSensorH / mActiveArrayH;
+    }
 
     crop_left = std::round(left);
     crop_top = std::round(top);
@@ -215,9 +242,36 @@ void QCamera3CropRegionMapper::toSensor(int32_t& crop_left, int32_t& crop_top,
     LOGD("before bounding left %d, top %d, width %d, height %d",
          crop_left, crop_top, crop_width, crop_height);
     boundToSize(crop_left, crop_top, crop_width, crop_height,
-            mSensorW, mSensorH);
+            to_sensor ? mSensorW : mActiveArrayW,
+            to_sensor ? mSensorH : mActiveArrayH);
     LOGD("after bounding left %d, top %d, width %d, height %d",
          crop_left, crop_top, crop_width, crop_height);
+}
+
+/*===========================================================================
+ * FUNCTION   : applyZoomRatio
+ *
+ * DESCRIPTION: Apply zoom ratio to the crop region
+ *
+ * PARAMETERS :
+ *   @crop_left   : x coordinate of top left corner of rectangle
+ *   @crop_top    : y coordinate of top left corner of rectangle
+ *   @crop_width  : width of rectangle
+ *   @crop_height : height of rectangle
+ *   @zoom_ratio  : zoom ratio to be applied to the input rectangles
+ *
+ * RETURN     : none
+ *==========================================================================*/
+void QCamera3CropRegionMapper::applyZoomRatio(int32_t& crop_left, int32_t& crop_top,
+        int32_t& crop_width, int32_t& crop_height, float zoom_ratio)
+{
+    if (mActiveArrayW == 0 || mActiveArrayH == 0) {
+        LOGE("active array sizes are not initialized!");
+        return;
+    }
+
+    applyZoomRatioHelper(crop_left, crop_top, crop_width, crop_height, zoom_ratio,
+        false /*to_sensor*/);
 }
 
 /*===========================================================================
