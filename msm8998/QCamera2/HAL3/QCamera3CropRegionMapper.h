@@ -51,6 +51,12 @@ public:
     void toActiveArray(uint32_t& x, uint32_t& y, float zoom_ratio);
     void toSensor(uint32_t& x, uint32_t& y, float zoom_ratio);
 
+    // Adjust the crop rectangle to reflect zoom_ratio. For example, if
+    // zoom_ratio is 2.0, and crop region is active array size, this function
+    // will scale the crop region to be 2x zoomed.
+    void applyZoomRatio(int32_t& crop_left, int32_t& crop_top,
+            int32_t& crop_width, int32_t& crop_height, float zoom_ratio);
+
 private:
     /* sensor output size */
     int32_t mSensorW, mSensorH;
@@ -60,6 +66,9 @@ private:
             int32_t& height, int32_t bound_w, int32_t bound_h);
 
     static constexpr float MIN_ZOOM_RATIO = 0.0001f;
+    void applyZoomRatioHelper(int32_t& crop_left, int32_t& crop_top,
+            int32_t& crop_width, int32_t& crop_height, float zoom_ratio,
+            bool to_sensor);
 };
 
 }; // namespace qcamera

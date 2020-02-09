@@ -15960,7 +15960,7 @@ bool QCamera3HardwareInterface::trySubmittingHdrPlusRequestLocked(
             scalerRegion[3] = currentScalerRegion[3];
 
             // Apply zoom ratio to generate new crop region
-            mCropRegionMapper.toSensor(scalerRegion[0], scalerRegion[1],
+            mCropRegionMapper.applyZoomRatio(scalerRegion[0], scalerRegion[1],
                     scalerRegion[2], scalerRegion[3], zoomRatio);
 
             scalerRegion[0] = currentScalerRegion[0] + mLastEISCropInfo.delta_x;
@@ -15983,7 +15983,7 @@ bool QCamera3HardwareInterface::trySubmittingHdrPlusRequestLocked(
         }
     } else {
         if (entry.count == 4) {
-            mCropRegionMapper.toSensor(entry.data.i32[0], entry.data.i32[1],
+            mCropRegionMapper.applyZoomRatio(entry.data.i32[0], entry.data.i32[1],
                     entry.data.i32[2], entry.data.i32[3], zoomRatio);
         }
     }
