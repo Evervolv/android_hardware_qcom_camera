@@ -125,7 +125,8 @@ typedef struct {
     // Time when request queued into system
     nsecs_t timestamp;
     List<PendingBufferInfo> mPendingBufferList;
-    bool hdrplus;
+    std::shared_ptr<mm_camera_buf_def_t> mHdrplusInputBuf;
+    std::shared_ptr<mm_camera_buf_def_t> mHdrplusInputMetaBuf;
 } PendingBuffersInRequest;
 
 class PendingBuffersMap {

@@ -5513,7 +5513,6 @@ no_error:
     bufsForCurRequest.frame_number = frameNumber;
     // Mark current timestamp for the new request
     bufsForCurRequest.timestamp = systemTime(CLOCK_MONOTONIC);
-    bufsForCurRequest.hdrplus = hdrPlusRequest;
 
     if (hdrPlusRequest) {
         // Save settings for this request.
@@ -14974,10 +14973,29 @@ void QCamera3HardwareInterface::onCaptureResult(pbcamera::CaptureResult *result,
         status_t res = translateFwkMetadataToHalMetadata(updatedResultMetadata, halMetadata.get(),
                 halStreamId, /*minFrameDuration*/0);
         if (res == OK) {
+            android_errorWriteLog(0x534e4554, "150004253");
+            // Keep a copy of outputBufferDef until the final JPEG buffer is
+            // ready because the JPEG callback uses the mm_camera_buf_def_t
+            // struct. The metaBufDef is stored in a shared_ptr to make sure
+            // it's freed.
+            std::shared_ptr<mm_camera_buf_def_t> metaBufDef =
+                    std::make_shared<mm_camera_buf_def_t>();
+            {
+                pthread_mutex_lock(&mMutex);
+                for (auto& pendingBuffers : mPendingBuffersMap.mPendingBuffersInRequest) {
+                    if (pendingBuffers.frame_number == result->requestId) {
+                        pendingBuffers.mHdrplusInputBuf = pendingRequest.yuvBuffer;
+                        pendingBuffers.mHdrplusInputMetaBuf = metaBufDef;
+                        break;
+                    }
+                }
+                pthread_mutex_unlock(&mMutex);
+            }
+
             // Return the buffer to pic channel for encoding.
             picChannel->returnYuvBufferAndEncode(pendingRequest.yuvBuffer.get(),
                     pendingRequest.frameworkOutputBuffers[0].buffer, result->requestId,
-                    halMetadata);
+                    halMetadata, metaBufDef.get());
         } else {
             // Return the buffer without encoding.
             // TODO: This should not happen but we may want to report an error buffer to camera
