@@ -589,7 +589,8 @@ public:
     // Return a YUV buffer (from getYuvBufferForRequest) and request jpeg encoding.
     int32_t returnYuvBufferAndEncode(mm_camera_buf_def_t *frame,
             buffer_handle_t *outBuffer, uint32_t frameNumber,
-            std::shared_ptr<metadata_buffer_t> metadata);
+            std::shared_ptr<metadata_buffer_t> metadata,
+            mm_camera_buf_def_t *metaFrame);
 
     // Return a YUV buffer (from getYuvBufferForRequest) without requesting jpeg encoding.
     int32_t returnYuvBuffer(mm_camera_buf_def_t *frame);

@@ -4296,7 +4296,7 @@ int32_t QCamera3PicChannel::returnYuvBuffer(mm_camera_buf_def_t *frame)
 
 int32_t QCamera3PicChannel::returnYuvBufferAndEncode(mm_camera_buf_def_t *frame,
         buffer_handle_t *outBuffer, uint32_t frameNumber,
-        std::shared_ptr<metadata_buffer_t> metadata)
+        std::shared_ptr<metadata_buffer_t> metadata, mm_camera_buf_def_t *metaFrame)
 {
     int32_t rc = OK;
 
@@ -4382,7 +4382,7 @@ int32_t QCamera3PicChannel::returnYuvBufferAndEncode(mm_camera_buf_def_t *frame,
     metadataBuf->camera_handle = m_camHandle;
     metadataBuf->ch_id = getMyHandle();
     metadataBuf->num_bufs = 1;
-    metadataBuf->bufs[0] = (mm_camera_buf_def_t *)calloc(1, sizeof(mm_camera_buf_def_t));
+    metadataBuf->bufs[0] = metaFrame;
     metadataBuf->bufs[0]->buffer = metadata.get();
 
     // Start processing the metadata
