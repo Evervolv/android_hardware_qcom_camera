@@ -84,19 +84,6 @@ static hal_version connectPowerHalLocked() {
         return NONE;
     }
 
-    if (gPowerHalAidlExists) {
-        if (!gPowerHal_Aidl_) {
-            ndk::SpAIBinder pwBinder = ndk::SpAIBinder(AServiceManager_getService(kInstance.c_str()));
-            gPowerHal_Aidl_ = aidl::android::hardware::power::IPower::fromBinder(pwBinder);
-        }
-        if (gPowerHal_Aidl_) {
-            ALOGI("Successfully connected to Power Hal Aidl service.");
-            return AIDL;
-        } else {
-            gPowerHalAidlExists = false;
-        }
-    }
-
     if (gPowerHalHidlExists) {
         if (!gPowerHal_1_2_) {
             gPowerHal_1_2_ =
@@ -107,6 +94,19 @@ static hal_version connectPowerHalLocked() {
             return HIDL_1_2;
         } else {
             gPowerHalHidlExists = false;
+        }
+    }
+
+    if (gPowerHalAidlExists) {
+        if (!gPowerHal_Aidl_) {
+            ndk::SpAIBinder pwBinder = ndk::SpAIBinder(AServiceManager_getService(kInstance.c_str()));
+            gPowerHal_Aidl_ = aidl::android::hardware::power::IPower::fromBinder(pwBinder);
+        }
+        if (gPowerHal_Aidl_) {
+            ALOGI("Successfully connected to Power Hal Aidl service.");
+            return AIDL;
+        } else {
+            gPowerHalAidlExists = false;
         }
     }
 
