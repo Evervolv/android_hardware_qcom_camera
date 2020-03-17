@@ -15141,7 +15141,8 @@ int32_t QCamera3HardwareInterface::notifyErrorForPendingRequests()
     while (pendingRequest != mPendingRequestsList.end() ||
            pendingBuffer != mPendingBuffersMap.mPendingBuffersInRequest.end()) {
         if (pendingRequest == mPendingRequestsList.end() ||
-            pendingBuffer->frame_number < pendingRequest->frame_number) {
+                ((pendingBuffer != mPendingBuffersMap.mPendingBuffersInRequest.end()) &&
+                 (pendingBuffer->frame_number < pendingRequest->frame_number))) {
             // If metadata for this frame was sent, notify about a buffer error and returns buffers
             // with error.
             for (auto &info : pendingBuffer->mPendingBufferList) {
@@ -15165,7 +15166,8 @@ int32_t QCamera3HardwareInterface::notifyErrorForPendingRequests()
 
             pendingBuffer = mPendingBuffersMap.mPendingBuffersInRequest.erase(pendingBuffer);
         } else if (pendingBuffer == mPendingBuffersMap.mPendingBuffersInRequest.end() ||
-                   pendingBuffer->frame_number > pendingRequest->frame_number) {
+                   ((pendingRequest != mPendingRequestsList.end()) &&
+                   (pendingBuffer->frame_number > pendingRequest->frame_number))) {
             // If the buffers for this frame were sent already, notify about a result error.
             camera3_notify_msg_t notify_msg;
             memset(&notify_msg, 0, sizeof(camera3_notify_msg_t));
