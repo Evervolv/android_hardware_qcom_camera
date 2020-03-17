@@ -654,9 +654,10 @@ QCameraPerfLockIntf* QCameraPerfLockIntf::createSingleton()
                 std::lock_guard<std::mutex> lock(gPowerHalMutex);
                 if (connectPowerHalLocked() == NONE) {
                     ALOGE("Couldn't load PowerHAL module");
+                } else {
+                    error = false;
                 }
-                else
-                #endif
+                #else
                 {
                     /* Retrieve the name of the vendor extension library */
                     void *dlHandle = NULL;
@@ -685,6 +686,7 @@ QCameraPerfLockIntf* QCameraPerfLockIntf::createSingleton()
                         LOGE("Unable to load lib: %s", value);
                     }
                 }
+                #endif
                 if (error && mInstance) {
                     delete mInstance;
                     mInstance = NULL;
