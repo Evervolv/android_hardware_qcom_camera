@@ -597,6 +597,8 @@ public:
 
 private:
     int32_t queueJpegSetting(uint32_t out_buf_index, metadata_buffer_t *metadata);
+    int32_t initializeJpegSetting(uint32_t index, metadata_buffer_t *metadata,
+            jpeg_settings_t *settings);
 
 public:
     cam_dimension_t m_max_pic_dim;
