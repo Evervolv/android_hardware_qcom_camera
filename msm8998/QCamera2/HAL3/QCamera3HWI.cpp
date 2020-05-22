@@ -4592,6 +4592,15 @@ void QCamera3HardwareInterface::handleBufferWithLock(
     LOGH("result frame_number = %d, buffer = %p",
              frame_number, buffer->buffer);
 
+    if (buffer->status == CAMERA3_BUFFER_STATUS_ERROR) {
+        camera3_notify_msg_t notify_msg = {};
+        notify_msg.type = CAMERA3_MSG_ERROR;
+        notify_msg.message.error.frame_number = frame_number;
+        notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_BUFFER ;
+        notify_msg.message.error.error_stream = buffer->stream;
+        orchestrateNotify(&notify_msg);
+    }
+
     mPendingBuffersMap.removeBuf(buffer->buffer);
     mOutputBufferDispatcher.markBufferReady(frame_number, *buffer);
 
@@ -15216,8 +15225,11 @@ int32_t QCamera3HardwareInterface::notifyErrorForPendingRequests()
             pendingBuffer = mPendingBuffersMap.mPendingBuffersInRequest.erase(pendingBuffer);
         } else if (pendingBuffer == mPendingBuffersMap.mPendingBuffersInRequest.end() ||
                    ((pendingRequest != mPendingRequestsList.end()) &&
-                   (pendingBuffer->frame_number > pendingRequest->frame_number))) {
-            // If the buffers for this frame were sent already, notify about a result error.
+                   (pendingBuffer->frame_number > pendingRequest->frame_number ||
+                    (pendingBuffer->frame_number == pendingRequest->frame_number &&
+                     pendingBuffer->mPendingBufferList.size() < pendingRequest->num_buffers)))) {
+            // If some or all buffers for this frame were sent already, notify about a result error,
+            // as well as remaining buffer errors.
             camera3_notify_msg_t notify_msg;
             memset(&notify_msg, 0, sizeof(camera3_notify_msg_t));
             notify_msg.type = CAMERA3_MSG_ERROR;
@@ -15234,20 +15246,41 @@ int32_t QCamera3HardwareInterface::notifyErrorForPendingRequests()
                 orchestrateResult(&result);
             }
 
+            if (pendingBuffer != mPendingBuffersMap.mPendingBuffersInRequest.end() &&
+                    pendingBuffer->frame_number == pendingRequest->frame_number) {
+                for (const auto &info : pendingBuffer->mPendingBufferList) {
+                    // Send a buffer error for this frame number.
+                    camera3_notify_msg_t notify_msg;
+                    memset(&notify_msg, 0, sizeof(camera3_notify_msg_t));
+                    notify_msg.type = CAMERA3_MSG_ERROR;
+                    notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_BUFFER;
+                    notify_msg.message.error.error_stream = info.stream;
+                    notify_msg.message.error.frame_number = pendingBuffer->frame_number;
+                    orchestrateNotify(&notify_msg);
+
+                    camera3_stream_buffer_t buffer = {};
+                    buffer.acquire_fence = -1;
+                    buffer.release_fence = -1;
+                    buffer.buffer = info.buffer;
+                    buffer.status = CAMERA3_BUFFER_STATUS_ERROR;
+                    buffer.stream = info.stream;
+                    mOutputBufferDispatcher.markBufferReady(pendingBuffer->frame_number, buffer);
+                }
+                pendingBuffer = mPendingBuffersMap.mPendingBuffersInRequest.erase(pendingBuffer);
+            }
             mShutterDispatcher.clear(pendingRequest->frame_number);
             pendingRequest = mPendingRequestsList.erase(pendingRequest);
         } else {
             // If both buffers and result metadata weren't sent yet, notify about a request error
             // and return buffers with error.
-            for (auto &info : pendingBuffer->mPendingBufferList) {
-                camera3_notify_msg_t notify_msg;
-                memset(&notify_msg, 0, sizeof(camera3_notify_msg_t));
-                notify_msg.type = CAMERA3_MSG_ERROR;
-                notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_REQUEST;
-                notify_msg.message.error.error_stream = info.stream;
-                notify_msg.message.error.frame_number = pendingBuffer->frame_number;
-                orchestrateNotify(&notify_msg);
+            camera3_notify_msg_t notify_msg;
+            memset(&notify_msg, 0, sizeof(camera3_notify_msg_t));
+            notify_msg.type = CAMERA3_MSG_ERROR;
+            notify_msg.message.error.error_code = CAMERA3_MSG_ERROR_REQUEST;
+            notify_msg.message.error.frame_number = pendingBuffer->frame_number;
+            orchestrateNotify(&notify_msg);
 
+            for (auto &info : pendingBuffer->mPendingBufferList) {
                 camera3_stream_buffer_t buffer = {};
                 buffer.acquire_fence = -1;
                 buffer.release_fence = -1;
